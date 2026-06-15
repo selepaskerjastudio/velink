@@ -130,6 +130,20 @@ class ServerController extends Controller
         ]);
     }
 
+    public function destroy(Request $request, Server $server): RedirectResponse
+    {
+        AuditLogger::log(
+            action: 'server.deleted',
+            description: "Server '{$server->name}' deleted",
+            userId: $request->user()->id,
+            properties: ['server_uuid' => $server->uuid, 'hostname' => $server->hostname],
+        );
+
+        $server->delete();
+
+        return redirect()->route('servers.index');
+    }
+
     private function installCommand(Server $server, string $token): string
     {
         $panelUrl = rtrim(config('app.url'), '/');
