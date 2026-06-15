@@ -288,7 +288,7 @@ export default function ServersShow({
                     </CardFooter>
                 </Card>
 
-                <Card className="max-w-xl">
+                {liveStatus !== 'pending' && <Card className="max-w-xl">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <div>
                             <CardTitle>Applications</CardTitle>
@@ -324,9 +324,9 @@ export default function ServersShow({
                             ))}
                         </CardContent>
                     )}
-                </Card>
+                </Card>}
 
-                <Card className="max-w-xl">
+                {liveStatus !== 'pending' && <Card className="max-w-xl">
                     <CardHeader>
                         <CardTitle>Manage</CardTitle>
                         <CardDescription>Services, scheduled jobs, and databases on this server.</CardDescription>
@@ -364,9 +364,9 @@ export default function ServersShow({
                             </>
                         )}
                     </CardContent>
-                </Card>
+                </Card>}
 
-                {recentMetrics.length > 0 && (
+                {liveStatus !== 'pending' && recentMetrics.length > 0 && (
                     <Card className="max-w-xl">
                         <CardHeader>
                             <CardTitle>Resource usage</CardTitle>
@@ -387,7 +387,7 @@ export default function ServersShow({
                     </Card>
                 )}
 
-                <Card className="max-w-xl">
+                {liveStatus !== 'pending' && <Card className="max-w-xl">
                     <CardHeader>
                         <CardTitle>Provisioning</CardTitle>
                         <CardDescription>Install services and track live job progress.</CardDescription>
@@ -499,7 +499,7 @@ export default function ServersShow({
                             </TabsContent>
                         </Tabs>
                     </CardContent>
-                </Card>
+                </Card>}
             </div>
         </AppLayout>
     );
