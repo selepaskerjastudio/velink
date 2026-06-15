@@ -18,7 +18,7 @@ class ProvisioningCatalog
         'supervisor', 'redis', 'mysql', 'mariadb', 'postgresql', 'mongodb',
     ];
 
-    public const PHP_VERSIONS = ['7.4', '8.1', '8.2', '8.3', '8.4'];
+    public const PHP_VERSIONS = ['8.1', '8.2', '8.3', '8.4'];
 
     private const NODE_MAJOR = '20';
     private const PG_BASE = 'https://apt.postgresql.org/pub/repos/apt';
@@ -35,20 +35,20 @@ class ProvisioningCatalog
         return match ($component) {
             'base' => [$this->shell('Install base packages', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get update
-                apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release software-properties-common apt-transport-https
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release software-properties-common apt-transport-https
                 SH)],
 
             'nginx' => [$this->shell('Install nginx', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get update
-                apt-get install -y nginx
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y nginx
                 systemctl enable --now nginx
                 SH)],
 
             'certbot' => [$this->shell('Install certbot', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get install -y certbot python3-certbot-nginx
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y certbot python3-certbot-nginx
                 SH)],
 
             'php' => $this->phpSteps($opts),
@@ -63,30 +63,30 @@ class ProvisioningCatalog
             'node' => [$this->shell('Install Node.js', sprintf(<<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
                 curl -fsSL https://deb.nodesource.com/setup_%s.x | bash -
-                apt-get install -y nodejs
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y nodejs
                 SH, self::NODE_MAJOR))],
 
             'supervisor' => [$this->shell('Install supervisord', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get install -y supervisor
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y supervisor
                 systemctl enable --now supervisor
                 SH)],
 
             'redis' => [$this->shell('Install Redis', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get install -y redis-server
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y redis-server
                 systemctl enable --now redis-server
                 SH)],
 
             'mysql' => [$this->shell('Install MySQL', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get install -y mysql-server
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y mysql-server
                 systemctl enable --now mysql
                 SH)],
 
             'mariadb' => [$this->shell('Install MariaDB', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get install -y mariadb-server
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y mariadb-server
                 systemctl enable --now mariadb
                 SH)],
 
@@ -95,8 +95,8 @@ class ProvisioningCatalog
                 install -d /usr/share/postgresql-common/pgdg
                 curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
                 echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] %s $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
-                apt-get update
-                apt-get install -y postgresql
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y postgresql
                 systemctl enable --now postgresql
                 SH, self::PG_BASE))],
 
@@ -104,8 +104,8 @@ class ProvisioningCatalog
                 export DEBIAN_FRONTEND=noninteractive
                 curl -fsSL https://www.mongodb.org/static/pgp/server-%1$s.asc | gpg -o /usr/share/keyrings/mongodb-server-%1$s.gpg --dearmor --yes
                 echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-%1$s.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/%1$s multiverse" > /etc/apt/sources.list.d/mongodb-org-%1$s.list
-                apt-get update
-                apt-get install -y mongodb-org
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y mongodb-org
                 systemctl enable --now mongod
                 SH, self::MONGO_VERSION))],
 
@@ -122,8 +122,8 @@ class ProvisioningCatalog
         $versions = $opts['php_versions'] ?? ['8.3'];
         $steps = [$this->shell('Add ondrej/php PPA', <<<'SH'
             export DEBIAN_FRONTEND=noninteractive
-            add-apt-repository -y ppa:ondrej/php
-            apt-get update
+            flock -w 300 /var/lib/dpkg/lock-frontend add-apt-repository -y ppa:ondrej/php
+            flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
             SH)];
 
         foreach ($versions as $v) {
@@ -136,7 +136,7 @@ class ProvisioningCatalog
             ));
             $steps[] = $this->shell("Install PHP {$v}", sprintf(<<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                apt-get install -y %s
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y %s
                 systemctl enable --now php%s-fpm
                 SH, $pkgs, $v));
         }
