@@ -38,22 +38,26 @@
 
 ## Fase 1 — Agent + Eksekusi Command (inti MVP) ⚠️ risiko tinggi · 🔴 Opus
 
-- [ ] `/agent` (Go): bootstrap, baca config/token, dial-out WSS ke gateway.
-- [ ] Agent: heartbeat + reconnect otomatis + verifikasi TLS cert panel.
-- [ ] Agent: **executor Job** (jalankan shell, tulis file, render config dari payload),
-      stream stdout/stderr/exit-code.
-- [ ] Agent: jalan sebagai systemd unit dengan hak privileged.
-- [ ] Panel: model `Job` + state machine + broadcast progress via Reverb.
-- [ ] `/installer`: script `curl | bash` untuk pasang agent + daftarkan ke panel.
-- [ ] **Provisioning (Job idempotent, agent yang install):**
-  - [ ] nginx + certbot.
-  - [ ] php-fpm **7.4, 8.1, 8.2, 8.3, 8.4** via PPA `ondrej/php` + composer + node.
-  - [ ] supervisord.
-  - [ ] MySQL/MariaDB.
-  - [ ] PostgreSQL (repo PGDG).
-  - [ ] MongoDB (repo resmi MongoDB).
-  - [ ] Redis.
-- [ ] UI: pilih service yang akan diinstall per server + lihat progress provisioning.
+- [x] `/agent` (Go): bootstrap, baca config/token, dial-out WSS ke gateway.
+- [x] Agent: heartbeat + reconnect otomatis (backoff) + verifikasi TLS cert panel
+      (wss default; `AGENT_INSECURE=1` hanya untuk dev).
+- [x] Agent: **executor Job** (jalankan shell, tulis file, render config dari payload),
+      stream stdout/stderr/exit-code. _(unit test executor lulus)._
+- [x] Agent: jalan sebagai systemd unit dengan hak privileged (unit di `/installer`).
+- [x] Panel: model `AgentJob` + state machine + dispatch (Redis) + listener
+      `agent:listen` + broadcast `AgentJobUpdated`/`ServerPresenceUpdated` via Reverb.
+- [x] `/installer`: script `curl | bash` (`agent.sh`) untuk pasang agent + daftarkan ke panel.
+- [x] **Provisioning (Job idempotent, agent yang install)** — katalog `ProvisioningCatalog`
+      + `ProvisionService` (base dulu, dispatch sebagai job `shell`):
+  - [x] nginx + certbot.
+  - [x] php-fpm **7.4, 8.1, 8.2, 8.3, 8.4** via PPA `ondrej/php` + composer + node.
+  - [x] supervisord.
+  - [x] MySQL/MariaDB.
+  - [x] PostgreSQL (repo PGDG).
+  - [x] MongoDB (repo resmi MongoDB).
+  - [x] Redis.
+- [ ] UI: pilih service yang akan diinstall per server + lihat progress provisioning
+      (live via Reverb). _← satu-satunya sisa Fase 1; sisanya backend sudah jalan & teruji._
 
 ## Fase 2 — App PHP + Versi PHP per-App 🟢 Sonnet
 

@@ -8,17 +8,8 @@ beforeEach(function () {
     config(['services.gateway.secret' => 'test-gateway-secret']);
 });
 
-function makeServer(string $token = 'plain-agent-token'): Server
-{
-    return Server::create([
-        'name' => 'web-01',
-        'status' => 'pending',
-        'agent_token' => $token, // hashed by the model cast
-    ]);
-}
-
 test('valid token and secret returns the server', function () {
-    $server = makeServer('plain-agent-token');
+    $server = Server::factory()->create(['name' => 'web-01', 'agent_token' => 'plain-agent-token']);
 
     $response = $this->withHeader('X-Gateway-Secret', 'test-gateway-secret')
         ->postJson('/internal/agent/verify', [
@@ -34,7 +25,7 @@ test('valid token and secret returns the server', function () {
 });
 
 test('wrong token is rejected', function () {
-    $server = makeServer('plain-agent-token');
+    $server = Server::factory()->create(['agent_token' => 'plain-agent-token']);
 
     $this->withHeader('X-Gateway-Secret', 'test-gateway-secret')
         ->postJson('/internal/agent/verify', [
@@ -46,7 +37,7 @@ test('wrong token is rejected', function () {
 });
 
 test('missing gateway secret is rejected', function () {
-    $server = makeServer();
+    $server = Server::factory()->create(['agent_token' => 'plain-agent-token']);
 
     $this->postJson('/internal/agent/verify', [
         'server_id' => $server->id,
@@ -55,7 +46,7 @@ test('missing gateway secret is rejected', function () {
 });
 
 test('wrong gateway secret is rejected', function () {
-    $server = makeServer();
+    $server = Server::factory()->create(['agent_token' => 'plain-agent-token']);
 
     $this->withHeader('X-Gateway-Secret', 'nope')
         ->postJson('/internal/agent/verify', [

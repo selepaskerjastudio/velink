@@ -65,4 +65,9 @@ class Server extends Model
     {
         return $this->hasMany(AuditLog::class);
     }
+
+    public function agentJobs(): HasMany
+    {
+        return $this->hasMany(AgentJob::class);
+    }
 }

@@ -37,6 +37,8 @@ return [
 
     'gateway' => [
         'secret' => env('GATEWAY_SECRET'),
+        // Public WSS base URL agents dial out to (used in the install one-liner).
+        'public_url' => env('GATEWAY_PUBLIC_URL', 'ws://127.0.0.1:8080'),
     ],
 
 ];

@@ -1,0 +1,182 @@
+// Package client maintains the agent's dial-out WebSocket connection to the
+// gateway: it authenticates, heartbeats, executes incoming jobs, and reconnects
+// automatically with exponential backoff.
+package client
+
+import (
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
+	"github.com/coruncloud/agent/internal/config"
+	"github.com/coruncloud/agent/internal/executor"
+	"github.com/coruncloud/agent/internal/protocol"
+)
+
+const (
+	minBackoff = 1 * time.Second
+	maxBackoff = 30 * time.Second
+)
+
+// Client is the agent's connection manager.
+type Client struct {
+	cfg  config.Config
+	exec *executor.Executor
+	log  *slog.Logger
+}
+
+// New builds a Client.
+func New(cfg config.Config, log *slog.Logger) *Client {
+	return &Client{
+		cfg:  cfg,
+		exec: executor.New(cfg.ServerID),
+		log:  log,
+	}
+}
+
+// Run connects and serves until ctx is cancelled, reconnecting on failure.
+func (c *Client) Run(ctx context.Context) {
+	backoff := minBackoff
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+
+		err := c.connectAndServe(ctx, func() { backoff = minBackoff })
+		if ctx.Err() != nil {
+			return
+		}
+
+		c.log.Warn("connection lost; reconnecting", "error", err, "in", backoff)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff *= 2; backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
+// connectAndServe runs one connection lifecycle. onConnected is called once the
+// dial succeeds (used to reset backoff).
+func (c *Client) connectAndServe(ctx context.Context, onConnected func()) error {
+	header := http.Header{}
+	header.Set("Authorization", "Bearer "+c.cfg.Token)
+	header.Set("X-Server-Id", strconv.FormatInt(c.cfg.ServerID, 10))
+	header.Set("X-Agent-Version", c.cfg.AgentVersion)
+
+	opts := &websocket.DialOptions{HTTPHeader: header}
+	if c.cfg.Insecure {
+		opts.HTTPClient = &http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		}
+	}
+
+	dialCtx, cancelDial := context.WithTimeout(ctx, 15*time.Second)
+	ws, _, err := websocket.Dial(dialCtx, c.cfg.GatewayURL+"/agent/connect", opts)
+	cancelDial()
+	if err != nil {
+		return err
+	}
+	defer ws.CloseNow()
+
+	onConnected()
+	c.log.Info("connected to gateway", "url", c.cfg.GatewayURL, "server_id", c.cfg.ServerID)
+
+	connCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	send := make(chan protocol.Envelope, 64)
+	send <- protocol.Envelope{Type: protocol.TypeHello, ServerID: c.cfg.ServerID, Timestamp: protocol.Now()}
+
+	go c.writePump(connCtx, ws, send)
+	go c.heartbeat(connCtx, send)
+	return c.readPump(connCtx, cancel, ws, send)
+}
+
+func (c *Client) writePump(ctx context.Context, ws *websocket.Conn, send chan protocol.Envelope) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case env := <-send:
+			wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			err := wsjson.Write(wctx, ws, env)
+			cancel()
+			if err != nil {
+				c.log.Warn("write failed", "error", err)
+				return
+			}
+		}
+	}
+}
+
+func (c *Client) heartbeat(ctx context.Context, send chan protocol.Envelope) {
+	t := time.NewTicker(c.cfg.HeartbeatInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			select {
+			case send <- protocol.Envelope{Type: protocol.TypeHeartbeat, ServerID: c.cfg.ServerID, Timestamp: protocol.Now()}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
+func (c *Client) readPump(ctx context.Context, cancel context.CancelFunc, ws *websocket.Conn, send chan protocol.Envelope) error {
+	defer cancel()
+	for {
+		var env protocol.Envelope
+		if err := wsjson.Read(ctx, ws, &env); err != nil {
+			return err
+		}
+		if env.Type == protocol.TypeJob {
+			go c.handleJob(ctx, env, send)
+		}
+	}
+}
+
+func (c *Client) handleJob(ctx context.Context, env protocol.Envelope, send chan protocol.Envelope) {
+	var spec executor.JobSpec
+	if err := json.Unmarshal(env.Payload, &spec); err != nil {
+		c.log.Warn("malformed job payload", "job_id", env.JobID, "error", err)
+		c.emit(ctx, send, failureResult(c.cfg.ServerID, env.JobID, "malformed job payload: "+err.Error()))
+		return
+	}
+
+	c.log.Info("running job", "job_id", env.JobID, "action", spec.Action)
+	c.exec.Run(ctx, env.JobID, spec, func(out protocol.Envelope) {
+		c.emit(ctx, send, out)
+	})
+}
+
+func (c *Client) emit(ctx context.Context, send chan protocol.Envelope, env protocol.Envelope) {
+	select {
+	case send <- env:
+	case <-ctx.Done():
+	}
+}
+
+func failureResult(serverID int64, jobID, msg string) protocol.Envelope {
+	payload, _ := json.Marshal(map[string]any{"exit_code": 1, "error": msg})
+	return protocol.Envelope{
+		Type:      protocol.TypeJobResult,
+		JobID:     jobID,
+		ServerID:  serverID,
+		Payload:   payload,
+		Timestamp: protocol.Now(),
+	}
+}
