@@ -9,6 +9,12 @@ Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
 
+Route::get('install/agent.sh', function () {
+    $path = base_path('../installer/agent.sh');
+    abort_unless(file_exists($path), 404);
+    return response()->file($path, ['Content-Type' => 'text/plain; charset=utf-8']);
+})->name('install.agent');
+
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
