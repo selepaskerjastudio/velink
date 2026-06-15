@@ -364,7 +364,6 @@ go run ./cmd/gateway
 /panel       Laravel 12 + Inertia 2 + React 19 (control panel)
 /gateway     Go — WebSocket gateway (bridge agent ↔ panel via Redis)
 /agent       Go — agent binary yang diinstall di setiap server terkelola
-/provision   Template config nginx/php-fpm/supervisor (referensi)
 /installer   Script curl|bash one-liner untuk install agent
 /docs        PRD, PLAN, TODO
 ```
