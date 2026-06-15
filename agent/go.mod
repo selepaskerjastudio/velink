@@ -1,4 +1,4 @@
-module github.com/coruncloud/agent
+module github.com/velink/agent
 
 go 1.24.0
 

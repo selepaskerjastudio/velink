@@ -6,7 +6,7 @@ use App\Models\CronJob;
 use App\Models\Server;
 
 /**
- * The managed /etc/cron.d/coruncloud drop-in file. Rendered by the agent via
+ * The managed /etc/cron.d/velink drop-in file. Rendered by the agent via
  * the `render_config` action (Go text/template, vars are a flat map so keys
  * here must match the map keys exactly, snake_case).
  *
@@ -15,14 +15,14 @@ use App\Models\Server;
  */
 class CronTemplates
 {
-    public const FILE_PATH = '/etc/cron.d/coruncloud';
+    public const FILE_PATH = '/etc/cron.d/velink';
 
     public const SCHEDULE_REGEX = '/^(\*|[\d,\-\/]+)(\s+(\*|[\d,\-\/]+)){4}$/';
 
     public const USER_REGEX = '/^[a-z_][a-z0-9_-]*$/';
 
     public const CRON_FILE = <<<'CONF'
-        # Managed by coruncloud — do not edit manually.
+        # Managed by Velink — do not edit manually.
         {{range .jobs}}{{.schedule}} {{.user}} {{.command}}
         {{end}}
         CONF;

@@ -24,7 +24,7 @@ internal/client              # dial-out WSS, hello, heartbeat, reconnect, read/w
 ## Konfigurasi
 
 `cp .env.example .env` lalu isi `AGENT_GATEWAY_URL`, `AGENT_TOKEN`, `AGENT_SERVER_ID`
-(installer menulis ini ke `/etc/coruncloud/agent.env`).
+(installer menulis ini ke `/etc/velink/agent.env`).
 
 ## Build & test
 

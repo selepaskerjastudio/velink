@@ -1,4 +1,4 @@
-# coruncloud
+# Velink
 
 Self-hosted server control panel untuk mengelola banyak Ubuntu VM dari satu dashboard — terinspirasi RunCloud/Laravel Forge. Tidak perlu SSH manual: satu agent ringan di setiap server terkelola menerima perintah dari panel lewat WebSocket.
 
@@ -54,8 +54,8 @@ Tiga komponen:
 ### 1.1 Clone & install dependensi
 
 ```bash
-git clone https://github.com/yourname/coruncloud.git
-cd coruncloud/panel
+git clone https://github.com/yourname/velink.git
+cd velink/panel
 
 composer install
 npm install
@@ -71,8 +71,8 @@ php artisan key:generate
 Edit `.env` sesuai kebutuhan:
 
 ```dotenv
-APP_NAME=coruncloud
-APP_URL=https://panel.example.com       # URL publik panel (wajib, dipakai di perintah install agent)
+APP_NAME=Velink
+APP_URL=https://panel.velink.dev       # URL publik panel (wajib, dipakai di perintah install agent)
 APP_ENV=production
 APP_DEBUG=false
 
@@ -80,8 +80,8 @@ APP_DEBUG=false
 DB_CONNECTION=pgsql
 DB_HOST=127.0.0.1
 DB_PORT=5432
-DB_DATABASE=coruncloud
-DB_USERNAME=coruncloud
+DB_DATABASE=velink
+DB_USERNAME=velink
 DB_PASSWORD=ganti_ini
 
 # Session & queue via database
@@ -95,7 +95,7 @@ REDIS_PORT=6379
 
 # Reverb (WebSocket browser)
 BROADCAST_CONNECTION=reverb
-REVERB_APP_ID=coruncloud
+REVERB_APP_ID=velink
 REVERB_APP_KEY=ganti_ini
 REVERB_APP_SECRET=ganti_ini
 REVERB_HOST=0.0.0.0
@@ -104,7 +104,7 @@ REVERB_SCHEME=https
 
 # Gateway
 GATEWAY_SECRET=rahasia_panjang_acak_64char   # harus sama dengan GATEWAY_PANEL_SECRET di gateway/.env
-GATEWAY_PUBLIC_URL=wss://panel.example.com:9090   # URL WSS yang bisa dicapai agent dari internet
+GATEWAY_PUBLIC_URL=wss://panel.velink.dev:9090   # URL WSS yang bisa dicapai agent dari internet
 ```
 
 ### 1.3 Migrasi database
@@ -123,23 +123,23 @@ npm run build
 
 Gunakan **supervisor** atau **systemd** untuk masing-masing proses. Contoh dengan supervisor:
 
-**`/etc/supervisor/conf.d/coruncloud-panel.conf`:**
+**`/etc/supervisor/conf.d/velink-panel.conf`:**
 ```ini
-[program:coruncloud-queue]
+[program:velink-queue]
 command=php /path/to/panel/artisan queue:work --tries=3 --sleep=3
 directory=/path/to/panel
 autostart=true
 autorestart=true
 user=www-data
-stdout_logfile=/var/log/coruncloud-queue.log
+stdout_logfile=/var/log/velink-queue.log
 
-[program:coruncloud-reverb]
+[program:velink-reverb]
 command=php /path/to/panel/artisan reverb:start
 directory=/path/to/panel
 autostart=true
 autorestart=true
 user=www-data
-stdout_logfile=/var/log/coruncloud-reverb.log
+stdout_logfile=/var/log/velink-reverb.log
 ```
 
 Serve HTTP via **nginx + php-fpm** (Laravel standard), root ke `/path/to/panel/public`.
@@ -154,7 +154,7 @@ Gateway adalah binary Go yang berjalan di VM panel yang sama.
 
 ```bash
 cd gateway
-go build -o ../coruncloud-gateway ./cmd/gateway
+go build -o ../velink-gateway ./cmd/gateway
 ```
 
 Atau download binary dari release page (jika tersedia).
@@ -179,15 +179,15 @@ GATEWAY_PRESENCE_TTL=90
 
 ### 2.3 Jalankan sebagai systemd service
 
-**`/etc/systemd/system/coruncloud-gateway.service`:**
+**`/etc/systemd/system/velink-gateway.service`:**
 ```ini
 [Unit]
-Description=coruncloud Gateway
+Description=Velink Gateway
 After=network.target
 
 [Service]
 EnvironmentFile=/path/to/gateway/.env
-ExecStart=/path/to/coruncloud-gateway
+ExecStart=/path/to/velink-gateway
 Restart=always
 User=www-data
 
@@ -197,14 +197,14 @@ WantedBy=multi-user.target
 
 ```bash
 systemctl daemon-reload
-systemctl enable --now coruncloud-gateway
+systemctl enable --now velink-gateway
 ```
 
 ---
 
 ## 3. Akun pertama
 
-Buka `https://panel.example.com/register` untuk membuat akun admin pertama.
+Buka `https://panel.velink.dev/register` untuk membuat akun admin pertama.
 
 > Setelah akun pertama dibuat, disarankan menonaktifkan registrasi publik (atur `APP_REGISTRATION=false` atau batasi via middleware).
 
@@ -223,17 +223,17 @@ Buka `https://panel.example.com/register` untuk membuat akun admin pertama.
 Jalankan perintah yang disalin dari panel **di VM target** (Ubuntu 22.04/24.04) sebagai root:
 
 ```bash
-curl -fsSL https://panel.example.com/install/agent.sh | sudo bash -s -- \
+curl -fsSL https://panel.velink.dev/install/agent.sh | sudo bash -s -- \
     --token=<TOKEN> \
-    --panel=https://panel.example.com \
-    --gateway=wss://panel.example.com:9090 \
+    --panel=https://panel.velink.dev \
+    --gateway=wss://panel.velink.dev:9090 \
     --server-id=<UUID>
 ```
 
 Installer akan:
-- Download binary `coruncloud-agent` ke `/usr/local/bin/`
-- Tulis konfigurasi ke `/etc/coruncloud/agent.env`
-- Daftarkan dan aktifkan systemd unit `coruncloud-agent`
+- Download binary `velink-agent` ke `/usr/local/bin/`
+- Tulis konfigurasi ke `/etc/velink/agent.env`
+- Daftarkan dan aktifkan systemd unit `velink-agent`
 
 Setelah berhasil, status server di panel berubah menjadi **online** dalam beberapa detik.
 
@@ -312,7 +312,7 @@ Halaman aplikasi → **Workers** → **New Worker**. Isi nama program dan perint
 
 ### Cron
 
-Halaman server → **Cron** → **New Cron Job**. Isi ekspresi cron dan perintah. Panel menulis drop-in ke `/etc/cron.d/coruncloud` via agent.
+Halaman server → **Cron** → **New Cron Job**. Isi ekspresi cron dan perintah. Panel menulis drop-in ke `/etc/cron.d/velink` via agent.
 
 ### Service systemd
 

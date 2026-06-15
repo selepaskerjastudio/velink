@@ -1,4 +1,4 @@
-module github.com/coruncloud/gateway
+module github.com/velink/gateway
 
 go 1.22
 

@@ -111,7 +111,7 @@ class DatabaseProvisionService
     private function mongodbCreateCommand(string $name): string
     {
         return <<<SH
-            mongosh --quiet --eval "db.getSiblingDB('{$name}').createCollection('_coruncloud_init')"
+            mongosh --quiet --eval "db.getSiblingDB('{$name}').createCollection('_velink_init')"
             SH;
     }
 

@@ -17,7 +17,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/coruncloud/agent/internal/protocol"
+	"github.com/velink/agent/internal/protocol"
 )
 
 // Supported job actions (the inner payload.action; the transport type is "job").

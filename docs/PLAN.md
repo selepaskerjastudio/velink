@@ -1,4 +1,4 @@
-# PLAN — Rencana Teknis & Arsitektur coruncloud
+# PLAN — Rencana Teknis & Arsitektur Velink
 
 > Status: Draft v1. Tanggal: 2026-06-15. Lihat juga [`PRD.md`](./PRD.md) dan [`TODO.md`](./TODO.md).
 

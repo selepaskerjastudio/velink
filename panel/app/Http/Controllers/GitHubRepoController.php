@@ -29,7 +29,7 @@ class GitHubRepoController extends Controller
 
         if ($query === '') {
             $response = Http::withToken($token)
-                ->withUserAgent('coruncloud/1.0')
+                ->withUserAgent('velink/1.0')
                 ->get('https://api.github.com/user/repos', [
                     'sort' => 'updated',
                     'per_page' => 20,
@@ -37,7 +37,7 @@ class GitHubRepoController extends Controller
                 ]);
         } else {
             $response = Http::withToken($token)
-                ->withUserAgent('coruncloud/1.0')
+                ->withUserAgent('velink/1.0')
                 ->get('https://api.github.com/search/repositories', [
                     'q' => $query,
                     'sort' => 'updated',

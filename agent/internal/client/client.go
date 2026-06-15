@@ -13,10 +13,10 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/coruncloud/agent/internal/config"
-	"github.com/coruncloud/agent/internal/executor"
-	"github.com/coruncloud/agent/internal/metrics"
-	"github.com/coruncloud/agent/internal/protocol"
+	"github.com/velink/agent/internal/config"
+	"github.com/velink/agent/internal/executor"
+	"github.com/velink/agent/internal/metrics"
+	"github.com/velink/agent/internal/protocol"
 )
 
 const (

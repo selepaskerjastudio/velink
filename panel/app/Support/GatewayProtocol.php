@@ -11,9 +11,9 @@ final class GatewayProtocol
     /** Redis connection (config/database.php) with an empty prefix. */
     public const REDIS_CONNECTION = 'gateway';
 
-    public const CHANNEL_DISPATCH = 'coruncloud:gateway:dispatch';
-    public const CHANNEL_INBOUND = 'coruncloud:gateway:inbound';
-    public const CHANNEL_PRESENCE = 'coruncloud:gateway:presence';
+    public const CHANNEL_DISPATCH = 'velink:gateway:dispatch';
+    public const CHANNEL_INBOUND = 'velink:gateway:inbound';
+    public const CHANNEL_PRESENCE = 'velink:gateway:presence';
 
     public const TYPE_HELLO = 'hello';
     public const TYPE_HEARTBEAT = 'heartbeat';
@@ -28,6 +28,6 @@ final class GatewayProtocol
 
     public static function presenceKey(int $serverId): string
     {
-        return "coruncloud:presence:server:{$serverId}";
+        return "velink:presence:server:{$serverId}";
     }
 }

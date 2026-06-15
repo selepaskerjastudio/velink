@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/coruncloud/agent/internal/protocol"
+	"github.com/velink/agent/internal/protocol"
 )
 
 // collector gathers emitted envelopes in a goroutine-safe way.

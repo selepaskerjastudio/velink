@@ -50,16 +50,16 @@ const (
 // inbound + presence; the gateway does the reverse.
 const (
 	// ChannelDispatch carries panel -> agent envelopes (routed by ServerID).
-	ChannelDispatch = "coruncloud:gateway:dispatch"
+	ChannelDispatch = "velink:gateway:dispatch"
 	// ChannelInbound carries agent -> panel envelopes.
-	ChannelInbound = "coruncloud:gateway:inbound"
+	ChannelInbound = "velink:gateway:inbound"
 	// ChannelPresence carries online/offline transitions.
-	ChannelPresence = "coruncloud:gateway:presence"
+	ChannelPresence = "velink:gateway:presence"
 )
 
 // PresenceKey is the Redis key holding a server's live presence (with TTL).
 func PresenceKey(serverID string) string {
-	return fmt.Sprintf("coruncloud:presence:server:%s", serverID)
+	return fmt.Sprintf("velink:presence:server:%s", serverID)
 }
 
 // PresenceEvent is published to ChannelPresence on every transition.

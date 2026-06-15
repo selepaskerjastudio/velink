@@ -1,4 +1,4 @@
-# TODO — coruncloud
+# TODO — Velink
 
 > Checklist pengerjaan. Lihat [`PRD.md`](./PRD.md) dan [`PLAN.md`](./PLAN.md).
 > Urutan: kerjakan **3 bagian berisiko** dulu (transport agent, eksekusi privileged
@@ -95,7 +95,7 @@
 - [x] Supervisord: generate program conf untuk queue worker (`queue:work`/Horizon),
       restart, baca status/log dari UI (`workers.index/store/update/control/destroy`,
       `WorkerService`, `WorkerTemplates`, `applications/workers.tsx`).
-- [x] Cron: crontab terkelola (drop-in `/etc/cron.d/coruncloud`) dari UI
+- [x] Cron: crontab terkelola (drop-in `/etc/cron.d/velink`) dari UI
       (`cron.index/store/update/toggle/destroy`, `CronService`, `CronTemplates`,
       `servers/cron.tsx`).
 - [x] Manajemen database dari UI: buat/hapus DB (`databases.*`, `DatabaseProvisionService`,
@@ -124,7 +124,7 @@
 
 - [ ] **Catatan rilis (bigint→UUID server identifier):** setelah perubahan ini
       dirilis, agent yang sudah terpasang punya `AGENT_SERVER_ID=<bigint>` lama
-      di `/etc/coruncloud/agent.env` — harus dijalankan ulang `installer/agent.sh`
+      di `/etc/velink/agent.env` — harus dijalankan ulang `installer/agent.sh`
       dengan `--server-id=<uuid>` baru dari panel agar `X-Server-Id`/`server_id`
       cocok dengan validasi UUID di gateway & panel.
 

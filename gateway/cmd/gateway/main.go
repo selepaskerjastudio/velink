@@ -1,4 +1,4 @@
-// Command gateway is the coruncloud realtime gateway: it terminates agent
+// Command gateway is the Velink realtime gateway: it terminates agent
 // WebSocket connections, tracks presence in Redis, and bridges jobs/output
 // between agents and the Laravel panel over Redis pub/sub.
 package main
@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coruncloud/gateway/internal/auth"
-	"github.com/coruncloud/gateway/internal/bridge"
-	"github.com/coruncloud/gateway/internal/config"
-	"github.com/coruncloud/gateway/internal/hub"
-	"github.com/coruncloud/gateway/internal/presence"
-	"github.com/coruncloud/gateway/internal/server"
+	"github.com/velink/gateway/internal/auth"
+	"github.com/velink/gateway/internal/bridge"
+	"github.com/velink/gateway/internal/config"
+	"github.com/velink/gateway/internal/hub"
+	"github.com/velink/gateway/internal/presence"
+	"github.com/velink/gateway/internal/server"
 	"github.com/redis/go-redis/v9"
 )
 

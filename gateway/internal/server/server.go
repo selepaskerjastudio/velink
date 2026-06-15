@@ -12,11 +12,11 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/coruncloud/gateway/internal/auth"
-	"github.com/coruncloud/gateway/internal/bridge"
-	"github.com/coruncloud/gateway/internal/hub"
-	"github.com/coruncloud/gateway/internal/presence"
-	"github.com/coruncloud/gateway/internal/protocol"
+	"github.com/velink/gateway/internal/auth"
+	"github.com/velink/gateway/internal/bridge"
+	"github.com/velink/gateway/internal/hub"
+	"github.com/velink/gateway/internal/presence"
+	"github.com/velink/gateway/internal/protocol"
 )
 
 // Server holds the dependencies for the agent-facing endpoints.

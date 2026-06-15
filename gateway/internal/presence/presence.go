@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/coruncloud/gateway/internal/protocol"
+	"github.com/velink/gateway/internal/protocol"
 	"github.com/redis/go-redis/v9"
 )
 

@@ -250,7 +250,7 @@ export default function ServerCron({
                 <Card className="max-w-2xl">
                     <CardHeader>
                         <CardTitle>Scheduled jobs</CardTitle>
-                        <CardDescription>Managed via /etc/cron.d/coruncloud on this server.</CardDescription>
+                        <CardDescription>Managed via /etc/cron.d/velink on this server.</CardDescription>
                     </CardHeader>
                     {cronJobs.length > 0 && (
                         <CardContent className="grid gap-2">

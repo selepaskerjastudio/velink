@@ -1,13 +1,13 @@
 [Unit]
-Description=coruncloud agent
-Documentation=https://github.com/coruncloud
+Description=Velink agent
+Documentation=https://github.com/velink
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/coruncloud/agent.env
-ExecStart=/usr/local/bin/coruncloud-agent
+EnvironmentFile=/etc/velink/agent.env
+ExecStart=/usr/local/bin/velink-agent
 Restart=always
 RestartSec=5
 # The agent provisions packages/services, so it runs privileged.

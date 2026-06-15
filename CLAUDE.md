@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-**coruncloud** is a self-hosted server control panel (inspired by RunCloud/Laravel Forge) for managing multiple Ubuntu VMs from a single dashboard. It manages PHP applications (per-app PHP version), databases, Redis, systemd services, supervisord workers, cron jobs, and Git deployments — all without manual SSH.
+**Velink** is a self-hosted server control panel (inspired by RunCloud/Laravel Forge) for managing multiple Ubuntu VMs from a single dashboard. It manages PHP applications (per-app PHP version), databases, Redis, systemd services, supervisord workers, cron jobs, and Git deployments — all without manual SSH.
 
 ## Repository structure (monorepo)
 
@@ -89,7 +89,7 @@ Key namespaces:
 A thin, stateless WebSocket terminator that runs on the panel VM. It:
 - Accepts `wss://.../agent/connect` connections from agents (verifies token by calling the panel's internal `/internal/agent/verify` endpoint)
 - Maintains agent presence in Redis (TTL-based, per-server key)
-- Bridges messages: panel→agent (`coruncloud:gateway:dispatch`) and agent→panel (`coruncloud:gateway:inbound`)
+- Bridges messages: panel→agent (`velink:gateway:dispatch`) and agent→panel (`velink:gateway:inbound`)
 
 ### Agent (Go) — `/agent`
 A single static binary installed on each managed server via the one-liner installer. It:
@@ -100,9 +100,9 @@ A single static binary installed on each managed server via the one-liner instal
 
 ### Job dispatch flow
 1. Panel creates an `AgentJob` record (state: `pending`)
-2. `JobDispatcher` publishes it to `coruncloud:gateway:dispatch` Redis channel
+2. `JobDispatcher` publishes it to `velink:gateway:dispatch` Redis channel
 3. Gateway routes to the correct agent by `server_id` (UUID)
-4. Agent executes, streams output chunks → gateway → `coruncloud:gateway:inbound`
+4. Agent executes, streams output chunks → gateway → `velink:gateway:inbound`
 5. `GatewayInboundProcessor` (panel) updates job status and broadcasts `AgentJobUpdated` via Reverb to the browser
 
 ## Key patterns

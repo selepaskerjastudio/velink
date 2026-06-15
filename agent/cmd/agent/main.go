@@ -1,4 +1,4 @@
-// Command agent is the coruncloud agent: a single static binary installed on
+// Command agent is the Velink agent: a single static binary installed on
 // each managed server. It dials out to the gateway, heartbeats, and executes
 // jobs (provisioning, deploys, service control) on behalf of the panel.
 package main
@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/coruncloud/agent/internal/client"
-	"github.com/coruncloud/agent/internal/config"
+	"github.com/velink/agent/internal/client"
+	"github.com/velink/agent/internal/config"
 )
 
 func main() {

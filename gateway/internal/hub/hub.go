@@ -5,7 +5,7 @@ package hub
 import (
 	"sync"
 
-	"github.com/coruncloud/gateway/internal/protocol"
+	"github.com/velink/gateway/internal/protocol"
 )
 
 // Conn is one live agent connection. Writes go through the buffered Send channel

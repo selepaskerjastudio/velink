@@ -3,7 +3,7 @@ package hub
 import (
 	"testing"
 
-	"github.com/coruncloud/gateway/internal/protocol"
+	"github.com/velink/gateway/internal/protocol"
 )
 
 func TestReconnectReturnsPrevious(t *testing.T) {

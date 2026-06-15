@@ -34,10 +34,10 @@ ter-hash (bcrypt) di DB panel, verifikasi harus di panel, gateway tetap stateles
 
 ## Redis channels
 
-- `coruncloud:gateway:dispatch` — panel → agent (envelope dengan `server_id`).
-- `coruncloud:gateway:inbound`  — agent → panel (heartbeat di-handle lokal, sisanya diteruskan).
-- `coruncloud:gateway:presence` — transisi online/offline.
-- `coruncloud:presence:server:<id>` — key presence per-server (dengan TTL heartbeat).
+- `velink:gateway:dispatch` — panel → agent (envelope dengan `server_id`).
+- `velink:gateway:inbound`  — agent → panel (heartbeat di-handle lokal, sisanya diteruskan).
+- `velink:gateway:presence` — transisi online/offline.
+- `velink:presence:server:<id>` — key presence per-server (dengan TTL heartbeat).
 
 ## Menjalankan (dev)
 

@@ -8,7 +8,7 @@ use App\Models\Server;
 use App\Provisioning\CronTemplates;
 
 /**
- * Manages CronJob rows and keeps the managed /etc/cron.d/coruncloud drop-in
+ * Manages CronJob rows and keeps the managed /etc/cron.d/velink drop-in
  * file on the target server in sync via the `render_config` action.
  */
 class CronService

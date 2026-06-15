@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/coruncloud/gateway/internal/hub"
-	"github.com/coruncloud/gateway/internal/protocol"
+	"github.com/velink/gateway/internal/hub"
+	"github.com/velink/gateway/internal/protocol"
 	"github.com/redis/go-redis/v9"
 )
 

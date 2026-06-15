@@ -1,10 +1,10 @@
-# PRD — coruncloud (Server Control Panel)
+# PRD — Velink (Server Control Panel)
 
 > Product Requirements Document. Status: Draft v1. Tanggal: 2026-06-15.
 
 ## 1. Ringkasan
 
-**coruncloud** adalah control panel internal untuk mengelola banyak server/VM dari
+**Velink** adalah control panel internal untuk mengelola banyak server/VM dari
 satu dashboard, terinspirasi RunCloud/Laravel Forge/Ploi. Satu VM "panel" mengelola
 banyak server target tanpa perlu masuk ke terminal secara manual.
 
