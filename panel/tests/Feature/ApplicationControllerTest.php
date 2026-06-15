@@ -1,9 +1,12 @@
 <?php
 
 use App\Models\Application;
+use App\Models\Deployment;
+use App\Models\GitProvider;
 use App\Models\PhpPool;
 use App\Models\Server;
 use App\Models\User;
+use App\Provisioning\DeployTemplates;
 use Illuminate\Support\Facades\Redis;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
@@ -167,4 +170,157 @@ test('env content can be updated and is written to the server', function () {
     expect($published)->toHaveCount(1);
     expect($published[0]['payload']['action'])->toBe('write_file');
     expect($published[0]['payload']['params']['path'])->toBe("{$application->root_path}/.env");
+});
+
+test('deploy settings can be updated', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    $server = Server::factory()->online()->create();
+    $application = Application::factory()->create(['server_id' => $server->id]);
+
+    $provider = GitProvider::create(['type' => 'github', 'name' => 'GitHub']);
+    $credential = $user->gitCredentials()->create([
+        'git_provider_id' => $provider->id,
+        'account_username' => 'octocat',
+        'access_token' => 'ghp_test',
+    ]);
+
+    $response = $this->patch(route('applications.deploy-settings', $application), [
+        'repository' => 'acme/widgets',
+        'branch' => 'develop',
+        'deploy_mode' => 'inplace',
+        'git_credential_id' => $credential->id,
+        'deploy_script' => 'echo deploy',
+    ]);
+
+    $response->assertRedirect(route('applications.show', $application));
+
+    $application->refresh();
+    expect($application->repository)->toBe('acme/widgets');
+    expect($application->branch)->toBe('develop');
+    expect($application->deploy_mode)->toBe('inplace');
+    expect($application->git_credential_id)->toBe($credential->id);
+    expect($application->deploy_script)->toBe('echo deploy');
+});
+
+test('deploy settings reject an invalid repository format', function () {
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $application = Application::factory()->create(['server_id' => $server->id]);
+
+    $response = $this->patch(route('applications.deploy-settings', $application), [
+        'repository' => 'not a repo',
+        'branch' => 'main',
+        'deploy_mode' => 'inplace',
+    ]);
+
+    $response->assertSessionHasErrors('repository');
+});
+
+test('deploy settings reject zero-downtime mode for now', function () {
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $application = Application::factory()->create(['server_id' => $server->id]);
+
+    $response = $this->patch(route('applications.deploy-settings', $application), [
+        'branch' => 'main',
+        'deploy_mode' => 'zero_downtime',
+    ]);
+
+    $response->assertSessionHasErrors('deploy_mode');
+});
+
+test('a git credential must belong to the authenticated user', function () {
+    $owner = User::factory()->create();
+    $provider = GitProvider::create(['type' => 'github', 'name' => 'GitHub']);
+    $credential = $owner->gitCredentials()->create([
+        'git_provider_id' => $provider->id,
+        'account_username' => 'octocat',
+        'access_token' => 'ghp_test',
+    ]);
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $application = Application::factory()->create(['server_id' => $server->id]);
+
+    $response = $this->patch(route('applications.deploy-settings', $application), [
+        'branch' => 'main',
+        'deploy_mode' => 'inplace',
+        'git_credential_id' => $credential->id,
+    ]);
+
+    $response->assertSessionHasErrors('git_credential_id');
+});
+
+test('a deployment can be triggered when a repository is configured', function () {
+    mockGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $application = Application::factory()->create([
+        'server_id' => $server->id,
+        'repository' => 'acme/widgets',
+        'branch' => 'main',
+    ]);
+
+    $response = $this->post(route('applications.deployments.store', $application));
+
+    $response->assertRedirect(route('applications.show', $application));
+
+    $deployment = Deployment::where('application_id', $application->id)->first();
+    expect($deployment)->not->toBeNull();
+    expect($deployment->status)->toBe('running');
+    expect($deployment->branch)->toBe('main');
+    expect($deployment->mode)->toBe('inplace');
+    expect($deployment->triggered_by)->toBe('manual');
+    expect($deployment->agent_job_uuid)->not->toBeNull();
+
+    $job = $application->server->agentJobs()->where('application_id', $application->id)->first();
+    expect($job->uuid)->toBe($deployment->agent_job_uuid);
+    expect($job->payload['command'])->toContain('acme/widgets')->toContain('main');
+});
+
+test('deploying without a repository configured returns an error', function () {
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $application = Application::factory()->create(['server_id' => $server->id]);
+
+    $response = $this->post(route('applications.deployments.store', $application));
+
+    $response->assertRedirect(route('applications.show', $application));
+    $response->assertSessionHasErrors('repository');
+
+    expect(Deployment::where('application_id', $application->id)->count())->toBe(0);
+});
+
+test('show page includes deploy settings, git credentials and deployment history', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    $server = Server::factory()->online()->create();
+    $application = Application::factory()->create(['server_id' => $server->id]);
+
+    $provider = GitProvider::create(['type' => 'github', 'name' => 'GitHub']);
+    $user->gitCredentials()->create([
+        'git_provider_id' => $provider->id,
+        'account_username' => 'octocat',
+        'access_token' => 'ghp_test',
+    ]);
+
+    Deployment::create([
+        'application_id' => $application->id,
+        'branch' => 'main',
+        'mode' => 'inplace',
+        'status' => 'success',
+        'triggered_by' => 'manual',
+    ]);
+
+    $response = $this->get(route('applications.show', $application));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->has('gitCredentials', 1)
+        ->has('deployments', 1)
+        ->where('defaultDeployScript', DeployTemplates::DEFAULT_SCRIPT)
+        ->where('application.deploy_mode', 'inplace')
+    );
 });

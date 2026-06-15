@@ -17,3 +17,4 @@ require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';
 require __DIR__.'/servers.php';
 require __DIR__.'/applications.php';
+require __DIR__.'/git-credentials.php';

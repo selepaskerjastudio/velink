@@ -16,6 +16,7 @@ class Deployment extends Model
         'mode',
         'status',
         'triggered_by',
+        'agent_job_uuid',
         'log',
         'started_at',
         'finished_at',

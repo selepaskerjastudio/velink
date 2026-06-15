@@ -77,6 +77,36 @@ export interface Application {
     status: string;
     created_at?: string;
     env_content: string | null;
+    repository: string | null;
+    branch: string;
+    deploy_mode: string;
+    deploy_script: string | null;
+    git_credential_id: number | null;
+}
+
+export interface GitCredential {
+    id: number;
+    account_username: string | null;
+    created_at?: string;
+    provider: {
+        id: number;
+        type: string;
+        name: string;
+    };
+}
+
+export type DeploymentStatus = 'pending' | 'running' | 'success' | 'failed';
+
+export interface Deployment {
+    id: number;
+    branch: string | null;
+    mode: string;
+    status: DeploymentStatus;
+    triggered_by: string;
+    agent_job_uuid: string | null;
+    log: string | null;
+    started_at: string | null;
+    finished_at: string | null;
 }
 
 export interface User {

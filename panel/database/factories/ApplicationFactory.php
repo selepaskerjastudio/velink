@@ -25,6 +25,8 @@ class ApplicationFactory extends Factory
             'root_path' => "/home/{$linuxUser}",
             'linux_user' => $linuxUser,
             'php_version' => '8.3',
+            'branch' => 'main',
+            'deploy_mode' => 'inplace',
             'status' => 'pending',
         ];
     }

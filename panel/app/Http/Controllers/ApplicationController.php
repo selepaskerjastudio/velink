@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Application;
 use App\Models\Server;
+use App\Provisioning\DeployTemplates;
 use App\Provisioning\ProvisioningCatalog;
 use App\Services\AppProvisionService;
+use App\Services\DeploymentService;
 use App\Services\JobDispatcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,6 +18,10 @@ use Inertia\Response;
 class ApplicationController extends Controller
 {
     private const DOMAIN_REGEX = '/^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i';
+
+    private const REPOSITORY_REGEX = '/^[\w.-]+\/[\w.-]+$/';
+
+    private const BRANCH_REGEX = '/^[\w.\/-]+$/';
 
     public function create(Server $server): Response
     {
@@ -56,11 +62,22 @@ class ApplicationController extends Controller
 
         return Inertia::render('applications/show', [
             'application' => [
-                ...$application->only(['id', 'server_id', 'name', 'domain', 'root_path', 'linux_user', 'php_version', 'status', 'created_at']),
+                ...$application->only([
+                    'id', 'server_id', 'name', 'domain', 'root_path', 'linux_user', 'php_version', 'status', 'created_at',
+                    'repository', 'branch', 'deploy_mode', 'deploy_script', 'git_credential_id',
+                ]),
                 'env_content' => $application->env_content,
             ],
             'server' => $application->server->only(['id', 'name']),
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
+            'defaultDeployScript' => DeployTemplates::DEFAULT_SCRIPT,
+            'gitCredentials' => auth()->user()->gitCredentials()
+                ->with('provider:id,type,name')
+                ->get(['id', 'account_username', 'git_provider_id', 'created_at']),
+            'deployments' => $application->deployments()
+                ->latest('id')
+                ->limit(20)
+                ->get(['id', 'branch', 'mode', 'status', 'triggered_by', 'agent_job_uuid', 'log', 'started_at', 'finished_at']),
             'jobs' => $application->server->agentJobs()
                 ->where('application_id', $application->id)
                 ->latest('id')
@@ -69,6 +86,42 @@ class ApplicationController extends Controller
                 ->reverse()
                 ->values(),
         ]);
+    }
+
+    public function updateDeploySettings(Request $request, Application $application): RedirectResponse
+    {
+        $validated = $request->validate([
+            'repository' => ['nullable', 'string', 'max:255', 'regex:'.self::REPOSITORY_REGEX],
+            'branch' => ['required', 'string', 'max:255', 'regex:'.self::BRANCH_REGEX],
+            'deploy_mode' => ['required', 'string', 'in:inplace'],
+            'git_credential_id' => [
+                'nullable',
+                Rule::exists('git_credentials', 'id')->where('user_id', $request->user()->id),
+            ],
+            'deploy_script' => ['nullable', 'string'],
+        ]);
+
+        $application->forceFill([
+            'repository' => $validated['repository'] ?: null,
+            'branch' => $validated['branch'],
+            'deploy_mode' => $validated['deploy_mode'],
+            'git_credential_id' => $validated['git_credential_id'] ?: null,
+            'deploy_script' => $validated['deploy_script'] ?: null,
+        ])->save();
+
+        return redirect()->route('applications.show', $application);
+    }
+
+    public function storeDeployment(Request $request, Application $application, DeploymentService $deploymentService): RedirectResponse
+    {
+        if (! $application->repository) {
+            return redirect()->route('applications.show', $application)
+                ->withErrors(['repository' => 'Set a repository before deploying.']);
+        }
+
+        $deploymentService->deploy($application, 'manual', $request->user()->id);
+
+        return redirect()->route('applications.show', $application);
     }
 
     public function updatePhpVersion(Request $request, Application $application, AppProvisionService $provisionService): RedirectResponse

@@ -71,16 +71,22 @@
 
 ## Fase 3 — Deploy Git (GitHub & GitLab) 🟢 Sonnet (mesin deploy ZDT 🔴 Opus)
 
-- [ ] OAuth app GitHub + GitLab; simpan token (encrypted).
-- [ ] List repo + pasang deploy key.
-- [ ] **Mode "Update biasa" (in-place):** deploy script editable (default `git pull` →
-      `composer install --no-dev` → `npm ci && build` → `migrate --force` → restart
-      worker → reload fpm).
+- [x] Kredensial Git via Personal Access Token (manual, encrypted) untuk
+      GitHub & GitLab — halaman "Git credentials". _(OAuth app penuh
+      ditunda; PAT manual cukup untuk clone/fetch via agent.)_
+- [ ] List repo + pasang deploy key (butuh OAuth app — ditunda).
+- [x] **Mode "Update biasa" (in-place):** deploy script editable (default git
+      fetch+reset → `composer install --no-dev` → `npm ci && build` →
+      `migrate --force` + cache artisan), dijalankan sebagai `linux_user`
+      aplikasi via `sudo -u`.
 - [ ] 🔴 **Opus** — **Mode "Zero-downtime":** `releases/<ts>` + symlink `current` atomik
       + `shared/` (.env, storage) + rollback (boleh shell-out ke Deployer).
-- [ ] Pilihan `deploy_mode` per aplikasi + editor deploy script di dashboard.
+- [x] Pilihan `deploy_mode` per aplikasi + editor deploy script di dashboard
+      (Select `deploy_mode` saat ini hanya mengizinkan `inplace`; opsi
+      zero-downtime tampil disabled "coming soon").
 - [ ] Endpoint webhook GitHub/GitLab → auto-deploy on push ke branch target.
-- [ ] Halaman riwayat deployment + log + tombol rollback (mode ZDT).
+- [x] Halaman riwayat deployment + log live (via Reverb, `agent_job_uuid` ↔
+      `AgentJobUpdated`); tombol rollback masih menunggu mode ZDT.
 
 ## Fase 4 — Service / Worker / Cron 🟢 Sonnet
 
