@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Server;
+use App\Provisioning\ProvisioningCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -53,6 +54,14 @@ class ServerController extends Controller
     {
         return Inertia::render('servers/show', [
             'server' => $server,
+            'jobs' => $server->agentJobs()
+                ->latest('id')
+                ->limit(50)
+                ->get(['uuid', 'type', 'label', 'status', 'exit_code', 'output', 'created_at'])
+                ->reverse()
+                ->values(),
+            'provisioningComponents' => ProvisioningCatalog::COMPONENTS,
+            'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
         ]);
     }
 

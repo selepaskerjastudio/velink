@@ -1,24 +1,121 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Label } from '@/components/ui/label';
+import echo from '@/echo';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem, type Server, type SharedData } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
-import { TriangleAlertIcon } from 'lucide-react';
+import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type Server, type SharedData } from '@/types';
+import { Head, useForm, usePage } from '@inertiajs/react';
+import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
     switch (status) {
         case 'online':
+        case 'succeeded':
             return 'default';
         case 'offline':
+        case 'failed':
+        case 'timeout':
             return 'destructive';
+        case 'running':
+            return 'outline';
         default:
             return 'secondary';
     }
 }
 
-export default function ServersShow({ server }: { server: Server }) {
+const COMPONENT_LABELS: Record<string, string> = {
+    nginx: 'Nginx',
+    certbot: 'Certbot (Let’s Encrypt)',
+    php: 'PHP-FPM',
+    composer: 'Composer',
+    node: 'Node.js 20',
+    supervisor: 'Supervisord',
+    redis: 'Redis',
+    mysql: 'MySQL',
+    mariadb: 'MariaDB',
+    postgresql: 'PostgreSQL',
+    mongodb: 'MongoDB',
+};
+
+interface AgentJobUpdatedEvent {
+    uuid: string;
+    type: string;
+    label: string | null;
+    status: AgentJobStatus;
+    exit_code: number | null;
+    output: string | null;
+}
+
+interface ServerPresenceEvent {
+    id: number;
+    status: string;
+    agent_version: string | null;
+    last_seen_at: string | null;
+}
+
+export default function ServersShow({
+    server,
+    jobs,
+    provisioningComponents,
+    phpVersions,
+}: {
+    server: Server;
+    jobs: AgentJob[];
+    provisioningComponents: string[];
+    phpVersions: string[];
+}) {
     const { flash } = usePage<SharedData>().props;
+    const [liveStatus, setLiveStatus] = useState(server.status);
+    const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
+
+    useEffect(() => setLiveJobs(jobs), [jobs]);
+    useEffect(() => setLiveStatus(server.status), [server.status]);
+
+    useEffect(() => {
+        const channel = echo.private(`server.${server.id}`);
+
+        channel.listen('.agent-job.updated', (event: AgentJobUpdatedEvent) => {
+            setLiveJobs((current) => {
+                const index = current.findIndex((job) => job.uuid === event.uuid);
+                if (index === -1) {
+                    return current;
+                }
+                const next = [...current];
+                next[index] = { ...next[index], ...event };
+                return next;
+            });
+        });
+
+        channel.listen('.server.presence', (event: ServerPresenceEvent) => {
+            setLiveStatus(event.status);
+        });
+
+        return () => {
+            echo.leave(`server.${server.id}`);
+        };
+    }, [server.id]);
+
+    const form = useForm<{ components: string[]; php_versions: string[] }>({
+        components: [],
+        php_versions: [],
+    });
+
+    const toggleComponent = (component: string, checked: boolean) => {
+        form.setData('components', checked ? [...form.data.components, component] : form.data.components.filter((c) => c !== component));
+    };
+
+    const togglePhpVersion = (version: string, checked: boolean) => {
+        form.setData('php_versions', checked ? [...form.data.php_versions, version] : form.data.php_versions.filter((v) => v !== version));
+    };
+
+    const submitProvision = () => {
+        form.post(route('servers.provision', server.id), { preserveScroll: true });
+    };
 
     const breadcrumbs: BreadcrumbItem[] = [
         {
@@ -38,7 +135,7 @@ export default function ServersShow({ server }: { server: Server }) {
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <div className="flex items-center justify-between">
                     <h1 className="text-xl font-semibold">{server.name}</h1>
-                    <Badge variant={statusVariant(server.status)}>{server.status}</Badge>
+                    <Badge variant={statusVariant(liveStatus)}>{liveStatus}</Badge>
                 </div>
 
                 {flash.installCommand && (
@@ -91,6 +188,98 @@ export default function ServersShow({ server }: { server: Server }) {
                         </div>
                     </CardContent>
                 </Card>
+
+                <Card className="max-w-xl">
+                    <CardHeader>
+                        <CardTitle>Provision services</CardTitle>
+                        <CardDescription>
+                            Pick the services to install on this server. The agent installs everything as a series of idempotent jobs —
+                            you can re-run this any time.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3">
+                        {provisioningComponents
+                            .filter((component) => component !== 'base')
+                            .map((component) => (
+                                <div key={component} className="grid gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox
+                                            id={`component-${component}`}
+                                            checked={form.data.components.includes(component)}
+                                            onCheckedChange={(checked) => toggleComponent(component, checked === true)}
+                                        />
+                                        <Label htmlFor={`component-${component}`}>{COMPONENT_LABELS[component] ?? component}</Label>
+                                    </div>
+
+                                    {component === 'php' && form.data.components.includes('php') && (
+                                        <div className="ml-7 flex flex-wrap gap-3">
+                                            {phpVersions.map((version) => (
+                                                <div key={version} className="flex items-center gap-2">
+                                                    <Checkbox
+                                                        id={`php-${version}`}
+                                                        checked={form.data.php_versions.includes(version)}
+                                                        onCheckedChange={(checked) => togglePhpVersion(version, checked === true)}
+                                                    />
+                                                    <Label htmlFor={`php-${version}`} className="text-sm">
+                                                        PHP {version}
+                                                    </Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {component === 'php' && form.data.components.includes('php') && form.errors.php_versions && (
+                                        <p className="ml-7 text-sm text-destructive">{form.errors.php_versions}</p>
+                                    )}
+                                </div>
+                            ))}
+                    </CardContent>
+                    <CardFooter className="justify-between">
+                        {form.errors.components && <p className="text-sm text-destructive">{form.errors.components}</p>}
+                        <Button onClick={submitProvision} disabled={form.processing || form.data.components.length === 0}>
+                            Provision selected services
+                        </Button>
+                    </CardFooter>
+                </Card>
+
+                {liveJobs.length > 0 && (
+                    <Card className="max-w-xl">
+                        <CardHeader>
+                            <CardTitle>Provisioning progress</CardTitle>
+                            <CardDescription>Live status of jobs dispatched to this server.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid gap-2">
+                            {liveJobs.map((job) => (
+                                <Collapsible key={job.uuid}>
+                                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium">{job.label ?? job.type}</span>
+                                            {job.exit_code !== null && (
+                                                <span className="text-muted-foreground text-xs">exit {job.exit_code}</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+                                            {job.output && (
+                                                <CollapsibleTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                                                        <ChevronDownIcon />
+                                                    </Button>
+                                                </CollapsibleTrigger>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {job.output && (
+                                        <CollapsibleContent>
+                                            <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
+                                                {job.output}
+                                            </pre>
+                                        </CollapsibleContent>
+                                    )}
+                                </Collapsible>
+                            ))}
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </AppLayout>
     );

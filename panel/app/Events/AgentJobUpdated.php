@@ -40,6 +40,7 @@ class AgentJobUpdated implements ShouldBroadcast
         return [
             'uuid' => $this->job->uuid,
             'type' => $this->job->type,
+            'label' => $this->job->label,
             'status' => $this->job->status,
             'exit_code' => $this->job->exit_code,
             'output' => $this->job->output,

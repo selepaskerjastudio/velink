@@ -46,6 +46,18 @@ export interface Server {
     updated_at?: string;
 }
 
+export type AgentJobStatus = 'pending' | 'dispatched' | 'running' | 'succeeded' | 'failed' | 'timeout';
+
+export interface AgentJob {
+    uuid: string;
+    type: string;
+    label: string | null;
+    status: AgentJobStatus;
+    exit_code: number | null;
+    output: string | null;
+    created_at?: string;
+}
+
 export interface User {
     id: number;
     name: string;

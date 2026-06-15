@@ -56,8 +56,8 @@
   - [x] PostgreSQL (repo PGDG).
   - [x] MongoDB (repo resmi MongoDB).
   - [x] Redis.
-- [ ] UI: pilih service yang akan diinstall per server + lihat progress provisioning
-      (live via Reverb). _← satu-satunya sisa Fase 1; sisanya backend sudah jalan & teruji._
+- [x] UI: pilih service yang akan diinstall per server + lihat progress provisioning
+      (live via Reverb).
 
 ## Fase 2 — App PHP + Versi PHP per-App 🟢 Sonnet
 

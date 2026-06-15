@@ -31,6 +31,7 @@ class AgentJob extends Model
         'application_id',
         'user_id',
         'type',
+        'label',
         'payload',
         'status',
         'exit_code',

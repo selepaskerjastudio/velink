@@ -35,7 +35,7 @@ class ProvisionService
                     $server,
                     $step['type'],
                     $step['params'],
-                    ['user_id' => $userId],
+                    ['user_id' => $userId, 'label' => $step['name']],
                 );
             }
         }

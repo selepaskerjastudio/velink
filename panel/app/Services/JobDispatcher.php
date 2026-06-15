@@ -15,7 +15,7 @@ class JobDispatcher
 {
     /**
      * @param  array<string, mixed>  $params      Action-specific parameters (the executor's input).
-     * @param  array{application_id?: int|null, user_id?: int|null}  $attributes
+     * @param  array{application_id?: int|null, user_id?: int|null, label?: string|null}  $attributes
      */
     public function dispatch(Server $server, string $type, array $params = [], array $attributes = []): AgentJob
     {
@@ -24,6 +24,7 @@ class JobDispatcher
             'application_id' => $attributes['application_id'] ?? null,
             'user_id' => $attributes['user_id'] ?? null,
             'type' => $type,
+            'label' => $attributes['label'] ?? null,
             'payload' => $params,
             'status' => AgentJob::STATUS_PENDING,
         ]);
