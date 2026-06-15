@@ -1,0 +1,18 @@
+# OS / editor junk
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Environment files (panel has its own .gitignore for panel/.env)
+.env
+gateway/.env
+agent/.env
+installer/.env
+
+# Compiled Go binaries (sources live in cmd/, internal/)
+/gateway/gateway
+/gateway/bin/
+/agent/agent
+/agent/bin/
+*.exe
