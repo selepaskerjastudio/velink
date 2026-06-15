@@ -15,6 +15,13 @@ Route::get('install/agent.sh', function () {
     return response()->file($path, ['Content-Type' => 'text/plain; charset=utf-8']);
 })->name('install.agent');
 
+Route::get('install/bin/{file}', function (string $file) {
+    abort_unless(preg_match('/^agent-[a-z0-9]+-[a-z0-9]+-[a-z0-9.]+$/', $file), 404);
+    $path = storage_path("app/agent-bins/{$file}");
+    abort_unless(file_exists($path), 404);
+    return response()->download($path, $file, ['Content-Type' => 'application/octet-stream']);
+})->name('install.binary');
+
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');

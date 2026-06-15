@@ -1,4 +1,6 @@
 *
 !private/
 !public/
+!agent-bins/
+!agent-bins/.gitkeep
 !.gitignore
