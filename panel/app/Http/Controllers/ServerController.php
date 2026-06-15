@@ -133,14 +133,11 @@ class ServerController extends Controller
     private function installCommand(Server $server, string $token): string
     {
         $panelUrl = rtrim(config('app.url'), '/');
-        $gatewayUrl = rtrim((string) config('services.gateway.public_url'), '/');
 
         return sprintf(
-            'curl -fsSL %s/install/agent.sh | sudo bash -s -- --token=%s --panel=%s --gateway=%s --server-id=%s',
+            'curl -fsSL %s/install/agent.sh | sudo bash -s -- --token=%s --server-id=%s',
             $panelUrl,
             $token,
-            $panelUrl,
-            $gatewayUrl,
             $server->uuid,
         );
     }
