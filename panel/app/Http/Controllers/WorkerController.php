@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Application;
 use App\Models\Service;
+use App\Services\AuditLogger;
 use App\Services\WorkerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -56,6 +57,14 @@ class WorkerController extends Controller
 
         $service->create($application, $validated['name'], $validated['command'], $validated['numprocs'], $request->user()->id);
 
+        AuditLogger::log(
+            action: 'worker.created',
+            description: "Worker '{$validated['name']}' created for '{$application->name}'",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+            properties: ['app_uuid' => $application->uuid],
+        );
+
         return redirect()->route('workers.index', $application);
     }
 
@@ -70,6 +79,13 @@ class WorkerController extends Controller
 
         $service->update($worker, $validated['command'], $validated['numprocs'], $request->user()->id);
 
+        AuditLogger::log(
+            action: 'worker.updated',
+            description: "Worker '{$worker->name}' updated",
+            userId: $request->user()->id,
+            serverId: $worker->server_id,
+        );
+
         return redirect()->back();
     }
 
@@ -83,6 +99,14 @@ class WorkerController extends Controller
 
         $service->control($worker, $validated['action'], $request->user()->id);
 
+        AuditLogger::log(
+            action: 'worker.controlled',
+            description: "Worker '{$worker->name}' {$validated['action']}",
+            userId: $request->user()->id,
+            serverId: $worker->server_id,
+            properties: ['action' => $validated['action']],
+        );
+
         return redirect()->back();
     }
 
@@ -91,8 +115,17 @@ class WorkerController extends Controller
         abort_unless($worker->type === 'supervisor', 404);
 
         $application = $worker->application;
+        $workerName = $worker->name;
+        $serverId = $worker->server_id;
 
         $service->delete($worker, auth()->id());
+
+        AuditLogger::log(
+            action: 'worker.deleted',
+            description: "Worker '{$workerName}' deleted",
+            userId: auth()->id(),
+            serverId: $serverId,
+        );
 
         return redirect()->route('workers.index', $application);
     }

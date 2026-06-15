@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Application;
 use App\Models\Server;
 use App\Provisioning\ProvisioningCatalog;
+use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -56,6 +57,14 @@ class ServerController extends Controller
             'agent_token' => $token,
         ]);
 
+        AuditLogger::log(
+            action: 'server.created',
+            description: "Server '{$server->name}' added",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['server_uuid' => $server->uuid],
+        );
+
         return redirect()->route('servers.show', $server)->with([
             'plain_agent_token' => $token,
             'install_command' => $this->installCommand($server, $token),
@@ -88,6 +97,17 @@ class ServerController extends Controller
                 ->values(),
             'provisioningComponents' => ProvisioningCatalog::COMPONENTS,
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
+            'recentMetrics' => $server->metrics()
+                ->orderBy('recorded_at')
+                ->limit(120)
+                ->get(['cpu_percent', 'mem_total', 'mem_used', 'disk_total', 'disk_used', 'load1', 'recorded_at'])
+                ->map(fn ($m) => [
+                    'cpu'   => round($m->cpu_percent, 1),
+                    'ram'   => $m->mem_total > 0 ? round($m->mem_used / $m->mem_total * 100, 1) : 0,
+                    'disk'  => $m->disk_total > 0 ? round($m->disk_used / $m->disk_total * 100, 1) : 0,
+                    'load1' => round($m->load1, 2),
+                    'ts'    => $m->recorded_at->format('H:i:s'),
+                ]),
         ]);
     }
 

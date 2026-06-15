@@ -6,6 +6,7 @@ use App\Events\AgentJobUpdated;
 use App\Events\ServerPresenceUpdated;
 use App\Models\AgentJob;
 use App\Models\Server;
+use App\Models\ServerMetric;
 use App\Support\GatewayProtocol;
 
 /**
@@ -17,12 +18,19 @@ use App\Support\GatewayProtocol;
 class GatewayInboundProcessor
 {
     /**
-     * Handle one envelope from the inbound channel (job output / result).
+     * Handle one envelope from the inbound channel (job output / result / metrics).
      */
     public function handleInbound(string $payload): void
     {
         $env = json_decode($payload, true);
         if (! is_array($env)) {
+            return;
+        }
+
+        // Metrics have no job_id — handle them before the job_id check.
+        if (($env['type'] ?? '') === GatewayProtocol::TYPE_METRICS) {
+            $this->handleMetrics($env);
+
             return;
         }
 
@@ -61,6 +69,36 @@ class GatewayInboundProcessor
         }
 
         event(new AgentJobUpdated($job->refresh()));
+    }
+
+    /**
+     * Handle a metrics envelope: persist a ServerMetric row and prune old records.
+     */
+    private function handleMetrics(array $env): void
+    {
+        $serverId = $env['server_id'] ?? null;
+        $server = $serverId ? Server::where('uuid', $serverId)->first() : null;
+        if (! $server) {
+            return;
+        }
+
+        $body = is_array($env['payload'] ?? null) ? $env['payload'] : [];
+
+        ServerMetric::create([
+            'server_id'   => $server->id,
+            'cpu_percent' => (float) ($body['cpu_percent'] ?? 0),
+            'mem_total'   => (int) ($body['mem_total'] ?? 0),
+            'mem_used'    => (int) ($body['mem_used'] ?? 0),
+            'disk_total'  => (int) ($body['disk_total'] ?? 0),
+            'disk_used'   => (int) ($body['disk_used'] ?? 0),
+            'load1'       => (float) ($body['load1'] ?? 0),
+            'recorded_at' => now(),
+        ]);
+
+        // Keep only the last 2 hours (~240 readings at 30 s intervals).
+        ServerMetric::where('server_id', $server->id)
+            ->where('recorded_at', '<', now()->subHours(2))
+            ->delete();
     }
 
     /**

@@ -73,4 +73,9 @@ class Server extends Model
     {
         return $this->hasMany(AgentJob::class);
     }
+
+    public function metrics(): HasMany
+    {
+        return $this->hasMany(ServerMetric::class);
+    }
 }

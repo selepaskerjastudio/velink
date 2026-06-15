@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Application;
+use App\Services\AuditLogger;
 use App\Services\DeploymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,17 @@ class WebhookController extends Controller
         }
 
         $deploymentService->deploy($application, 'webhook');
+
+        AuditLogger::log(
+            action: 'application.deployed',
+            description: "Deploy triggered for '{$application->name}' (webhook)",
+            userId: null,
+            serverId: $application->server_id,
+            properties: [
+                'branch' => $application->branch,
+                'triggered_by' => 'webhook',
+            ],
+        );
 
         return response()->json(['status' => 'dispatched']);
     }

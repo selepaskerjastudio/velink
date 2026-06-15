@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DatabaseUser;
 use App\Models\Server;
+use App\Services\AuditLogger;
 use App\Services\DatabaseUserProvisionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -72,6 +73,14 @@ class DatabaseUserController extends Controller
             $request->user()->id,
         );
 
+        AuditLogger::log(
+            action: 'database_user.created',
+            description: "DB user '{$validated['username']}' created",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['server_uuid' => $server->uuid],
+        );
+
         return redirect()->route('database-users.index', $server)->with([
             'plain_db_user_password' => $result['plainPassword'],
             'plain_db_user_username' => $validated['username'],
@@ -86,14 +95,30 @@ class DatabaseUserController extends Controller
 
         $service->updateGrants($databaseUser, $validated['grants'] ?? [], $request->user()->id);
 
+        AuditLogger::log(
+            action: 'database_user.updated',
+            description: "DB user '{$databaseUser->username}' grants updated",
+            userId: $request->user()->id,
+            serverId: $databaseUser->server_id,
+        );
+
         return redirect()->route('database-users.index', $databaseUser->server);
     }
 
     public function destroy(DatabaseUser $databaseUser, DatabaseUserProvisionService $service): RedirectResponse
     {
         $server = $databaseUser->server;
+        $username = $databaseUser->username;
+        $serverId = $databaseUser->server_id;
 
         $service->delete($databaseUser, request()->user()->id);
+
+        AuditLogger::log(
+            action: 'database_user.deleted',
+            description: "DB user '{$username}' deleted",
+            userId: request()->user()->id,
+            serverId: $serverId,
+        );
 
         return redirect()->route('database-users.index', $server);
     }

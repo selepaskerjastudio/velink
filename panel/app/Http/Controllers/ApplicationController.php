@@ -8,6 +8,7 @@ use App\Models\Server;
 use App\Provisioning\DeployTemplates;
 use App\Provisioning\ProvisioningCatalog;
 use App\Services\AppProvisionService;
+use App\Services\AuditLogger;
 use App\Services\DeploymentService;
 use App\Services\JobDispatcher;
 use Illuminate\Http\RedirectResponse;
@@ -53,6 +54,14 @@ class ApplicationController extends Controller
         ]);
 
         $provisionService->provisionNew($application, $request->user()->id);
+
+        AuditLogger::log(
+            action: 'application.created',
+            description: "Application '{$application->name}' created on '{$server->name}'",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['app_uuid' => $application->uuid],
+        );
 
         return redirect()->route('applications.show', $application);
     }
@@ -128,6 +137,17 @@ class ApplicationController extends Controller
             'deploy_script' => $validated['deploy_script'] ?: null,
         ])->save();
 
+        AuditLogger::log(
+            action: 'application.deploy_settings_updated',
+            description: "Deploy settings updated for '{$application->name}'",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+            properties: [
+                'repository' => $validated['repository'] ?: null,
+                'branch' => $validated['branch'],
+            ],
+        );
+
         return redirect()->route('applications.show', $application);
     }
 
@@ -140,6 +160,17 @@ class ApplicationController extends Controller
 
         $deploymentService->deploy($application, 'manual', $request->user()->id);
 
+        AuditLogger::log(
+            action: 'application.deployed',
+            description: "Deploy triggered for '{$application->name}' (manual)",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+            properties: [
+                'branch' => $application->branch,
+                'mode' => 'manual',
+            ],
+        );
+
         return redirect()->route('applications.show', $application);
     }
 
@@ -151,6 +182,14 @@ class ApplicationController extends Controller
 
         if ($validated['php_version'] !== $application->php_version) {
             $provisionService->changePhpVersion($application, $validated['php_version'], $request->user()->id);
+
+            AuditLogger::log(
+                action: 'application.php_version_changed',
+                description: "PHP changed to {$validated['php_version']} for '{$application->name}'",
+                userId: $request->user()->id,
+                serverId: $application->server_id,
+                properties: ['php_version' => $validated['php_version']],
+            );
         }
 
         return redirect()->route('applications.show', $application);
@@ -173,6 +212,13 @@ class ApplicationController extends Controller
             'user_id' => $request->user()->id,
             'label' => 'Write .env',
         ]);
+
+        AuditLogger::log(
+            action: 'application.env_updated',
+            description: "'.env' updated for '{$application->name}'",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+        );
 
         return redirect()->route('applications.show', $application);
     }

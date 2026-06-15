@@ -15,6 +15,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 	"github.com/coruncloud/agent/internal/config"
 	"github.com/coruncloud/agent/internal/executor"
+	"github.com/coruncloud/agent/internal/metrics"
 	"github.com/coruncloud/agent/internal/protocol"
 )
 
@@ -98,6 +99,7 @@ func (c *Client) connectAndServe(ctx context.Context, onConnected func()) error 
 
 	go c.writePump(connCtx, ws, send)
 	go c.heartbeat(connCtx, send)
+	go c.metricsLoop(connCtx, send)
 	return c.readPump(connCtx, cancel, ws, send)
 }
 
@@ -166,6 +168,41 @@ func (c *Client) emit(ctx context.Context, send chan protocol.Envelope, env prot
 	select {
 	case send <- env:
 	case <-ctx.Done():
+	}
+}
+
+// metricsLoop collects a system resource snapshot every 30 seconds and sends
+// it to the gateway via the shared send channel.
+func (c *Client) metricsLoop(ctx context.Context, send chan protocol.Envelope) {
+	t := time.NewTicker(30 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			snap, err := metrics.Collect(ctx)
+			if err != nil {
+				c.log.Warn("metrics collection failed", "error", err)
+				continue
+			}
+			payload, err := json.Marshal(snap)
+			if err != nil {
+				c.log.Warn("metrics marshal failed", "error", err)
+				continue
+			}
+			env := protocol.Envelope{
+				Type:      protocol.TypeMetrics,
+				ServerID:  c.cfg.ServerID,
+				Payload:   json.RawMessage(payload),
+				Timestamp: protocol.Now(),
+			}
+			select {
+			case send <- env:
+			case <-ctx.Done():
+				return
+			}
+		}
 	}
 }
 

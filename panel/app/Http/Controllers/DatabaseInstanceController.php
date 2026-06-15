@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DatabaseInstance;
 use App\Models\Server;
+use App\Services\AuditLogger;
 use App\Services\DatabaseProvisionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -79,14 +80,31 @@ class DatabaseInstanceController extends Controller
             $request->user()->id,
         );
 
+        AuditLogger::log(
+            action: 'database.created',
+            description: "Database '{$validated['name']}' ({$validated['engine']}) created on '{$server->name}'",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['server_uuid' => $server->uuid],
+        );
+
         return redirect()->route('databases.index', $server);
     }
 
     public function destroy(DatabaseInstance $database, DatabaseProvisionService $service): RedirectResponse
     {
         $server = $database->server;
+        $databaseName = $database->name;
+        $serverId = $database->server_id;
 
         $service->delete($database, request()->user()->id);
+
+        AuditLogger::log(
+            action: 'database.deleted',
+            description: "Database '{$databaseName}' deleted",
+            userId: request()->user()->id,
+            serverId: $serverId,
+        );
 
         return redirect()->route('databases.index', $server);
     }

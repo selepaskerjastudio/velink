@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CronJob;
 use App\Models\Server;
 use App\Provisioning\CronTemplates;
+use App\Services\AuditLogger;
 use App\Services\CronService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -56,6 +57,14 @@ class CronJobController extends Controller
 
         $service->create($server, $validated, $request->user()->id);
 
+        AuditLogger::log(
+            action: 'cron.created',
+            description: "Cron '{$validated['schedule']} {$validated['command']}' created",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['server_uuid' => $server->uuid],
+        );
+
         return redirect()->route('cron.index', $server);
     }
 
@@ -78,6 +87,13 @@ class CronJobController extends Controller
 
         $service->update($cronJob, $validated, $request->user()->id);
 
+        AuditLogger::log(
+            action: 'cron.updated',
+            description: 'Cron job updated',
+            userId: $request->user()->id,
+            serverId: $cronJob->server_id,
+        );
+
         return redirect()->route('cron.index', $cronJob->server);
     }
 
@@ -85,13 +101,32 @@ class CronJobController extends Controller
     {
         $service->toggle($cronJob, request()->user()->id);
 
+        $status = $cronJob->fresh()->status ?? ($cronJob->status === 'active' ? 'paused' : 'active');
+
+        AuditLogger::log(
+            action: 'cron.toggled',
+            description: "Cron job {$status}",
+            userId: request()->user()->id,
+            serverId: $cronJob->server_id,
+            properties: ['status' => $status],
+        );
+
         return redirect()->route('cron.index', $cronJob->server);
     }
 
     public function destroy(CronJob $cronJob, CronService $service): RedirectResponse
     {
         $server = $cronJob->server;
+        $serverId = $cronJob->server_id;
+
         $service->delete($cronJob, request()->user()->id);
+
+        AuditLogger::log(
+            action: 'cron.deleted',
+            description: 'Cron job deleted',
+            userId: request()->user()->id,
+            serverId: $serverId,
+        );
 
         return redirect()->route('cron.index', $server);
     }

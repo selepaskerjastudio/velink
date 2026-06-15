@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Server;
 use App\Provisioning\ProvisioningCatalog;
+use App\Services\AuditLogger;
 use App\Services\ProvisionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,14 @@ class ProvisioningController extends Controller
             $validated['components'],
             ['php_versions' => $validated['php_versions'] ?? []],
             $request->user()->id,
+        );
+
+        AuditLogger::log(
+            action: 'server.provisioned',
+            description: "Provisioning started on '{$server->name}'",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['components' => $validated['components']],
         );
 
         return redirect()->route('servers.show', $server);

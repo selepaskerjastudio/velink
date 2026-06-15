@@ -4,6 +4,7 @@ use App\Events\AgentJobUpdated;
 use App\Events\ServerPresenceUpdated;
 use App\Models\AgentJob;
 use App\Models\Server;
+use App\Models\ServerMetric;
 use App\Services\GatewayInboundProcessor;
 use App\Support\GatewayProtocol;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -124,4 +125,39 @@ test('presence event with unknown server uuid is ignored', function () {
     ]));
 
     Event::assertNotDispatched(ServerPresenceUpdated::class);
+});
+
+test('metrics envelope inserts a ServerMetric record', function () {
+    $s = Server::factory()->create();
+
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type'      => GatewayProtocol::TYPE_METRICS,
+        'server_id' => $s->uuid,
+        'payload'   => [
+            'cpu_percent' => 12.34,
+            'mem_total'   => 8_000_000_000,
+            'mem_used'    => 4_000_000_000,
+            'disk_total'  => 100_000_000_000,
+            'disk_used'   => 50_000_000_000,
+            'load1'       => 0.75,
+        ],
+    ]));
+
+    expect(ServerMetric::where('server_id', $s->id)->count())->toBe(1);
+
+    $metric = ServerMetric::where('server_id', $s->id)->first();
+    expect($metric->cpu_percent)->toBe(12.34)
+        ->and($metric->mem_total)->toBe(8_000_000_000)
+        ->and($metric->load1)->toBe(0.75)
+        ->and($metric->recorded_at)->not->toBeNull();
+});
+
+test('metrics envelope with unknown server uuid is ignored', function () {
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type'      => GatewayProtocol::TYPE_METRICS,
+        'server_id' => (string) Str::uuid(),
+        'payload'   => ['cpu_percent' => 5.0],
+    ]));
+
+    expect(ServerMetric::count())->toBe(0);
 });

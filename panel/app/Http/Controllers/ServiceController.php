@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Server;
 use App\Models\Service;
+use App\Services\AuditLogger;
 use App\Services\ServiceManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,6 +47,14 @@ class ServiceController extends Controller
 
         $manager->register($server, $validated['name'], $validated['label'] ?? null);
 
+        AuditLogger::log(
+            action: 'service.created',
+            description: "Service '{$validated['name']}' registered on '{$server->name}'",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['server_uuid' => $server->uuid],
+        );
+
         return redirect()->route('services.index', $server);
     }
 
@@ -56,6 +65,14 @@ class ServiceController extends Controller
         ]);
 
         $manager->control($service, $validated['action']);
+
+        AuditLogger::log(
+            action: 'service.controlled',
+            description: "Service '{$service->name}' {$validated['action']}",
+            userId: $request->user()->id,
+            serverId: $service->server_id,
+            properties: ['action' => $validated['action']],
+        );
 
         return redirect()->route('services.index', $service->server);
     }
@@ -70,8 +87,17 @@ class ServiceController extends Controller
     public function destroy(Service $service, ServiceManager $manager): RedirectResponse
     {
         $server = $service->server;
+        $serviceName = $service->name;
+        $serverId = $service->server_id;
 
         $manager->unregister($service);
+
+        AuditLogger::log(
+            action: 'service.deleted',
+            description: "Service '{$serviceName}' deleted",
+            userId: auth()->id(),
+            serverId: $serverId,
+        );
 
         return redirect()->route('services.index', $server);
     }

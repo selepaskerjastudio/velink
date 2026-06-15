@@ -7,10 +7,19 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label';
 import echo from '@/echo';
 import AppLayout from '@/layouts/app-layout';
-import { type AgentJob, type AgentJobStatus, type ApplicationSummary, type BreadcrumbItem, type Server, type SharedData } from '@/types';
+import {
+    type AgentJob,
+    type AgentJobStatus,
+    type ApplicationSummary,
+    type BreadcrumbItem,
+    type Server,
+    type ServerMetricPoint,
+    type SharedData,
+} from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
     switch (status) {
@@ -64,12 +73,14 @@ export default function ServersShow({
     jobs,
     provisioningComponents,
     phpVersions,
+    recentMetrics,
 }: {
     server: Server;
     applications: ApplicationSummary[];
     jobs: AgentJob[];
     provisioningComponents: string[];
     phpVersions: string[];
+    recentMetrics: ServerMetricPoint[];
 }) {
     const { flash } = usePage<SharedData>().props;
     const [liveStatus, setLiveStatus] = useState(server.status);
@@ -243,6 +254,27 @@ export default function ServersShow({
                         </Button>
                     </CardContent>
                 </Card>
+
+                {recentMetrics.length > 0 && (
+                    <Card className="max-w-xl">
+                        <CardHeader>
+                            <CardTitle>Resource usage</CardTitle>
+                            <CardDescription>CPU and RAM % — last {recentMetrics.length} readings</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={200}>
+                                <LineChart data={recentMetrics}>
+                                    <XAxis dataKey="ts" interval="preserveStartEnd" tick={{ fontSize: 11 }} />
+                                    <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
+                                    <Tooltip formatter={(v: number) => `${v}%`} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="cpu" name="CPU" stroke="#3b82f6" dot={false} strokeWidth={1.5} />
+                                    <Line type="monotone" dataKey="ram" name="RAM" stroke="#22c55e" dot={false} strokeWidth={1.5} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                )}
 
                 <Card className="max-w-xl">
                     <CardHeader>

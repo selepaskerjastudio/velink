@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\GitCredential;
 use App\Models\GitProvider;
+use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -48,6 +49,13 @@ class GitCredentialController extends Controller
             'access_token' => $validated['access_token'],
         ]);
 
+        AuditLogger::log(
+            action: 'git_credential.created',
+            description: "Git credential added ({$validated['provider_type']} / {$validated['account_username']})",
+            userId: $request->user()->id,
+            properties: ['provider_type' => $validated['provider_type']],
+        );
+
         return redirect()->route('git-credentials.index');
     }
 
@@ -56,6 +64,12 @@ class GitCredentialController extends Controller
         abort_if($gitCredential->user_id !== $request->user()->id, 403);
 
         $gitCredential->delete();
+
+        AuditLogger::log(
+            action: 'git_credential.deleted',
+            description: 'Git credential removed',
+            userId: $request->user()->id,
+        );
 
         return redirect()->route('git-credentials.index');
     }

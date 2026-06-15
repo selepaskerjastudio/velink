@@ -170,6 +170,14 @@ export interface CronApplicationOption {
     linux_user: string;
 }
 
+export interface ServerMetricPoint {
+    cpu: number;
+    ram: number;
+    disk: number;
+    load1: number;
+    ts: string;
+}
+
 export type DatabaseGrants = Record<string, string[]>;
 
 export interface DatabaseUserSummary {
