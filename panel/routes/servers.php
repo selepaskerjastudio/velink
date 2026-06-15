@@ -10,4 +10,5 @@ Route::middleware('auth')->group(function () {
     Route::post('servers', [ServerController::class, 'store'])->name('servers.store');
     Route::get('servers/{server}', [ServerController::class, 'show'])->name('servers.show');
     Route::post('servers/{server}/provision', [ProvisioningController::class, 'store'])->name('servers.provision');
+    Route::post('servers/{server}/regenerate-token', [ServerController::class, 'regenerateToken'])->name('servers.regenerate-token');
 });

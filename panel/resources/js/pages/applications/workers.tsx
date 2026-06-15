@@ -1,3 +1,4 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +9,7 @@ import echo from '@/echo';
 import AppLayout from '@/layouts/app-layout';
 import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type WorkerStatus, type WorkerSummary } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { ChevronDownIcon } from 'lucide-react';
+import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -149,7 +150,7 @@ export default function ApplicationsWorkers({
     jobs,
 }: {
     application: { id: string; name: string };
-    server: { id: string; name: string };
+    server: { id: string; name: string; status: string };
     workers: WorkerSummary[];
     jobs: AgentJob[];
 }) {
@@ -205,6 +206,16 @@ export default function ApplicationsWorkers({
                 <div className="flex items-center justify-between">
                     <h1 className="text-xl font-semibold">Queue workers</h1>
                 </div>
+
+                {server.status !== 'online' && (
+                    <Alert variant="destructive">
+                        <TriangleAlertIcon className="h-4 w-4" />
+                        <AlertTitle>Server offline</AlertTitle>
+                        <AlertDescription>
+                            The agent on this server is not connected. Actions that require the agent (deploy, PHP switch, .env write, SSL) will be queued but won't run until the server reconnects.
+                        </AlertDescription>
+                    </Alert>
+                )}
 
                 <Card className="max-w-2xl">
                     <CardHeader>

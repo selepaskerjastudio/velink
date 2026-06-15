@@ -8,6 +8,7 @@ use App\Provisioning\ProvisioningCatalog;
 use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -108,6 +109,24 @@ class ServerController extends Controller
                     'load1' => round($m->load1, 2),
                     'ts'    => $m->recorded_at->format('H:i:s'),
                 ]),
+        ]);
+    }
+
+    public function regenerateToken(Request $request, Server $server): RedirectResponse
+    {
+        $token = Str::random(48);
+        $server->update(['agent_token' => Hash::make($token)]);
+
+        AuditLogger::log(
+            action: 'server.token_regenerated',
+            description: "Agent token regenerated for '{$server->name}'",
+            userId: $request->user()->id,
+            serverId: $server->id,
+        );
+
+        return redirect()->route('servers.show', $server)->with([
+            'plain_agent_token' => $token,
+            'install_command' => $this->installCommand($server, $token),
         ]);
     }
 

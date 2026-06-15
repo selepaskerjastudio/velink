@@ -28,6 +28,7 @@ class WorkerController extends Controller
             'server' => [
                 'id' => $application->server->uuid,
                 'name' => $application->server->name,
+                'status' => $application->server->status,
             ],
             'workers' => $application->services()
                 ->where('type', 'supervisor')

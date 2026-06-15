@@ -83,7 +83,7 @@ class ApplicationController extends Controller
                 'webhook_url' => route('webhooks.github', $application),
                 'webhook_url_gitlab' => route('webhooks.gitlab', $application),
             ],
-            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name],
+            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'status' => $application->server->status],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
             'defaultDeployScript' => DeployTemplates::DEFAULT_SCRIPT,
             'gitCredentials' => auth()->user()->gitCredentials()

@@ -17,7 +17,7 @@ class ServiceController extends Controller
     public function index(Server $server): Response
     {
         return Inertia::render('servers/services', [
-            'server' => ['id' => $server->uuid, 'name' => $server->name],
+            'server' => ['id' => $server->uuid, 'name' => $server->name, 'status' => $server->status],
             'services' => $server->services()
                 ->where('type', 'systemd')
                 ->orderBy('name')

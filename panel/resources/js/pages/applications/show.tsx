@@ -1,4 +1,5 @@
 import InputError from '@/components/input-error';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +21,7 @@ import {
     type GitCredential,
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ChevronDownIcon } from 'lucide-react';
+import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -76,7 +77,7 @@ export default function ApplicationsShow({
     defaultDeployScript,
 }: {
     application: Application;
-    server: { id: string; name: string };
+    server: { id: string; name: string; status: string };
     phpVersions: string[];
     jobs: AgentJob[];
     deployments: Deployment[];
@@ -242,6 +243,16 @@ export default function ApplicationsShow({
                         <Badge variant={statusVariant(application.status)}>{application.status}</Badge>
                     </div>
                 </div>
+
+                {server.status !== 'online' && (
+                    <Alert variant="destructive">
+                        <TriangleAlertIcon className="h-4 w-4" />
+                        <AlertTitle>Server offline</AlertTitle>
+                        <AlertDescription>
+                            The agent on this server is not connected. Actions that require the agent (deploy, PHP switch, .env write, SSL) will be queued but won't run until the server reconnects.
+                        </AlertDescription>
+                    </Alert>
+                )}
 
                 <Card className="max-w-xl">
                     <CardHeader>

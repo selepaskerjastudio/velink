@@ -8,3 +8,11 @@ Route::middleware('auth')->group(function () {
     Route::post('git-credentials', [GitCredentialController::class, 'store'])->name('git-credentials.store');
     Route::delete('git-credentials/{gitCredential}', [GitCredentialController::class, 'destroy'])->name('git-credentials.destroy');
 });
+
+// OAuth — redirect-based, no CSRF token needed on GET
+Route::middleware('auth')->group(function () {
+    Route::get('git-credentials/oauth/{provider}/redirect', [\App\Http\Controllers\GitOAuthController::class, 'redirect'])
+        ->name('git-credentials.oauth.redirect');
+    Route::get('git-credentials/oauth/{provider}/callback', [\App\Http\Controllers\GitOAuthController::class, 'callback'])
+        ->name('git-credentials.oauth.callback');
+});

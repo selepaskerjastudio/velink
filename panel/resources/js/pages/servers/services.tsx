@@ -1,4 +1,5 @@
 import InputError from '@/components/input-error';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +11,7 @@ import echo from '@/echo';
 import AppLayout from '@/layouts/app-layout';
 import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type SystemdService } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
-import { ChevronDownIcon } from 'lucide-react';
+import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const SERVICE_ACTIONS = ['start', 'stop', 'restart', 'reload', 'enable', 'disable'] as const;
@@ -103,7 +104,7 @@ export default function ServerServices({
     services,
     jobs,
 }: {
-    server: { id: string; name: string };
+    server: { id: string; name: string; status: string };
     services: SystemdService[];
     jobs: AgentJob[];
 }) {
@@ -155,6 +156,16 @@ export default function ServerServices({
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <h1 className="text-xl font-semibold">Services</h1>
+
+                {server.status !== 'online' && (
+                    <Alert variant="destructive">
+                        <TriangleAlertIcon className="h-4 w-4" />
+                        <AlertTitle>Server offline</AlertTitle>
+                        <AlertDescription>
+                            The agent on this server is not connected. Actions that require the agent (deploy, PHP switch, .env write, SSL) will be queued but won't run until the server reconnects.
+                        </AlertDescription>
+                    </Alert>
+                )}
 
                 <Card className="max-w-2xl">
                     <CardHeader>

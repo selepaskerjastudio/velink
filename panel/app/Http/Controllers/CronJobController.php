@@ -18,7 +18,7 @@ class CronJobController extends Controller
     public function index(Server $server): Response
     {
         return Inertia::render('servers/cron', [
-            'server' => ['id' => $server->uuid, 'name' => $server->name],
+            'server' => ['id' => $server->uuid, 'name' => $server->name, 'status' => $server->status],
             'cronJobs' => $server->cronJobs()
                 ->with('application:id,name')
                 ->orderBy('id')
