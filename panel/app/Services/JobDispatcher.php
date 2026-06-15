@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Redis;
 class JobDispatcher
 {
     /**
-     * @param  array<string, mixed>  $params      Action-specific parameters (the executor's input).
+     * @param  array<string, mixed>  $params  Action-specific parameters (the executor's input).
      * @param  array{application_id?: int|null, user_id?: int|null, label?: string|null}  $attributes
      */
     public function dispatch(Server $server, string $type, array $params = [], array $attributes = []): AgentJob
@@ -52,7 +52,7 @@ class JobDispatcher
         return [
             'type' => GatewayProtocol::TYPE_JOB,
             'job_id' => $job->uuid,
-            'server_id' => $job->server_id,
+            'server_id' => $job->server->uuid,
             'payload' => [
                 'action' => $job->type,
                 'params' => $job->payload ?? [],

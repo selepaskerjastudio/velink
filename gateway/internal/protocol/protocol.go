@@ -17,7 +17,7 @@ type Envelope struct {
 	// JobID correlates a job dispatch with its output/result stream.
 	JobID string `json:"job_id,omitempty"`
 	// ServerID identifies the managed server a message is routed to/from.
-	ServerID int64 `json:"server_id,omitempty"`
+	ServerID string `json:"server_id,omitempty"`
 	// Payload is the type-specific body, decoded by the receiver.
 	Payload json.RawMessage `json:"payload,omitempty"`
 	// Timestamp is unix milliseconds, set by the sender.
@@ -58,13 +58,13 @@ const (
 )
 
 // PresenceKey is the Redis key holding a server's live presence (with TTL).
-func PresenceKey(serverID int64) string {
-	return fmt.Sprintf("coruncloud:presence:server:%d", serverID)
+func PresenceKey(serverID string) string {
+	return fmt.Sprintf("coruncloud:presence:server:%s", serverID)
 }
 
 // PresenceEvent is published to ChannelPresence on every transition.
 type PresenceEvent struct {
-	ServerID     int64  `json:"server_id"`
+	ServerID     string `json:"server_id"`
 	Status       string `json:"status"`
 	AgentVersion string `json:"agent_version,omitempty"`
 	Timestamp    int64  `json:"ts"`

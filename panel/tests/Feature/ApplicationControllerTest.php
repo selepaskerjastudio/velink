@@ -7,9 +7,10 @@ use App\Models\PhpPool;
 use App\Models\Server;
 use App\Models\User;
 use App\Provisioning\DeployTemplates;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+uses(RefreshDatabase::class);
 
 function mockGatewayPublish(): void
 {
@@ -189,7 +190,7 @@ test('deploy settings can be updated', function () {
         'repository' => 'acme/widgets',
         'branch' => 'develop',
         'deploy_mode' => 'inplace',
-        'git_credential_id' => $credential->id,
+        'git_credential_id' => $credential->uuid,
         'deploy_script' => 'echo deploy',
     ]);
 
@@ -246,7 +247,7 @@ test('a git credential must belong to the authenticated user', function () {
     $response = $this->patch(route('applications.deploy-settings', $application), [
         'branch' => 'main',
         'deploy_mode' => 'inplace',
-        'git_credential_id' => $credential->id,
+        'git_credential_id' => $credential->uuid,
     ]);
 
     $response->assertSessionHasErrors('git_credential_id');

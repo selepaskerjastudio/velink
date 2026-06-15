@@ -18,8 +18,8 @@ type Config struct {
 	GatewayURL string
 	// Token is the per-server enrollment token.
 	Token string
-	// ServerID is this server's panel ID.
-	ServerID int64
+	// ServerID is this server's panel UUID.
+	ServerID string
 	// AgentVersion is reported on connect.
 	AgentVersion string
 	// HeartbeatInterval is how often heartbeats are sent.
@@ -33,7 +33,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		GatewayURL:        os.Getenv("AGENT_GATEWAY_URL"),
 		Token:             os.Getenv("AGENT_TOKEN"),
-		ServerID:          envInt64("AGENT_SERVER_ID", 0),
+		ServerID:          os.Getenv("AGENT_SERVER_ID"),
 		AgentVersion:      Version,
 		HeartbeatInterval: time.Duration(envInt("AGENT_HEARTBEAT", 30)) * time.Second,
 		Insecure:          os.Getenv("AGENT_INSECURE") == "1",
@@ -44,7 +44,7 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("AGENT_GATEWAY_URL is required")
 	case cfg.Token == "":
 		return Config{}, fmt.Errorf("AGENT_TOKEN is required")
-	case cfg.ServerID == 0:
+	case cfg.ServerID == "":
 		return Config{}, fmt.Errorf("AGENT_SERVER_ID is required")
 	}
 
@@ -54,15 +54,6 @@ func Load() (Config, error) {
 func envInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return fallback
-}
-
-func envInt64(key string, fallback int64) int64 {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
 	}

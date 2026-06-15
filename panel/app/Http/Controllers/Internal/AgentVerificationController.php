@@ -18,11 +18,11 @@ class AgentVerificationController extends Controller
     public function verify(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'server_id' => ['required', 'integer'],
+            'server_id' => ['required', 'uuid'],
             'token' => ['required', 'string'],
         ]);
 
-        $server = Server::find($data['server_id']);
+        $server = Server::where('uuid', $data['server_id'])->first();
 
         if (! $server || ! Hash::check($data['token'], $server->agent_token)) {
             return response()->json(['valid' => false], 401);
@@ -31,7 +31,7 @@ class AgentVerificationController extends Controller
         return response()->json([
             'valid' => true,
             'server' => [
-                'id' => $server->id,
+                'id' => $server->uuid,
                 'name' => $server->name,
                 'status' => $server->status,
             ],

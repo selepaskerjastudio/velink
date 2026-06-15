@@ -33,7 +33,7 @@ export interface SharedData {
 }
 
 export interface Server {
-    id: number;
+    id: string;
     name: string;
     hostname: string | null;
     public_ip: string | null;
@@ -59,7 +59,7 @@ export interface AgentJob {
 }
 
 export interface ApplicationSummary {
-    id: number;
+    id: string;
     name: string;
     domain: string | null;
     php_version: string;
@@ -67,8 +67,7 @@ export interface ApplicationSummary {
 }
 
 export interface Application {
-    id: number;
-    server_id: number;
+    id: string;
     name: string;
     domain: string | null;
     root_path: string;
@@ -81,15 +80,14 @@ export interface Application {
     branch: string;
     deploy_mode: string;
     deploy_script: string | null;
-    git_credential_id: number | null;
+    git_credential_id: string | null;
 }
 
 export interface GitCredential {
-    id: number;
+    id: string;
     account_username: string | null;
     created_at?: string;
     provider: {
-        id: number;
         type: string;
         name: string;
     };
@@ -98,7 +96,7 @@ export interface GitCredential {
 export type DeploymentStatus = 'pending' | 'running' | 'success' | 'failed';
 
 export interface Deployment {
-    id: number;
+    id: string;
     branch: string | null;
     mode: string;
     status: DeploymentStatus;

@@ -26,7 +26,7 @@ func New(rdb *redis.Client, ttl time.Duration) *Tracker {
 // every heartbeat. It publishes a transition event only on the first call by
 // using SET NX semantics through a published flag from the caller is avoided —
 // here we always refresh the key and publish; the panel treats repeats as idempotent.
-func (t *Tracker) Online(ctx context.Context, serverID int64, agentVersion string) error {
+func (t *Tracker) Online(ctx context.Context, serverID string, agentVersion string) error {
 	ev := protocol.PresenceEvent{
 		ServerID:     serverID,
 		Status:       protocol.StatusOnline,
@@ -44,12 +44,12 @@ func (t *Tracker) Online(ctx context.Context, serverID int64, agentVersion strin
 }
 
 // Refresh extends the TTL without re-publishing a transition (heartbeat path).
-func (t *Tracker) Refresh(ctx context.Context, serverID int64) error {
+func (t *Tracker) Refresh(ctx context.Context, serverID string) error {
 	return t.rdb.Expire(ctx, protocol.PresenceKey(serverID), t.ttl).Err()
 }
 
 // Offline clears presence and publishes the transition (called on disconnect).
-func (t *Tracker) Offline(ctx context.Context, serverID int64) error {
+func (t *Tracker) Offline(ctx context.Context, serverID string) error {
 	if err := t.rdb.Del(ctx, protocol.PresenceKey(serverID)).Err(); err != nil {
 		return err
 	}

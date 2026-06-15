@@ -74,7 +74,7 @@ class GatewayInboundProcessor
         }
 
         $serverId = $ev['server_id'] ?? null;
-        $server = $serverId ? Server::find($serverId) : null;
+        $server = $serverId ? Server::where('uuid', $serverId)->first() : null;
         if (! $server) {
             return;
         }

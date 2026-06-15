@@ -38,11 +38,11 @@ type Emit func(protocol.Envelope)
 
 // Executor runs jobs for a given server.
 type Executor struct {
-	serverID int64
+	serverID string
 }
 
 // New builds an Executor stamped with the server ID for outgoing envelopes.
-func New(serverID int64) *Executor {
+func New(serverID string) *Executor {
 	return &Executor{serverID: serverID}
 }
 

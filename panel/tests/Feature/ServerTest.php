@@ -2,8 +2,9 @@
 
 use App\Models\Server;
 use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+uses(RefreshDatabase::class);
 
 test('guests are redirected to the login page', function () {
     $this->get('/servers')->assertRedirect('/login');
@@ -42,6 +43,6 @@ test('a server can be created and shows the agent token once', function () {
     $follow->assertOk();
     $follow->assertInertia(fn ($page) => $page
         ->where('flash.plainAgentToken', fn ($token) => filled($token))
-        ->where('flash.installCommand', fn ($command) => str_contains($command, (string) $server->id))
+        ->where('flash.installCommand', fn ($command) => str_contains($command, $server->uuid))
     );
 });

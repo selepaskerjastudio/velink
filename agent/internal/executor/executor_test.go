@@ -60,7 +60,7 @@ func run(t *testing.T, action string, params any) *collector {
 	t.Helper()
 	raw, _ := json.Marshal(params)
 	c := &collector{}
-	New(42).Run(context.Background(), "job-1", JobSpec{Action: action, Params: raw}, c.emit)
+	New("11111111-1111-1111-1111-111111111111").Run(context.Background(), "job-1", JobSpec{Action: action, Params: raw}, c.emit)
 	return c
 }
 

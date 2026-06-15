@@ -2,12 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasUuidRouteKey;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Deployment extends Model
 {
+    use HasUuidRouteKey;
+
     protected $fillable = [
+        'uuid',
         'application_id',
         'user_id',
         'commit_hash',

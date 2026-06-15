@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Application;
 use App\Models\Server;
 use App\Provisioning\ProvisioningCatalog;
 use Illuminate\Http\RedirectResponse;
@@ -17,7 +18,18 @@ class ServerController extends Controller
         return Inertia::render('servers/index', [
             'servers' => Server::query()
                 ->orderBy('name')
-                ->get(['id', 'name', 'hostname', 'public_ip', 'private_ip', 'os', 'status', 'agent_version', 'last_seen_at']),
+                ->get(['uuid', 'name', 'hostname', 'public_ip', 'private_ip', 'os', 'status', 'agent_version', 'last_seen_at'])
+                ->map(fn (Server $s) => [
+                    'id' => $s->uuid,
+                    'name' => $s->name,
+                    'hostname' => $s->hostname,
+                    'public_ip' => $s->public_ip,
+                    'private_ip' => $s->private_ip,
+                    'os' => $s->os,
+                    'status' => $s->status,
+                    'agent_version' => $s->agent_version,
+                    'last_seen_at' => $s->last_seen_at,
+                ]),
         ]);
     }
 
@@ -53,10 +65,20 @@ class ServerController extends Controller
     public function show(Server $server): Response
     {
         return Inertia::render('servers/show', [
-            'server' => $server,
+            'server' => [
+                ...$server->only(['name', 'hostname', 'public_ip', 'private_ip', 'os', 'status', 'agent_version', 'last_seen_at']),
+                'id' => $server->uuid,
+            ],
             'applications' => $server->applications()
                 ->orderBy('name')
-                ->get(['id', 'name', 'domain', 'php_version', 'status']),
+                ->get(['uuid', 'name', 'domain', 'php_version', 'status'])
+                ->map(fn (Application $a) => [
+                    'id' => $a->uuid,
+                    'name' => $a->name,
+                    'domain' => $a->domain,
+                    'php_version' => $a->php_version,
+                    'status' => $a->status,
+                ]),
             'jobs' => $server->agentJobs()
                 ->whereNull('application_id')
                 ->latest('id')
@@ -75,12 +97,12 @@ class ServerController extends Controller
         $gatewayUrl = rtrim((string) config('services.gateway.public_url'), '/');
 
         return sprintf(
-            'curl -fsSL %s/install/agent.sh | sudo bash -s -- --token=%s --panel=%s --gateway=%s --server-id=%d',
+            'curl -fsSL %s/install/agent.sh | sudo bash -s -- --token=%s --panel=%s --gateway=%s --server-id=%s',
             $panelUrl,
             $token,
             $panelUrl,
             $gatewayUrl,
-            $server->id,
+            $server->uuid,
         );
     }
 }

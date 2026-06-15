@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasUuidRouteKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,8 +10,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Server extends Model
 {
     use HasFactory;
+    use HasUuidRouteKey;
 
     protected $fillable = [
+        'uuid',
         'name',
         'hostname',
         'public_ip',

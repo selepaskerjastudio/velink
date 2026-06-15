@@ -2,13 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasUuidRouteKey;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GitCredential extends Model
 {
+    use HasUuidRouteKey;
+
     protected $fillable = [
+        'uuid',
         'user_id',
         'git_provider_id',
         'account_username',

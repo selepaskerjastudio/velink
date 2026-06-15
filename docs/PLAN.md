@@ -97,6 +97,14 @@ Tiga komponen utama + Redis + DB:
 
 Rahasia (token Git, password DB, isi `.env`) disimpan pakai **encrypted cast** Laravel.
 
+> **Identifier eksternal (UUID):** `servers`, `applications`, `git_credentials`,
+> `deployments` (dan `agent_jobs` sejak Fase 1) punya kolom `uuid` terpisah sebagai
+> route-key (trait `HasUuidRouteKey`: generate `Str::uuid()` saat `creating`,
+> `getRouteKeyName() => 'uuid'`). Bigint `id` tetap dipakai untuk relasi/FK internal
+> (join, `where('application_id', ...)`, dll) — hanya representasi yang terekspos ke
+> URL/payload Inertia/channel broadcast dan protokol agent↔gateway (`server_id`,
+> `X-Server-Id`, `--server-id`) yang berubah ke uuid.
+
 ## 5. Roadmap Berfase
 
 ### Fase 0 — Fondasi
@@ -153,6 +161,9 @@ Rahasia (token Git, password DB, isi `.env`) disimpan pakai **encrypted cast** L
 - **Jangan eksekusi shell arbitrer dari UI** — Job bertemplate + allowlist; web terminal
   adalah jalur eksplisit/teraudit terpisah.
 - Audit log semua aksi (siapa, server mana, perintah apa).
+- Identifier eksternal (URL, payload Inertia, channel broadcast, protokol
+  agent↔gateway) memakai UUID per-model (kolom `uuid` + `HasUuidRouteKey`), bukan
+  bigint sekuensial — mencegah enumerasi resource antar user.
 - Enkripsi at-rest untuk token Git, password DB, `.env` (encrypted cast).
 - Isolasi per-site: fpm pool user terpisah, `open_basedir`, permission ketat.
 - Panel di balik VPN/firewall, TLS wajib, 2FA untuk semua user.

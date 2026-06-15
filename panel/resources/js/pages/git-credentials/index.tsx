@@ -29,7 +29,7 @@ export default function GitCredentialsIndex({ credentials }: { credentials: GitC
         post(route('git-credentials.store'), { onSuccess: () => reset('account_username', 'access_token') });
     };
 
-    const destroy = (id: number) => {
+    const destroy = (id: string) => {
         if (confirm('Remove this credential? Applications using it will need a new one.')) {
             router.delete(route('git-credentials.destroy', id));
         }

@@ -12,7 +12,7 @@ import (
 // so a single writer goroutine owns the underlying socket (concurrent writes to
 // a WebSocket are not allowed).
 type Conn struct {
-	ServerID     int64
+	ServerID     string
 	AgentVersion string
 	Send         chan protocol.Envelope
 
@@ -21,7 +21,7 @@ type Conn struct {
 }
 
 // NewConn builds a connection with a buffered send queue.
-func NewConn(serverID int64, agentVersion string) *Conn {
+func NewConn(serverID string, agentVersion string) *Conn {
 	return &Conn{
 		ServerID:     serverID,
 		AgentVersion: agentVersion,
@@ -41,12 +41,12 @@ func (c *Conn) Closed() <-chan struct{} { return c.closed }
 // Hub is a concurrency-safe registry keyed by server ID.
 type Hub struct {
 	mu    sync.RWMutex
-	conns map[int64]*Conn
+	conns map[string]*Conn
 }
 
 // New builds an empty Hub.
 func New() *Hub {
-	return &Hub{conns: make(map[int64]*Conn)}
+	return &Hub{conns: make(map[string]*Conn)}
 }
 
 // Add registers a connection, returning any previous connection for the same
@@ -70,7 +70,7 @@ func (h *Hub) Remove(c *Conn) {
 }
 
 // Get returns the live connection for a server, if any.
-func (h *Hub) Get(serverID int64) (*Conn, bool) {
+func (h *Hub) Get(serverID string) (*Conn, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	c, ok := h.conns[serverID]

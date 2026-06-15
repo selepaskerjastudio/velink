@@ -8,6 +8,6 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 
 // Per-server channel for live job progress + presence. This is a single-tenant
 // internal panel, so any authenticated user may listen.
-Broadcast::channel('server.{serverId}', function ($user) {
+Broadcast::channel('server.{serverUuid}', function ($user) {
     return $user !== null;
 });

@@ -51,10 +51,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 // upgrade), then runs the read/write pumps for the lifetime of the connection.
 func (s *Server) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 	token := bearerToken(r.Header.Get("Authorization"))
-	serverID, _ := strconv.ParseInt(r.Header.Get("X-Server-Id"), 10, 64)
+	serverID := r.Header.Get("X-Server-Id")
 	agentVersion := r.Header.Get("X-Agent-Version")
 
-	if token == "" || serverID == 0 {
+	if token == "" || serverID == "" {
 		http.Error(w, "missing credentials", http.StatusUnauthorized)
 		return
 	}

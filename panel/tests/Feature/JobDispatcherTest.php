@@ -4,9 +4,10 @@ use App\Models\AgentJob;
 use App\Models\Server;
 use App\Services\JobDispatcher;
 use App\Support\GatewayProtocol;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+uses(RefreshDatabase::class);
 
 test('dispatch creates a job and publishes the envelope', function () {
     $server = Server::factory()->online()->create();
@@ -31,13 +32,23 @@ test('dispatch creates a job and publishes the envelope', function () {
     expect($captured)->toMatchArray([
         'type' => GatewayProtocol::TYPE_JOB,
         'job_id' => $job->uuid,
-        'server_id' => $server->id,
+        'server_id' => $server->uuid,
     ]);
     expect($captured['payload'])->toMatchArray([
         'action' => 'shell',
         'params' => ['command' => 'echo hi'],
     ]);
     expect($captured['ts'])->toBeInt();
+});
+
+test('buildEnvelope uses the server uuid as the wire server_id', function () {
+    $server = Server::factory()->online()->create();
+    $job = AgentJob::factory()->for($server)->create();
+
+    $envelope = app(JobDispatcher::class)->buildEnvelope($job);
+
+    expect($envelope['server_id'])->toBe($job->server->uuid)
+        ->and($envelope['server_id'])->toBe($server->uuid);
 });
 
 test('payload is encrypted at rest', function () {

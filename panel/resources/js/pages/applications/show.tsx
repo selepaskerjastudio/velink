@@ -75,7 +75,7 @@ export default function ApplicationsShow({
     defaultDeployScript,
 }: {
     application: Application;
-    server: { id: number; name: string };
+    server: { id: string; name: string };
     phpVersions: string[];
     jobs: AgentJob[];
     deployments: Deployment[];

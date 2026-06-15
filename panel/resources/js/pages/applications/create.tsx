@@ -9,7 +9,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
-export default function ApplicationsCreate({ server, phpVersions }: { server: { id: number; name: string }; phpVersions: string[] }) {
+export default function ApplicationsCreate({ server, phpVersions }: { server: { id: string; name: string }; phpVersions: string[] }) {
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         domain: '',

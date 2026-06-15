@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/coder/websocket"
@@ -70,7 +69,7 @@ func (c *Client) Run(ctx context.Context) {
 func (c *Client) connectAndServe(ctx context.Context, onConnected func()) error {
 	header := http.Header{}
 	header.Set("Authorization", "Bearer "+c.cfg.Token)
-	header.Set("X-Server-Id", strconv.FormatInt(c.cfg.ServerID, 10))
+	header.Set("X-Server-Id", c.cfg.ServerID)
 	header.Set("X-Agent-Version", c.cfg.AgentVersion)
 
 	opts := &websocket.DialOptions{HTTPHeader: header}
@@ -170,7 +169,7 @@ func (c *Client) emit(ctx context.Context, send chan protocol.Envelope, env prot
 	}
 }
 
-func failureResult(serverID int64, jobID, msg string) protocol.Envelope {
+func failureResult(serverID string, jobID, msg string) protocol.Envelope {
 	payload, _ := json.Marshal(map[string]any{"exit_code": 1, "error": msg})
 	return protocol.Envelope{
 		Type:      protocol.TypeJobResult,

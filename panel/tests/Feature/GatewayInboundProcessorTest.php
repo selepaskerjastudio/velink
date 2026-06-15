@@ -6,9 +6,11 @@ use App\Models\AgentJob;
 use App\Models\Server;
 use App\Services\GatewayInboundProcessor;
 use App\Support\GatewayProtocol;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+uses(RefreshDatabase::class);
 
 test('job output marks running, appends output, broadcasts', function () {
     Event::fake([AgentJobUpdated::class]);
@@ -86,7 +88,7 @@ test('presence online updates server and broadcasts', function () {
     $s = Server::factory()->create();
 
     app(GatewayInboundProcessor::class)->handlePresence(json_encode([
-        'server_id' => $s->id,
+        'server_id' => $s->uuid,
         'status' => GatewayProtocol::STATUS_ONLINE,
         'agent_version' => '0.1.0',
     ]));
@@ -105,9 +107,21 @@ test('presence offline updates server status', function () {
     $s->update(['status' => 'online']);
 
     app(GatewayInboundProcessor::class)->handlePresence(json_encode([
-        'server_id' => $s->id,
+        'server_id' => $s->uuid,
         'status' => GatewayProtocol::STATUS_OFFLINE,
     ]));
 
     expect($s->refresh()->status)->toBe('offline');
+});
+
+test('presence event with unknown server uuid is ignored', function () {
+    Event::fake([ServerPresenceUpdated::class]);
+    Server::factory()->create();
+
+    app(GatewayInboundProcessor::class)->handlePresence(json_encode([
+        'server_id' => (string) Str::uuid(),
+        'status' => GatewayProtocol::STATUS_ONLINE,
+    ]));
+
+    Event::assertNotDispatched(ServerPresenceUpdated::class);
 });

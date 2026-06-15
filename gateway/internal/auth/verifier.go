@@ -21,7 +21,7 @@ type Verifier struct {
 
 // ServerInfo is the subset of server data the panel returns on success.
 type ServerInfo struct {
-	ID     int64  `json:"id"`
+	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Status string `json:"status"`
 }
@@ -36,7 +36,7 @@ func New(panelURL, secret string) *Verifier {
 }
 
 type verifyRequest struct {
-	ServerID int64  `json:"server_id"`
+	ServerID string `json:"server_id"`
 	Token    string `json:"token"`
 }
 
@@ -47,7 +47,7 @@ type verifyResponse struct {
 
 // Verify returns the server record if the (serverID, token) pair is valid.
 // A non-nil error means the verification could not be completed or was rejected.
-func (v *Verifier) Verify(ctx context.Context, serverID int64, token string) (ServerInfo, error) {
+func (v *Verifier) Verify(ctx context.Context, serverID string, token string) (ServerInfo, error) {
 	body, err := json.Marshal(verifyRequest{ServerID: serverID, Token: token})
 	if err != nil {
 		return ServerInfo{}, err

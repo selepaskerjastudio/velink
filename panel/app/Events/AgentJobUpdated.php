@@ -15,16 +15,14 @@ class AgentJobUpdated implements ShouldBroadcast
     use InteractsWithSockets;
     use SerializesModels;
 
-    public function __construct(public AgentJob $job)
-    {
-    }
+    public function __construct(public AgentJob $job) {}
 
     /**
      * @return array<int, PrivateChannel>
      */
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('server.'.$this->job->server_id)];
+        return [new PrivateChannel('server.'.$this->job->server->uuid)];
     }
 
     public function broadcastAs(): string

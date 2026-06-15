@@ -106,6 +106,21 @@
 
 ## Lintas-Fase (Keamanan & Kualitas)
 
+- [x] **Identifier eksternal → UUID (2026-06-15) — 🟢 Sonnet.** `servers`,
+      `applications`, `git_credentials`, `deployments` kini punya kolom `uuid`
+      terpisah sebagai route-key (trait `HasUuidRouteKey`, sama seperti
+      `agent_jobs` di Fase 1) — URL, payload Inertia (`id`, `server_id`→dihapus,
+      `git_credential_id`), channel broadcast (`server.{uuid}`), dan protokol
+      agent↔gateway (`server_id`/`X-Server-Id`/`--server-id`) memakai uuid; bigint
+      `id` tetap untuk relasi/FK internal. 97 Pest test + gateway/agent
+      `go build/vet/test` hijau, `npm run build`/eslint/tsc bersih.
+
+- [ ] **Catatan rilis (bigint→UUID server identifier):** setelah perubahan ini
+      dirilis, agent yang sudah terpasang punya `AGENT_SERVER_ID=<bigint>` lama
+      di `/etc/coruncloud/agent.env` — harus dijalankan ulang `installer/agent.sh`
+      dengan `--server-id=<uuid>` baru dari panel agar `X-Server-Id`/`server_id`
+      cocok dengan validasi UUID di gateway & panel.
+
 - [ ] Audit log untuk semua aksi (siapa, server, perintah).
 - [ ] Allowlist/Job bertemplate — hindari shell arbitrer dari UI.
 - [ ] mTLS/token rotation untuk agent (opsional, tingkatkan keamanan).

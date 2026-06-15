@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Application;
+use App\Models\GitCredential;
 use App\Models\Server;
 use App\Provisioning\DeployTemplates;
 use App\Provisioning\ProvisioningCatalog;
@@ -26,7 +27,7 @@ class ApplicationController extends Controller
     public function create(Server $server): Response
     {
         return Inertia::render('applications/create', [
-            'server' => $server->only(['id', 'name']),
+            'server' => ['id' => $server->uuid, 'name' => $server->name],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
         ]);
     }
@@ -58,26 +59,38 @@ class ApplicationController extends Controller
 
     public function show(Application $application): Response
     {
-        $application->load('server');
+        $application->load(['server', 'gitCredential']);
 
         return Inertia::render('applications/show', [
             'application' => [
                 ...$application->only([
-                    'id', 'server_id', 'name', 'domain', 'root_path', 'linux_user', 'php_version', 'status', 'created_at',
-                    'repository', 'branch', 'deploy_mode', 'deploy_script', 'git_credential_id',
+                    'name', 'domain', 'root_path', 'linux_user', 'php_version', 'status', 'created_at',
+                    'repository', 'branch', 'deploy_mode', 'deploy_script',
                 ]),
+                'id' => $application->uuid,
+                'git_credential_id' => $application->gitCredential?->uuid,
                 'env_content' => $application->env_content,
             ],
-            'server' => $application->server->only(['id', 'name']),
+            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
             'defaultDeployScript' => DeployTemplates::DEFAULT_SCRIPT,
             'gitCredentials' => auth()->user()->gitCredentials()
                 ->with('provider:id,type,name')
-                ->get(['id', 'account_username', 'git_provider_id', 'created_at']),
+                ->get(['id', 'uuid', 'account_username', 'git_provider_id', 'created_at'])
+                ->map(fn ($c) => [
+                    'id' => $c->uuid,
+                    'account_username' => $c->account_username,
+                    'created_at' => $c->created_at,
+                    'provider' => ['type' => $c->provider->type, 'name' => $c->provider->name],
+                ]),
             'deployments' => $application->deployments()
                 ->latest('id')
                 ->limit(20)
-                ->get(['id', 'branch', 'mode', 'status', 'triggered_by', 'agent_job_uuid', 'log', 'started_at', 'finished_at']),
+                ->get(['uuid', 'branch', 'mode', 'status', 'triggered_by', 'agent_job_uuid', 'log', 'started_at', 'finished_at'])
+                ->map(fn ($d) => [
+                    'id' => $d->uuid,
+                    ...$d->only(['branch', 'mode', 'status', 'triggered_by', 'agent_job_uuid', 'log', 'started_at', 'finished_at']),
+                ]),
             'jobs' => $application->server->agentJobs()
                 ->where('application_id', $application->id)
                 ->latest('id')
@@ -96,16 +109,21 @@ class ApplicationController extends Controller
             'deploy_mode' => ['required', 'string', 'in:inplace'],
             'git_credential_id' => [
                 'nullable',
-                Rule::exists('git_credentials', 'id')->where('user_id', $request->user()->id),
+                'uuid',
+                Rule::exists('git_credentials', 'uuid')->where('user_id', $request->user()->id),
             ],
             'deploy_script' => ['nullable', 'string'],
         ]);
+
+        $credential = $validated['git_credential_id']
+            ? GitCredential::where('uuid', $validated['git_credential_id'])->first()
+            : null;
 
         $application->forceFill([
             'repository' => $validated['repository'] ?: null,
             'branch' => $validated['branch'],
             'deploy_mode' => $validated['deploy_mode'],
-            'git_credential_id' => $validated['git_credential_id'] ?: null,
+            'git_credential_id' => $credential?->id,
             'deploy_script' => $validated['deploy_script'] ?: null,
         ])->save();
 

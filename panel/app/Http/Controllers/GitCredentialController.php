@@ -19,7 +19,13 @@ class GitCredentialController extends Controller
             'credentials' => $request->user()->gitCredentials()
                 ->with('provider:id,type,name')
                 ->latest('id')
-                ->get(['id', 'git_provider_id', 'account_username', 'created_at']),
+                ->get(['id', 'uuid', 'git_provider_id', 'account_username', 'created_at'])
+                ->map(fn ($c) => [
+                    'id' => $c->uuid,
+                    'account_username' => $c->account_username,
+                    'created_at' => $c->created_at,
+                    'provider' => ['type' => $c->provider->type, 'name' => $c->provider->name],
+                ]),
         ]);
     }
 

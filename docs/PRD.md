@@ -95,7 +95,10 @@ cronjob, deploy dari Git (GitHub & GitLab), monitoring resource, dan web termina
   wajib (agent verifikasi cert panel), opsi mTLS. Tidak ada eksekusi shell arbitrer
   dari UI (Job bertemplate + allowlist; web terminal jalur terpisah & teraudit).
   Rahasia (token Git, password DB, `.env`) **dienkripsi at-rest**. 2FA untuk semua user.
-  Panel di balik VPN/firewall.
+  Panel di balik VPN/firewall. Identifier yang terekspos ke browser/URL (server,
+  aplikasi, kredensial git, deployment, serta identifier server di protokol
+  agent↔gateway) memakai **UUID**, bukan primary key bigint sekuensial, untuk
+  menghindari enumerasi resource.
 - **Skala:** target puluhan VM; satu Gateway Go di VM panel cukup.
 - **Keandalan:** Job idempotent; agent auto-reconnect; deploy bisa rollback (mode ZDT).
 - **Observability:** audit log + log Job per server.

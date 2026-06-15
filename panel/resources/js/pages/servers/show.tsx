@@ -52,7 +52,7 @@ interface AgentJobUpdatedEvent {
 }
 
 interface ServerPresenceEvent {
-    id: number;
+    id: string;
     status: string;
     agent_version: string | null;
     last_seen_at: string | null;

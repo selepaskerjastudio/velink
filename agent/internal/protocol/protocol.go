@@ -12,7 +12,7 @@ import (
 type Envelope struct {
 	Type      string          `json:"type"`
 	JobID     string          `json:"job_id,omitempty"`
-	ServerID  int64           `json:"server_id,omitempty"`
+	ServerID  string          `json:"server_id,omitempty"`
 	Payload   json.RawMessage `json:"payload,omitempty"`
 	Timestamp int64           `json:"ts,omitempty"`
 }
