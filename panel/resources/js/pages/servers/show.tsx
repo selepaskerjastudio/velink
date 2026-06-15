@@ -4,6 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import echo from '@/echo';
@@ -120,6 +130,9 @@ export default function ServersShow({
     });
 
     const tokenForm = useForm({});
+    const deleteForm = useForm({});
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState('');
 
     const toggleComponent = (component: string, checked: boolean) => {
         form.setData('components', checked ? [...form.data.components, component] : form.data.components.filter((c) => c !== component));
@@ -229,6 +242,50 @@ export default function ServersShow({
                             <span>{server.last_seen_at ?? 'Never'}</span>
                         </div>
                     </CardContent>
+                </Card>
+
+                <Card className="max-w-xl border-destructive/40">
+                    <CardHeader>
+                        <CardTitle>Danger zone</CardTitle>
+                        <CardDescription>Permanently delete this server and all associated data.</CardDescription>
+                    </CardHeader>
+                    <CardFooter>
+                        <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); setDeleteConfirm(''); }}>
+                            <DialogTrigger asChild>
+                                <Button variant="destructive" size="sm">Delete server</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Delete server</DialogTitle>
+                                    <DialogDescription>
+                                        This will permanently delete <strong>{server.name}</strong> and all its applications,
+                                        databases, services, and jobs. This action cannot be undone.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-2 py-2">
+                                    <Label htmlFor="delete-confirm">Type <strong>DELETE</strong> to confirm</Label>
+                                    <Input
+                                        id="delete-confirm"
+                                        value={deleteConfirm}
+                                        onChange={(e) => setDeleteConfirm(e.target.value)}
+                                        placeholder="DELETE"
+                                    />
+                                </div>
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+                                    <Button
+                                        variant="destructive"
+                                        disabled={deleteConfirm !== 'DELETE' || deleteForm.processing}
+                                        onClick={() => deleteForm.delete(route('servers.destroy', server.id), {
+                                            onSuccess: () => setDeleteOpen(false),
+                                        })}
+                                    >
+                                        Delete server
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    </CardFooter>
                 </Card>
 
                 <Card className="max-w-xl">
