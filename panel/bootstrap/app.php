@@ -18,12 +18,19 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::prefix('internal')
                 ->middleware(VerifyGatewaySecret::class)
                 ->group(base_path('routes/internal.php'));
+
+            Route::middleware('web')
+                ->group(base_path('routes/webhooks.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

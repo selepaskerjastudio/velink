@@ -20,7 +20,7 @@ import {
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ChevronDownIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const PROVIDER_LABELS: Record<string, string> = {
     github: 'GitHub',
@@ -164,6 +164,57 @@ export default function ApplicationsShow({
         deployNowForm.post(route('applications.deployments.store', application.id), { preserveScroll: true });
     };
 
+    type RepoOption = { full_name: string; private: boolean; default_branch: string };
+    const [repoOptions, setRepoOptions] = useState<RepoOption[]>([]);
+    const [repoLoading, setRepoLoading] = useState(false);
+    const [repoOpen, setRepoOpen] = useState(false);
+    const repoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const selectedCredential = gitCredentials.find((c) => c.id === deployForm.data.git_credential_id);
+    const isGitHub = selectedCredential?.provider.type === 'github';
+
+    useEffect(() => {
+        setRepoOptions([]);
+        setRepoOpen(false);
+    }, [deployForm.data.git_credential_id]);
+
+    const fetchRepos = (query: string, credentialId: string) => {
+        setRepoLoading(true);
+        const url = new URL(route('github.repos'), window.location.origin);
+        url.searchParams.set('credential', credentialId);
+        if (query) url.searchParams.set('q', query);
+        fetch(url.toString(), { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+            .then((r) => r.json())
+            .then((data) => {
+                setRepoOptions(data.repos ?? []);
+                setRepoLoading(false);
+            })
+            .catch(() => setRepoLoading(false));
+    };
+
+    const handleRepoInput = (value: string) => {
+        deployForm.setData('repository', value);
+        setRepoOpen(true);
+        if (repoTimerRef.current) clearTimeout(repoTimerRef.current);
+        repoTimerRef.current = setTimeout(() => {
+            if (isGitHub && deployForm.data.git_credential_id !== NO_CREDENTIAL) {
+                fetchRepos(value, deployForm.data.git_credential_id);
+            }
+        }, 300);
+    };
+
+    const handleRepoFocus = () => {
+        if (!isGitHub) return;
+        setRepoOpen(true);
+        if (repoOptions.length === 0) fetchRepos(deployForm.data.repository, deployForm.data.git_credential_id);
+    };
+
+    const selectRepo = (repo: RepoOption) => {
+        deployForm.setData('repository', repo.full_name);
+        deployForm.setData('branch', repo.default_branch);
+        setRepoOpen(false);
+    };
+
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
         { title: server.name, href: `/servers/${server.id}` },
@@ -267,12 +318,48 @@ export default function ApplicationsShow({
                     <CardContent className="grid gap-4">
                         <div className="grid gap-2">
                             <Label htmlFor="repository">Repository</Label>
-                            <Input
-                                id="repository"
-                                value={deployForm.data.repository}
-                                onChange={(e) => deployForm.setData('repository', e.target.value)}
-                                placeholder="owner/repo"
-                            />
+                            {isGitHub ? (
+                                <div className="relative">
+                                    <Input
+                                        id="repository"
+                                        value={deployForm.data.repository}
+                                        onChange={(e) => handleRepoInput(e.target.value)}
+                                        onFocus={handleRepoFocus}
+                                        onBlur={() => setTimeout(() => setRepoOpen(false), 150)}
+                                        placeholder="Search repositories…"
+                                        autoComplete="off"
+                                    />
+                                    {repoOpen && (repoLoading || repoOptions.length > 0) && (
+                                        <div className="bg-popover absolute z-10 mt-1 w-full rounded-md border shadow-md">
+                                            {repoLoading && (
+                                                <div className="text-muted-foreground px-3 py-2 text-sm">Searching…</div>
+                                            )}
+                                            {repoOptions.map((repo) => (
+                                                <button
+                                                    key={repo.full_name}
+                                                    type="button"
+                                                    className="hover:bg-accent flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+                                                    onMouseDown={() => selectRepo(repo)}
+                                                >
+                                                    <span className="flex-1">{repo.full_name}</span>
+                                                    {repo.private && (
+                                                        <Badge variant="secondary" className="text-xs">
+                                                            private
+                                                        </Badge>
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <Input
+                                    id="repository"
+                                    value={deployForm.data.repository}
+                                    onChange={(e) => deployForm.setData('repository', e.target.value)}
+                                    placeholder="owner/repo"
+                                />
+                            )}
                             <InputError message={deployForm.errors.repository ?? pageErrors.repository} />
                         </div>
 
@@ -351,6 +438,57 @@ export default function ApplicationsShow({
                         </Button>
                     </CardFooter>
                 </Card>
+
+                {application.repository && (
+                    <Card className="max-w-xl">
+                        <CardHeader>
+                            <CardTitle>Auto-deploy webhook</CardTitle>
+                            <CardDescription>
+                                Add this webhook in GitHub → Settings → Webhooks to trigger deployments on push to{' '}
+                                <code className="font-mono">{application.branch}</code>.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid gap-4">
+                            <div className="grid gap-2">
+                                <Label>Payload URL</Label>
+                                <div className="flex gap-2">
+                                    <Input readOnly value={application.webhook_url} className="font-mono text-xs" />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => navigator.clipboard.writeText(application.webhook_url)}
+                                    >
+                                        Copy
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Secret</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        readOnly
+                                        value={application.webhook_secret ?? ''}
+                                        className="font-mono text-xs"
+                                        type="password"
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
+                                    >
+                                        Copy
+                                    </Button>
+                                </div>
+                                <p className="text-muted-foreground text-xs">
+                                    Set <strong>Content type</strong> to <code>application/json</code> and paste this secret in the GitHub webhook
+                                    settings.
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
 
                 {liveDeployments.length > 0 && (
                     <Card className="max-w-xl">

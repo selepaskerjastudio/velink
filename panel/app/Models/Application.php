@@ -14,6 +14,15 @@ class Application extends Model
     use HasFactory;
     use HasUuidRouteKey;
 
+    protected static function booted(): void
+    {
+        static::creating(function (self $model): void {
+            if (empty($model->webhook_secret)) {
+                $model->webhook_secret = Str::random(40);
+            }
+        });
+    }
+
     protected $fillable = [
         'uuid',
         'server_id',
@@ -29,6 +38,7 @@ class Application extends Model
         'deploy_script',
         'env_content',
         'status',
+        'webhook_secret',
     ];
 
     protected $hidden = [

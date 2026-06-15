@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\GitHubRepoController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -11,6 +12,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
+
+    Route::get('github/repos', [GitHubRepoController::class, 'search'])->name('github.repos');
 });
 
 require __DIR__.'/settings.php';

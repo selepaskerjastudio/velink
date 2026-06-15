@@ -83,6 +83,8 @@ export interface Application {
     deploy_mode: string;
     deploy_script: string | null;
     git_credential_id: string | null;
+    webhook_secret: string | null;
+    webhook_url: string;
 }
 
 export interface GitCredential {

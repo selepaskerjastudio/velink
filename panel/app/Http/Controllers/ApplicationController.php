@@ -65,11 +65,12 @@ class ApplicationController extends Controller
             'application' => [
                 ...$application->only([
                     'name', 'domain', 'root_path', 'linux_user', 'php_version', 'status', 'created_at',
-                    'repository', 'branch', 'deploy_mode', 'deploy_script',
+                    'repository', 'branch', 'deploy_mode', 'deploy_script', 'webhook_secret',
                 ]),
                 'id' => $application->uuid,
                 'git_credential_id' => $application->gitCredential?->uuid,
                 'env_content' => $application->env_content,
+                'webhook_url' => route('webhooks.github', $application),
             ],
             'server' => ['id' => $application->server->uuid, 'name' => $application->server->name],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
