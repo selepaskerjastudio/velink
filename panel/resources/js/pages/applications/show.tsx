@@ -2,6 +2,7 @@ import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -158,6 +159,12 @@ export default function ApplicationsShow({
         deployForm.patch(route('applications.deploy-settings', application.id), { preserveScroll: true });
     };
 
+    const sslForm = useForm({});
+
+    const submitSsl = () => {
+        sslForm.post(route('applications.ssl', application.id), { preserveScroll: true });
+    };
+
     const deployNowForm = useForm({});
 
     const submitDeployNow = () => {
@@ -286,6 +293,28 @@ export default function ApplicationsShow({
                         >
                             Switch PHP version
                         </Button>
+                    </CardFooter>
+                </Card>
+
+                <Card className="max-w-xl">
+                    <CardHeader>
+                        <CardTitle>SSL / HTTPS</CardTitle>
+                        <CardDescription>
+                            Issue a free Let's Encrypt certificate via certbot. Requires certbot to be installed on the server and the domain
+                            to point to this server.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardFooter>
+                        <div className="flex flex-col gap-1">
+                            <Button
+                                variant="secondary"
+                                onClick={submitSsl}
+                                disabled={sslForm.processing || !application.domain || application.status === 'pending'}
+                            >
+                                Enable SSL
+                            </Button>
+                            {!application.domain && <p className="text-muted-foreground text-xs">No domain set</p>}
+                        </div>
                     </CardFooter>
                 </Card>
 
@@ -444,47 +473,94 @@ export default function ApplicationsShow({
                         <CardHeader>
                             <CardTitle>Auto-deploy webhook</CardTitle>
                             <CardDescription>
-                                Add this webhook in GitHub → Settings → Webhooks to trigger deployments on push to{' '}
-                                <code className="font-mono">{application.branch}</code>.
+                                Triggers deployment on push to <code className="font-mono">{application.branch}</code>. Configure in GitHub or
+                                GitLab.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="grid gap-4">
-                            <div className="grid gap-2">
-                                <Label>Payload URL</Label>
-                                <div className="flex gap-2">
-                                    <Input readOnly value={application.webhook_url} className="font-mono text-xs" />
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => navigator.clipboard.writeText(application.webhook_url)}
-                                    >
-                                        Copy
-                                    </Button>
+                        <CardContent className="grid gap-6">
+                            {/* GitHub section */}
+                            <div className="grid gap-4">
+                                <p className="text-sm font-medium">GitHub</p>
+                                <p className="text-muted-foreground text-xs">
+                                    Add in GitHub → Settings → Webhooks. Set Content type to <code>application/json</code>.
+                                </p>
+                                <div className="grid gap-2">
+                                    <Label>Payload URL</Label>
+                                    <div className="flex gap-2">
+                                        <Input readOnly value={application.webhook_url} className="font-mono text-xs" />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => navigator.clipboard.writeText(application.webhook_url)}
+                                        >
+                                            Copy
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Secret</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            readOnly
+                                            value={application.webhook_secret ?? ''}
+                                            className="font-mono text-xs"
+                                            type="password"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
+                                        >
+                                            Copy
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="grid gap-2">
-                                <Label>Secret</Label>
-                                <div className="flex gap-2">
-                                    <Input
-                                        readOnly
-                                        value={application.webhook_secret ?? ''}
-                                        className="font-mono text-xs"
-                                        type="password"
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
-                                    >
-                                        Copy
-                                    </Button>
-                                </div>
+
+                            <Separator />
+
+                            {/* GitLab section */}
+                            <div className="grid gap-4">
+                                <p className="text-sm font-medium">GitLab</p>
                                 <p className="text-muted-foreground text-xs">
-                                    Set <strong>Content type</strong> to <code>application/json</code> and paste this secret in the GitHub webhook
-                                    settings.
+                                    Add in GitLab → Settings → Webhooks. Set Content type to <code>application/json</code>. Secret token = the
+                                    value below.
                                 </p>
+                                <div className="grid gap-2">
+                                    <Label>URL</Label>
+                                    <div className="flex gap-2">
+                                        <Input readOnly value={application.webhook_url_gitlab} className="font-mono text-xs" />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => navigator.clipboard.writeText(application.webhook_url_gitlab)}
+                                        >
+                                            Copy
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Secret token</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            readOnly
+                                            value={application.webhook_secret ?? ''}
+                                            className="font-mono text-xs"
+                                            type="password"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
+                                        >
+                                            Copy
+                                        </Button>
+                                    </div>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>

@@ -13,12 +13,18 @@ use Illuminate\Support\Facades\Redis;
  */
 class JobDispatcher
 {
+    private const ALLOWED_ACTIONS = ['shell', 'write_file', 'render_config'];
+
     /**
      * @param  array<string, mixed>  $params  Action-specific parameters (the executor's input).
      * @param  array{application_id?: int|null, user_id?: int|null, label?: string|null}  $attributes
      */
     public function dispatch(Server $server, string $type, array $params = [], array $attributes = []): AgentJob
     {
+        if (!in_array($type, self::ALLOWED_ACTIONS, true)) {
+            throw new \InvalidArgumentException("Unknown agent job action: '{$type}'. Allowed: " . implode(', ', self::ALLOWED_ACTIONS));
+        }
+
         $job = AgentJob::create([
             'server_id' => $server->id,
             'application_id' => $attributes['application_id'] ?? null,

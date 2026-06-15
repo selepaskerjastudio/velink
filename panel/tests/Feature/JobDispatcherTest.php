@@ -63,3 +63,10 @@ test('payload is encrypted at rest', function () {
     expect($raw)->not->toContain('s3cret');
     expect($job->fresh()->payload)->toMatchArray(['path' => '/etc/secret', 'content' => 's3cret']);
 });
+
+test('dispatch rejects unknown action type', function () {
+    $server = Server::factory()->create();
+
+    expect(fn () => app(JobDispatcher::class)->dispatch($server, 'unknown_action'))
+        ->toThrow(\InvalidArgumentException::class, "Unknown agent job action: 'unknown_action'");
+});

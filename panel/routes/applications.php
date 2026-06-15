@@ -11,4 +11,5 @@ Route::middleware('auth')->group(function () {
     Route::patch('applications/{application}/env', [ApplicationController::class, 'updateEnv'])->name('applications.env');
     Route::patch('applications/{application}/deploy-settings', [ApplicationController::class, 'updateDeploySettings'])->name('applications.deploy-settings');
     Route::post('applications/{application}/deployments', [ApplicationController::class, 'storeDeployment'])->name('applications.deployments.store');
+    Route::post('applications/{application}/ssl', [ApplicationController::class, 'enableSsl'])->name('applications.ssl');
 });

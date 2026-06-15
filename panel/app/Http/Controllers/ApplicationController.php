@@ -9,6 +9,7 @@ use App\Provisioning\DeployTemplates;
 use App\Provisioning\ProvisioningCatalog;
 use App\Services\AppProvisionService;
 use App\Services\AuditLogger;
+use App\Services\DeployScriptValidator;
 use App\Services\DeploymentService;
 use App\Services\JobDispatcher;
 use Illuminate\Http\RedirectResponse;
@@ -80,6 +81,7 @@ class ApplicationController extends Controller
                 'git_credential_id' => $application->gitCredential?->uuid,
                 'env_content' => $application->env_content,
                 'webhook_url' => route('webhooks.github', $application),
+                'webhook_url_gitlab' => route('webhooks.gitlab', $application),
             ],
             'server' => ['id' => $application->server->uuid, 'name' => $application->server->name],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
@@ -124,6 +126,15 @@ class ApplicationController extends Controller
             ],
             'deploy_script' => ['nullable', 'string'],
         ]);
+
+        if (! empty($validated['deploy_script'])) {
+            $warnings = DeployScriptValidator::check($validated['deploy_script']);
+            if (! empty($warnings)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'deploy_script' => $warnings,
+                ]);
+            }
+        }
 
         $credential = $validated['git_credential_id']
             ? GitCredential::where('uuid', $validated['git_credential_id'])->first()
@@ -191,6 +202,38 @@ class ApplicationController extends Controller
                 properties: ['php_version' => $validated['php_version']],
             );
         }
+
+        return redirect()->route('applications.show', $application);
+    }
+
+    public function enableSsl(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse
+    {
+        if (! $application->domain) {
+            return redirect()->back()->withErrors(['domain' => 'Application has no domain configured.']);
+        }
+
+        if ($application->status === 'pending') {
+            return redirect()->back()->withErrors(['domain' => 'Application is not yet provisioned.']);
+        }
+
+        $domain = escapeshellarg($application->domain);
+        $email = escapeshellarg($request->user()->email);
+
+        $dispatcher->dispatch($application->server, 'shell', [
+            'command' => "certbot --nginx -d {$domain} --non-interactive --agree-tos --email {$email} --redirect",
+            'timeout' => 120,
+        ], [
+            'application_id' => $application->id,
+            'user_id' => $request->user()->id,
+            'label' => "Enable SSL for {$application->domain}",
+        ]);
+
+        AuditLogger::log(
+            action: 'application.ssl_enabled',
+            description: "SSL requested for '{$application->name}' ({$application->domain})",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+        );
 
         return redirect()->route('applications.show', $application);
     }

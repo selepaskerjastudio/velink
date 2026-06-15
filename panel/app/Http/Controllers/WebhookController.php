@@ -48,6 +48,45 @@ class WebhookController extends Controller
         return response()->json(['status' => 'dispatched']);
     }
 
+    public function gitlab(Request $request, Application $application, DeploymentService $deploymentService): JsonResponse
+    {
+        $token = $request->header('X-Gitlab-Token', '');
+        if (! $token || ! hash_equals((string) $application->webhook_secret, $token)) {
+            return response()->json(['error' => 'Invalid token'], 403);
+        }
+
+        if ($request->header('X-Gitlab-Event') !== 'Push Hook') {
+            return response()->json(['status' => 'ignored']);
+        }
+
+        $payload = $request->json()->all();
+        $ref = $payload['ref'] ?? '';
+        $pushedBranch = str_replace('refs/heads/', '', $ref);
+
+        if ($pushedBranch !== $application->branch) {
+            return response()->json(['status' => 'branch_mismatch']);
+        }
+
+        if (! $application->repository) {
+            return response()->json(['error' => 'No repository configured'], 422);
+        }
+
+        $deploymentService->deploy($application, 'webhook');
+
+        AuditLogger::log(
+            action: 'application.deployed',
+            description: "Deploy triggered for '{$application->name}' (gitlab webhook)",
+            userId: null,
+            serverId: $application->server_id,
+            properties: [
+                'branch' => $application->branch,
+                'triggered_by' => 'gitlab_webhook',
+            ],
+        );
+
+        return response()->json(['status' => 'dispatched']);
+    }
+
     private function verifyGitHubSignature(Request $request, string $secret): bool
     {
         $signature = $request->header('X-Hub-Signature-256');
