@@ -1,0 +1,12 @@
+<?php
+
+use App\Http\Controllers\WorkerController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('auth')->group(function () {
+    Route::get('applications/{application}/workers', [WorkerController::class, 'index'])->name('workers.index');
+    Route::post('applications/{application}/workers', [WorkerController::class, 'store'])->name('workers.store');
+    Route::patch('workers/{worker}', [WorkerController::class, 'update'])->name('workers.update');
+    Route::post('workers/{worker}/control', [WorkerController::class, 'control'])->name('workers.control');
+    Route::delete('workers/{worker}', [WorkerController::class, 'destroy'])->name('workers.destroy');
+});

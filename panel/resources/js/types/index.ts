@@ -28,6 +28,8 @@ export interface SharedData {
     flash: {
         plainAgentToken: string | null;
         installCommand: string | null;
+        plainDbUserPassword: string | null;
+        plainDbUserUsername: string | null;
     };
     [key: string]: unknown;
 }
@@ -116,4 +118,62 @@ export interface User {
     created_at: string;
     updated_at: string;
     [key: string]: unknown; // This allows for additional properties...
+}
+
+export type WorkerStatus = 'unknown' | 'running' | 'stopped';
+
+export interface WorkerSummary {
+    id: number;
+    name: string;
+    command: string;
+    status: WorkerStatus;
+    config: { numprocs?: number } | null;
+}
+
+export type SystemdServiceStatus = 'unknown' | 'active' | 'inactive' | 'failed';
+
+export interface SystemdService {
+    id: number;
+    name: string;
+    status: SystemdServiceStatus;
+    config: { enabled?: boolean; label?: string } | null;
+}
+
+export type DatabaseEngine = 'mysql' | 'mariadb' | 'postgres' | 'mongodb';
+
+export interface DatabaseInstanceSummary {
+    id: number;
+    engine: DatabaseEngine;
+    name: string;
+    charset: string | null;
+    collation: string | null;
+}
+
+export type CronJobStatus = 'active' | 'paused';
+
+export interface CronJobSummary {
+    id: number;
+    application_id: number | null;
+    application_name: string | null;
+    user: string;
+    command: string;
+    schedule: string;
+    status: CronJobStatus;
+    last_run_at: string | null;
+}
+
+export interface CronApplicationOption {
+    id: number;
+    name: string;
+    linux_user: string;
+}
+
+export type DatabaseGrants = Record<string, string[]>;
+
+export interface DatabaseUserSummary {
+    id: number;
+    engine: DatabaseEngine;
+    username: string;
+    host: string;
+    grants: DatabaseGrants | null;
 }

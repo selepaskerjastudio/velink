@@ -18,7 +18,7 @@ import {
     type DeploymentStatus,
     type GitCredential,
 } from '@/types';
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ChevronDownIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -177,7 +177,12 @@ export default function ApplicationsShow({
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <div className="flex items-center justify-between">
                     <h1 className="text-xl font-semibold">{application.name}</h1>
-                    <Badge variant={statusVariant(application.status)}>{application.status}</Badge>
+                    <div className="flex items-center gap-2">
+                        <Button asChild variant="outline" size="sm">
+                            <Link href={route('workers.index', application.id)}>Workers</Link>
+                        </Button>
+                        <Badge variant={statusVariant(application.status)}>{application.status}</Badge>
+                    </div>
                 </div>
 
                 <Card className="max-w-xl">

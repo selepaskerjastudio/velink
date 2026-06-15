@@ -18,3 +18,8 @@ require __DIR__.'/auth.php';
 require __DIR__.'/servers.php';
 require __DIR__.'/applications.php';
 require __DIR__.'/git-credentials.php';
+require __DIR__.'/workers.php';
+require __DIR__.'/services.php';
+require __DIR__.'/cron.php';
+require __DIR__.'/databases.php';
+require __DIR__.'/database-users.php';

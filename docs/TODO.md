@@ -90,11 +90,18 @@
 
 ## Fase 4 — Service / Worker / Cron 🟢 Sonnet
 
-- [ ] systemd: start/stop/restart/status via agent + UI.
-- [ ] Supervisord: generate program conf untuk queue worker (`queue:work`/Horizon),
-      restart, baca status/log dari UI.
-- [ ] Cron: crontab terkelola (drop-in `/etc/cron.d/`) dari UI.
-- [ ] Manajemen database dari UI: buat/hapus DB & user, atur grants (MySQL/PG/Mongo).
+- [x] systemd: start/stop/restart/status via agent + UI (`services.index/store/control/refresh-status/destroy`,
+      `ServiceManager`, `servers/services.tsx`).
+- [x] Supervisord: generate program conf untuk queue worker (`queue:work`/Horizon),
+      restart, baca status/log dari UI (`workers.index/store/update/control/destroy`,
+      `WorkerService`, `WorkerTemplates`, `applications/workers.tsx`).
+- [x] Cron: crontab terkelola (drop-in `/etc/cron.d/coruncloud`) dari UI
+      (`cron.index/store/update/toggle/destroy`, `CronService`, `CronTemplates`,
+      `servers/cron.tsx`).
+- [x] Manajemen database dari UI: buat/hapus DB (`databases.*`, `DatabaseProvisionService`,
+      `servers/databases.tsx`) + user + atur grants MySQL/PG/Mongo
+      (`database-users.*`, `DatabaseUserProvisionService`, `servers/database-users.tsx`,
+      one-time password flash).
 
 ## Fase 5 — Monitoring + Web Terminal (lanjutan) 🟢 Sonnet (web terminal 🔴 Opus)
 

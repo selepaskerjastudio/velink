@@ -48,6 +48,8 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'plainAgentToken' => $request->session()->get('plain_agent_token'),
                 'installCommand' => $request->session()->get('install_command'),
+                'plainDbUserPassword' => $request->session()->get('plain_db_user_password'),
+                'plainDbUserUsername' => $request->session()->get('plain_db_user_username'),
             ],
         ]);
     }

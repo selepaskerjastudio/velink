@@ -225,6 +225,27 @@ export default function ServersShow({
 
                 <Card className="max-w-xl">
                     <CardHeader>
+                        <CardTitle>Manage</CardTitle>
+                        <CardDescription>Services, scheduled jobs, and databases on this server.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-wrap gap-2">
+                        <Button asChild variant="outline" size="sm">
+                            <Link href={route('services.index', server.id)}>Services</Link>
+                        </Button>
+                        <Button asChild variant="outline" size="sm">
+                            <Link href={route('cron.index', server.id)}>Cron jobs</Link>
+                        </Button>
+                        <Button asChild variant="outline" size="sm">
+                            <Link href={route('databases.index', server.id)}>Databases</Link>
+                        </Button>
+                        <Button asChild variant="outline" size="sm">
+                            <Link href={route('database-users.index', server.id)}>Database users</Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                <Card className="max-w-xl">
+                    <CardHeader>
                         <CardTitle>Provision services</CardTitle>
                         <CardDescription>
                             Pick the services to install on this server. The agent installs everything as a series of idempotent jobs —
