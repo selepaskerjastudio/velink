@@ -104,7 +104,7 @@ REVERB_SCHEME=https
 
 # Gateway
 GATEWAY_SECRET=rahasia_panjang_acak_64char   # harus sama dengan GATEWAY_PANEL_SECRET di gateway/.env
-GATEWAY_PUBLIC_URL=wss://panel.velink.dev:9090   # URL WSS yang bisa dicapai agent dari internet
+GATEWAY_PUBLIC_URL=wss://panel.velink.dev        # URL WSS agent (lewat nginx, port 443)
 ```
 
 ### 1.3 Migrasi database
@@ -121,25 +121,52 @@ npm run build
 
 ### 1.5 Jalankan di production
 
-Gunakan **supervisor** atau **systemd** untuk masing-masing proses. Contoh dengan supervisor:
+Gunakan **systemd** untuk setiap proses. Empat unit yang wajib jalan:
 
-**`/etc/supervisor/conf.d/velink-panel.conf`:**
+| Unit | Perintah | Keterangan |
+|---|---|---|
+| `velink-queue.service` | `php artisan queue:work` | Proses job antrian (deploy, provision, dll.) |
+| `velink-reverb.service` | `php artisan reverb:start` | WebSocket browser (realtime UI) |
+| `velink-agent-listen.service` | `php artisan agent:listen` | **Wajib** — memproses pesan masuk dari gateway (presence, output job). Tanpa ini status server tidak berubah online/offline. |
+| `velink-gateway.service` | binary Go gateway | Bridge WebSocket antara agent dan panel (lihat §2) |
+
+Contoh unit `velink-agent-listen.service`:
 ```ini
-[program:velink-queue]
-command=php /path/to/panel/artisan queue:work --tries=3 --sleep=3
-directory=/path/to/panel
-autostart=true
-autorestart=true
-user=www-data
-stdout_logfile=/var/log/velink-queue.log
+[Unit]
+Description=Velink agent listener
+After=network.target redis.service
 
-[program:velink-reverb]
-command=php /path/to/panel/artisan reverb:start
-directory=/path/to/panel
-autostart=true
-autorestart=true
-user=www-data
-stdout_logfile=/var/log/velink-reverb.log
+[Service]
+WorkingDirectory=/root/velink/panel
+ExecStart=php artisan agent:listen
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Contoh unit `velink-queue.service`:
+```ini
+[Unit]
+Description=Velink queue worker
+After=network.target
+
+[Service]
+WorkingDirectory=/root/velink/panel
+ExecStart=php artisan queue:work --tries=3 --sleep=3
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+systemctl daemon-reload
+systemctl enable --now velink-queue velink-reverb velink-agent-listen velink-gateway
 ```
 
 Serve HTTP via **nginx + php-fpm** (Laravel standard), root ke `/path/to/panel/public`.
@@ -168,7 +195,7 @@ cp .env.example .env
 Edit `gateway/.env`:
 
 ```dotenv
-GATEWAY_LISTEN=:9090                              # port WSS yang didengarkan agent
+GATEWAY_LISTEN=:8080                              # port internal yang didengarkan gateway (di-proxy nginx)
 GATEWAY_PANEL_URL=http://127.0.0.1:80             # URL internal panel (loopback)
 GATEWAY_PANEL_SECRET=rahasia_panjang_acak_64char  # harus sama dengan GATEWAY_SECRET di panel/.env
 GATEWAY_REDIS_ADDR=127.0.0.1:6379
@@ -176,6 +203,8 @@ GATEWAY_REDIS_PASSWORD=
 GATEWAY_REDIS_DB=0
 GATEWAY_PRESENCE_TTL=90
 ```
+
+> Gateway tidak perlu menghadap internet langsung. Nginx mem-proxy `/agent/connect` ke gateway di port 8080, sehingga agent cukup konek ke `wss://panel.velink.dev` (port 443) tanpa port khusus.
 
 ### 2.3 Jalankan sebagai systemd service
 
@@ -225,10 +254,10 @@ Jalankan perintah yang disalin dari panel **di VM target** (Ubuntu 22.04/24.04) 
 ```bash
 curl -fsSL https://panel.velink.dev/install/agent.sh | sudo bash -s -- \
     --token=<TOKEN> \
-    --panel=https://panel.velink.dev \
-    --gateway=wss://panel.velink.dev:9090 \
     --server-id=<UUID>
 ```
+
+Panel dan gateway URL sudah di-hardcode di installer (`wss://panel.selepaskerja.id` via nginx). Perintah di atas sudah di-generate otomatis oleh panel di halaman Add Server.
 
 Installer akan:
 - Download binary `velink-agent` ke `/usr/local/bin/`

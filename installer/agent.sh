@@ -9,7 +9,7 @@
 # Flags:
 #   --token       per-server enrollment token (required)
 #   --server-id   this server's panel ID (required)
-#   --gateway     gateway WSS base URL (optional override, default: ws://panel.selepaskerja.id:8080)
+#   --gateway     gateway WSS base URL (optional override, default: wss://panel.selepaskerja.id)
 #   --panel       panel HTTP base URL (optional override, default: https://panel.selepaskerja.id)
 #   --version     agent version to install (default: latest)
 #   --binary-url  explicit binary URL (overrides --panel-based download)
@@ -19,7 +19,7 @@ set -euo pipefail
 
 TOKEN=""
 SERVER_ID=""
-GATEWAY_URL="ws://panel.selepaskerja.id:8080"
+GATEWAY_URL="wss://panel.selepaskerja.id"
 PANEL_URL="https://panel.selepaskerja.id"
 VERSION="latest"
 BINARY_URL=""
