@@ -58,6 +58,27 @@ export interface AgentJob {
     created_at?: string;
 }
 
+export interface ApplicationSummary {
+    id: number;
+    name: string;
+    domain: string | null;
+    php_version: string;
+    status: string;
+}
+
+export interface Application {
+    id: number;
+    server_id: number;
+    name: string;
+    domain: string | null;
+    root_path: string;
+    linux_user: string;
+    php_version: string;
+    status: string;
+    created_at?: string;
+    env_content: string | null;
+}
+
 export interface User {
     id: number;
     name: string;

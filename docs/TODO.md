@@ -61,11 +61,11 @@
 
 ## Fase 2 — App PHP + Versi PHP per-App 🟢 Sonnet
 
-- [ ] Template config: vhost nginx + php-fpm pool (per versi PHP).
-- [ ] Buat aplikasi: domain, root_path, **Linux user terisolasi per-site** (`open_basedir`).
-- [ ] Pilih versi PHP per app (7.4–8.4) saat buat app.
-- [ ] **Ganti versi PHP:** regenerate fpm pool + upstream nginx → reload (downtime minimal).
-- [ ] Editor `.env` aplikasi (encrypted).
+- [x] Template config: vhost nginx + php-fpm pool (per versi PHP).
+- [x] Buat aplikasi: domain, root_path, **Linux user terisolasi per-site** (`open_basedir`).
+- [x] Pilih versi PHP per app (7.4–8.4) saat buat app.
+- [x] **Ganti versi PHP:** regenerate fpm pool + upstream nginx → reload (downtime minimal).
+- [x] Editor `.env` aplikasi (encrypted).
 - [ ] SSL Let's Encrypt via certbot (opsional).
 - [ ] Verifikasi: situs hidup di PHP 8.3, ganti ke 8.4, dan app legacy PHP 7.4.
 

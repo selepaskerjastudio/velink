@@ -7,8 +7,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label';
 import echo from '@/echo';
 import AppLayout from '@/layouts/app-layout';
-import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type Server, type SharedData } from '@/types';
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { type AgentJob, type AgentJobStatus, type ApplicationSummary, type BreadcrumbItem, type Server, type SharedData } from '@/types';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -60,11 +60,13 @@ interface ServerPresenceEvent {
 
 export default function ServersShow({
     server,
+    applications,
     jobs,
     provisioningComponents,
     phpVersions,
 }: {
     server: Server;
+    applications: ApplicationSummary[];
     jobs: AgentJob[];
     provisioningComponents: string[];
     phpVersions: string[];
@@ -187,6 +189,38 @@ export default function ServersShow({
                             <span>{server.last_seen_at ?? 'Never'}</span>
                         </div>
                     </CardContent>
+                </Card>
+
+                <Card className="max-w-xl">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <div>
+                            <CardTitle>Applications</CardTitle>
+                            <CardDescription>PHP/Laravel apps hosted on this server.</CardDescription>
+                        </div>
+                        <Button asChild size="sm">
+                            <Link href={route('applications.create', server.id)}>New application</Link>
+                        </Button>
+                    </CardHeader>
+                    {applications.length > 0 && (
+                        <CardContent className="grid gap-2">
+                            {applications.map((app) => (
+                                <Link
+                                    key={app.id}
+                                    href={route('applications.show', app.id)}
+                                    className="flex items-center justify-between rounded-md border px-3 py-2 hover:bg-accent"
+                                >
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-medium">{app.name}</span>
+                                        <span className="text-muted-foreground text-xs">{app.domain ?? '—'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline">PHP {app.php_version}</Badge>
+                                        <Badge variant={statusVariant(app.status)}>{app.status}</Badge>
+                                    </div>
+                                </Link>
+                            ))}
+                        </CardContent>
+                    )}
                 </Card>
 
                 <Card className="max-w-xl">

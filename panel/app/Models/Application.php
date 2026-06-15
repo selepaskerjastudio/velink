@@ -2,12 +2,16 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Application extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'server_id',
         'git_credential_id',
@@ -63,5 +67,36 @@ class Application extends Model
     public function cronJobs(): HasMany
     {
         return $this->hasMany(CronJob::class);
+    }
+
+    public function activePhpPool(): ?PhpPool
+    {
+        return $this->phpPools()->where('php_version', $this->php_version)->first();
+    }
+
+    /**
+     * Derive a unique, valid Linux username (lowercase letters, digits,
+     * underscores; starts with a letter; <= 32 chars) from a domain/name,
+     * unique per server.
+     */
+    public static function generateLinuxUser(int $serverId, string $seed): string
+    {
+        $slug = Str::slug($seed, '_');
+        $slug = preg_replace('/[^a-z0-9_]/', '', $slug) ?? '';
+
+        if ($slug === '' || ! ctype_alpha($slug[0])) {
+            $slug = 'app_'.$slug;
+        }
+
+        $base = substr($slug, 0, 28);
+        $candidate = $base;
+        $suffix = 1;
+
+        while (static::where('server_id', $serverId)->where('linux_user', $candidate)->exists()) {
+            $suffix++;
+            $candidate = substr($base, 0, 28 - strlen((string) $suffix) - 1)."_{$suffix}";
+        }
+
+        return $candidate;
     }
 }

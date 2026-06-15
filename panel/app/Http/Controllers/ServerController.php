@@ -54,7 +54,11 @@ class ServerController extends Controller
     {
         return Inertia::render('servers/show', [
             'server' => $server,
+            'applications' => $server->applications()
+                ->orderBy('name')
+                ->get(['id', 'name', 'domain', 'php_version', 'status']),
             'jobs' => $server->agentJobs()
+                ->whereNull('application_id')
                 ->latest('id')
                 ->limit(50)
                 ->get(['uuid', 'type', 'label', 'status', 'exit_code', 'output', 'created_at'])
