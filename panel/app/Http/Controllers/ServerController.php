@@ -96,8 +96,8 @@ class ServerController extends Controller
                 ->get(['uuid', 'type', 'label', 'status', 'exit_code', 'output', 'created_at'])
                 ->reverse()
                 ->values(),
-            'provisioningComponents' => ProvisioningCatalog::COMPONENTS,
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
+            'dbComponents' => ProvisioningCatalog::DB_COMPONENTS,
             'recentMetrics' => $server->metrics()
                 ->orderBy('recorded_at')
                 ->limit(120)

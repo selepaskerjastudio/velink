@@ -48,19 +48,13 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
     }
 }
 
-const COMPONENT_LABELS: Record<string, string> = {
-    nginx: 'Nginx',
-    certbot: 'Certbot (Let’s Encrypt)',
-    php: 'PHP-FPM',
-    composer: 'Composer',
-    node: 'Node.js 20',
-    supervisor: 'Supervisord',
-    redis: 'Redis',
-    mysql: 'MySQL',
-    mariadb: 'MariaDB',
-    postgresql: 'PostgreSQL',
-    mongodb: 'MongoDB',
-};
+const CORE_LABELS = ['Nginx', 'Certbot', 'Composer', 'Node.js 20', 'Supervisord', 'Redis'];
+
+const DB_OPTIONS = [
+    { key: 'mariadb', label: 'MariaDB' },
+    { key: 'postgresql', label: 'PostgreSQL' },
+    { key: 'mongodb', label: 'MongoDB' },
+];
 
 interface AgentJobUpdatedEvent {
     uuid: string;
@@ -82,15 +76,15 @@ export default function ServersShow({
     server,
     applications,
     jobs,
-    provisioningComponents,
     phpVersions,
+    dbComponents: dbComponentKeys,
     recentMetrics,
 }: {
     server: Server;
     applications: ApplicationSummary[];
     jobs: AgentJob[];
-    provisioningComponents: string[];
     phpVersions: string[];
+    dbComponents: string[];
     recentMetrics: ServerMetricPoint[];
 }) {
     const { flash } = usePage<SharedData>().props;
@@ -106,9 +100,7 @@ export default function ServersShow({
         channel.listen('.agent-job.updated', (event: AgentJobUpdatedEvent) => {
             setLiveJobs((current) => {
                 const index = current.findIndex((job) => job.uuid === event.uuid);
-                if (index === -1) {
-                    return current;
-                }
+                if (index === -1) return current;
                 const next = [...current];
                 next[index] = { ...next[index], ...event };
                 return next;
@@ -119,14 +111,12 @@ export default function ServersShow({
             setLiveStatus(event.status);
         });
 
-        return () => {
-            echo.leave(`server.${server.id}`);
-        };
+        return () => { echo.leave(`server.${server.id}`); };
     }, [server.id]);
 
-    const form = useForm<{ components: string[]; php_versions: string[] }>({
-        components: [],
+    const form = useForm<{ php_versions: string[]; db_components: string[] }>({
         php_versions: [],
+        db_components: [],
     });
 
     const tokenForm = useForm({});
@@ -134,31 +124,33 @@ export default function ServersShow({
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState('');
 
-    const toggleComponent = (component: string, checked: boolean) => {
-        form.setData('components', checked ? [...form.data.components, component] : form.data.components.filter((c) => c !== component));
+    const togglePhpVersion = (version: string, checked: boolean) => {
+        form.setData('php_versions', checked
+            ? [...form.data.php_versions, version]
+            : form.data.php_versions.filter((v) => v !== version));
     };
 
-    const togglePhpVersion = (version: string, checked: boolean) => {
-        form.setData('php_versions', checked ? [...form.data.php_versions, version] : form.data.php_versions.filter((v) => v !== version));
+    const toggleDb = (key: string, checked: boolean) => {
+        form.setData('db_components', checked
+            ? [...form.data.db_components, key]
+            : form.data.db_components.filter((k) => k !== key));
     };
 
     const submitProvision = () => {
+        form.transform((data) => ({
+            components: ['base', 'nginx', 'certbot', 'php', 'composer', 'node', 'supervisor', 'redis', ...data.db_components],
+            php_versions: data.php_versions,
+        }));
         form.post(route('servers.provision', server.id), { preserveScroll: true });
     };
 
     const isOnline = liveStatus === 'online';
-
+    const isPending = liveStatus === 'pending';
     const runningJobsCount = liveJobs.filter((job) => job.status === 'running' || job.status === 'pending').length;
 
     const breadcrumbs: BreadcrumbItem[] = [
-        {
-            title: 'Servers',
-            href: '/servers',
-        },
-        {
-            title: server.name,
-            href: `/servers/${server.id}`,
-        },
+        { title: 'Servers', href: '/servers' },
+        { title: server.name, href: `/servers/${server.id}` },
     ];
 
     return (
@@ -166,20 +158,19 @@ export default function ServersShow({
             <Head title={server.name} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
+                {/* Header */}
                 <div className="flex items-center justify-between">
                     <h1 className="text-xl font-semibold">{server.name}</h1>
                     <Badge variant={statusVariant(liveStatus)}>{liveStatus}</Badge>
                 </div>
 
+                {/* Full-width alerts */}
                 {flash.installCommand && (
                     <Alert>
                         <TriangleAlertIcon />
                         <AlertTitle>Install the agent on this server</AlertTitle>
                         <AlertDescription>
-                            <p>
-                                Run this command on the target server to install and register the agent. The token below is shown only
-                                once — copy it now.
-                            </p>
+                            <p>Run this command on the target server. The token is shown only once — copy it now.</p>
                             <pre className="bg-muted mt-2 overflow-x-auto rounded-md p-3 text-xs">{flash.installCommand}</pre>
                             {flash.plainAgentToken && (
                                 <p className="mt-2 text-sm">
@@ -190,8 +181,8 @@ export default function ServersShow({
                     </Alert>
                 )}
 
-                {!isOnline && !flash.installCommand && (
-                    <Card className="max-w-xl border-destructive/50">
+                {!isOnline && !flash.installCommand && isPending && (
+                    <Card className="border-destructive/50">
                         <CardHeader>
                             <CardTitle>Agent not connected</CardTitle>
                             <CardDescription>
@@ -212,39 +203,280 @@ export default function ServersShow({
                     </Card>
                 )}
 
-                <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>Server details</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid gap-2 text-sm">
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Hostname</span>
-                            <span>{server.hostname ?? '—'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Public IP</span>
-                            <span>{server.public_ip ?? '—'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Private IP</span>
-                            <span>{server.private_ip ?? '—'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">OS</span>
-                            <span>{server.os ?? '—'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Agent version</span>
-                            <span>{server.agent_version ?? '—'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Last seen</span>
-                            <span>{server.last_seen_at ?? 'Never'}</span>
-                        </div>
-                    </CardContent>
-                </Card>
+                {/* 2-column grid */}
+                <div className="grid gap-4 lg:grid-cols-3">
 
-                <Card className="max-w-xl border-destructive/40">
+                    {/* Left column — main content */}
+                    <div className="flex flex-col gap-4 lg:col-span-2">
+
+                        {!isPending && (
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between">
+                                    <div>
+                                        <CardTitle>Applications</CardTitle>
+                                        <CardDescription>PHP/Laravel apps hosted on this server.</CardDescription>
+                                    </div>
+                                    {isOnline ? (
+                                        <Button asChild size="sm">
+                                            <Link href={route('applications.create', server.id)}>New application</Link>
+                                        </Button>
+                                    ) : (
+                                        <Button size="sm" disabled>New application</Button>
+                                    )}
+                                </CardHeader>
+                                {applications.length > 0 && (
+                                    <CardContent className="grid gap-2">
+                                        {applications.map((app) => (
+                                            <Link
+                                                key={app.id}
+                                                href={route('applications.show', app.id)}
+                                                className="flex items-center justify-between rounded-md border px-3 py-2 hover:bg-accent"
+                                            >
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-medium">{app.name}</span>
+                                                    <span className="text-muted-foreground text-xs">{app.domain ?? '—'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="outline">PHP {app.php_version}</Badge>
+                                                    <Badge variant={statusVariant(app.status)}>{app.status}</Badge>
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </CardContent>
+                                )}
+                            </Card>
+                        )}
+
+                        {!isPending && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Provisioning</CardTitle>
+                                    <CardDescription>Install services and track live job progress.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Tabs defaultValue="provision">
+                                        <TabsList>
+                                            <TabsTrigger value="provision">Provision</TabsTrigger>
+                                            <TabsTrigger value="activity">
+                                                Activity
+                                                {runningJobsCount > 0 && (
+                                                    <Badge variant="outline" className="ml-1 h-4 px-1 text-xs">
+                                                        {runningJobsCount}
+                                                    </Badge>
+                                                )}
+                                            </TabsTrigger>
+                                        </TabsList>
+
+                                        <TabsContent value="provision">
+                                            <div className="grid gap-5 pt-3">
+                                                {/* Core stack */}
+                                                <div>
+                                                    <p className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
+                                                        Always installed
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {CORE_LABELS.map((s) => (
+                                                            <span key={s} className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-xs">
+                                                                {s}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* PHP versions */}
+                                                <div>
+                                                    <p className="mb-2 text-sm font-medium">
+                                                        PHP version <span className="text-destructive">*</span>
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-3">
+                                                        {phpVersions.map((version) => (
+                                                            <div key={version} className="flex items-center gap-2">
+                                                                <Checkbox
+                                                                    id={`php-${version}`}
+                                                                    checked={form.data.php_versions.includes(version)}
+                                                                    onCheckedChange={(checked) => togglePhpVersion(version, checked === true)}
+                                                                />
+                                                                <Label htmlFor={`php-${version}`} className="text-sm">
+                                                                    PHP {version}
+                                                                </Label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    {form.errors.php_versions && (
+                                                        <p className="mt-1 text-sm text-destructive">{form.errors.php_versions}</p>
+                                                    )}
+                                                </div>
+
+                                                {/* Optional databases */}
+                                                <div>
+                                                    <p className="mb-2 text-sm font-medium">
+                                                        Databases{' '}
+                                                        <span className="text-muted-foreground text-xs font-normal">(optional)</span>
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-3">
+                                                        {DB_OPTIONS.map(({ key, label }) => (
+                                                            <div key={key} className="flex items-center gap-2">
+                                                                <Checkbox
+                                                                    id={`db-${key}`}
+                                                                    checked={form.data.db_components.includes(key)}
+                                                                    onCheckedChange={(checked) => toggleDb(key, checked === true)}
+                                                                />
+                                                                <Label htmlFor={`db-${key}`} className="text-sm">{label}</Label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-3">
+                                                    <Button
+                                                        onClick={submitProvision}
+                                                        disabled={form.processing || form.data.php_versions.length === 0 || !isOnline}
+                                                    >
+                                                        Provision server
+                                                    </Button>
+                                                    {form.data.php_versions.length === 0 && (
+                                                        <p className="text-muted-foreground text-sm">Select at least one PHP version</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+
+                                        <TabsContent value="activity">
+                                            {liveJobs.length === 0 ? (
+                                                <p className="text-muted-foreground pt-2 text-sm">No jobs dispatched yet.</p>
+                                            ) : (
+                                                <div className="grid gap-2 pt-2">
+                                                    {liveJobs.map((job) => (
+                                                        <Collapsible key={job.uuid}>
+                                                            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-sm font-medium">{job.label ?? job.type}</span>
+                                                                    {job.exit_code !== null && (
+                                                                        <span className="text-muted-foreground text-xs">exit {job.exit_code}</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+                                                                    {job.output && (
+                                                                        <CollapsibleTrigger asChild>
+                                                                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                                                                                <ChevronDownIcon />
+                                                                            </Button>
+                                                                        </CollapsibleTrigger>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            {job.output && (
+                                                                <CollapsibleContent>
+                                                                    <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
+                                                                        {job.output}
+                                                                    </pre>
+                                                                </CollapsibleContent>
+                                                            )}
+                                                        </Collapsible>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </TabsContent>
+                                    </Tabs>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
+
+                    {/* Right column — sidebar */}
+                    <div className="flex flex-col gap-4">
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Server details</CardTitle>
+                            </CardHeader>
+                            <CardContent className="grid gap-2 text-sm">
+                                {[
+                                    ['Hostname', server.hostname],
+                                    ['Public IP', server.public_ip],
+                                    ['Private IP', server.private_ip],
+                                    ['OS', server.os],
+                                    ['Agent version', server.agent_version],
+                                    ['Last seen', server.last_seen_at ?? 'Never'],
+                                ].map(([label, value]) => (
+                                    <div key={label} className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground shrink-0">{label}</span>
+                                        <span className="text-right">{value ?? '—'}</span>
+                                    </div>
+                                ))}
+                            </CardContent>
+                            <CardFooter>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={tokenForm.processing}
+                                    onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
+                                >
+                                    Regenerate install command
+                                </Button>
+                            </CardFooter>
+                        </Card>
+
+                        {!isPending && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Manage</CardTitle>
+                                    <CardDescription>Services, cron jobs, and databases.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex flex-wrap gap-2">
+                                    {isOnline ? (
+                                        <>
+                                            <Button asChild variant="outline" size="sm">
+                                                <Link href={route('services.index', server.id)}>Services</Link>
+                                            </Button>
+                                            <Button asChild variant="outline" size="sm">
+                                                <Link href={route('cron.index', server.id)}>Cron jobs</Link>
+                                            </Button>
+                                            <Button asChild variant="outline" size="sm">
+                                                <Link href={route('databases.index', server.id)}>Databases</Link>
+                                            </Button>
+                                            <Button asChild variant="outline" size="sm">
+                                                <Link href={route('database-users.index', server.id)}>Database users</Link>
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Button variant="outline" size="sm" disabled>Services</Button>
+                                            <Button variant="outline" size="sm" disabled>Cron jobs</Button>
+                                            <Button variant="outline" size="sm" disabled>Databases</Button>
+                                            <Button variant="outline" size="sm" disabled>Database users</Button>
+                                        </>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {!isPending && recentMetrics.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Resource usage</CardTitle>
+                                    <CardDescription>CPU and RAM % — last {recentMetrics.length} readings</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={180}>
+                                        <LineChart data={recentMetrics}>
+                                            <XAxis dataKey="ts" interval="preserveStartEnd" tick={{ fontSize: 10 }} />
+                                            <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 10 }} />
+                                            <Tooltip formatter={(v: number) => `${v}%`} />
+                                            <Legend />
+                                            <Line type="monotone" dataKey="cpu" name="CPU" stroke="#3b82f6" dot={false} strokeWidth={1.5} />
+                                            <Line type="monotone" dataKey="ram" name="RAM" stroke="#22c55e" dot={false} strokeWidth={1.5} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
+                </div>
+
+                {/* Danger zone — always at bottom */}
+                <Card className="border-destructive/40">
                     <CardHeader>
                         <CardTitle>Danger zone</CardTitle>
                         <CardDescription>Permanently delete this server and all associated data.</CardDescription>
@@ -287,219 +519,6 @@ export default function ServersShow({
                         </Dialog>
                     </CardFooter>
                 </Card>
-
-                {liveStatus !== 'pending' && <Card className="max-w-xl">
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <div>
-                            <CardTitle>Applications</CardTitle>
-                            <CardDescription>PHP/Laravel apps hosted on this server.</CardDescription>
-                        </div>
-                        {isOnline ? (
-                            <Button asChild size="sm">
-                                <Link href={route('applications.create', server.id)}>New application</Link>
-                            </Button>
-                        ) : (
-                            <Button size="sm" disabled>
-                                New application
-                            </Button>
-                        )}
-                    </CardHeader>
-                    {applications.length > 0 && (
-                        <CardContent className="grid gap-2">
-                            {applications.map((app) => (
-                                <Link
-                                    key={app.id}
-                                    href={route('applications.show', app.id)}
-                                    className="flex items-center justify-between rounded-md border px-3 py-2 hover:bg-accent"
-                                >
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-medium">{app.name}</span>
-                                        <span className="text-muted-foreground text-xs">{app.domain ?? '—'}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Badge variant="outline">PHP {app.php_version}</Badge>
-                                        <Badge variant={statusVariant(app.status)}>{app.status}</Badge>
-                                    </div>
-                                </Link>
-                            ))}
-                        </CardContent>
-                    )}
-                </Card>}
-
-                {liveStatus !== 'pending' && <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>Manage</CardTitle>
-                        <CardDescription>Services, scheduled jobs, and databases on this server.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex flex-wrap gap-2">
-                        {isOnline ? (
-                            <>
-                                <Button asChild variant="outline" size="sm">
-                                    <Link href={route('services.index', server.id)}>Services</Link>
-                                </Button>
-                                <Button asChild variant="outline" size="sm">
-                                    <Link href={route('cron.index', server.id)}>Cron jobs</Link>
-                                </Button>
-                                <Button asChild variant="outline" size="sm">
-                                    <Link href={route('databases.index', server.id)}>Databases</Link>
-                                </Button>
-                                <Button asChild variant="outline" size="sm">
-                                    <Link href={route('database-users.index', server.id)}>Database users</Link>
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <Button variant="outline" size="sm" disabled>
-                                    Services
-                                </Button>
-                                <Button variant="outline" size="sm" disabled>
-                                    Cron jobs
-                                </Button>
-                                <Button variant="outline" size="sm" disabled>
-                                    Databases
-                                </Button>
-                                <Button variant="outline" size="sm" disabled>
-                                    Database users
-                                </Button>
-                            </>
-                        )}
-                    </CardContent>
-                </Card>}
-
-                {liveStatus !== 'pending' && recentMetrics.length > 0 && (
-                    <Card className="max-w-xl">
-                        <CardHeader>
-                            <CardTitle>Resource usage</CardTitle>
-                            <CardDescription>CPU and RAM % — last {recentMetrics.length} readings</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ResponsiveContainer width="100%" height={200}>
-                                <LineChart data={recentMetrics}>
-                                    <XAxis dataKey="ts" interval="preserveStartEnd" tick={{ fontSize: 11 }} />
-                                    <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
-                                    <Tooltip formatter={(v: number) => `${v}%`} />
-                                    <Legend />
-                                    <Line type="monotone" dataKey="cpu" name="CPU" stroke="#3b82f6" dot={false} strokeWidth={1.5} />
-                                    <Line type="monotone" dataKey="ram" name="RAM" stroke="#22c55e" dot={false} strokeWidth={1.5} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {liveStatus !== 'pending' && <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>Provisioning</CardTitle>
-                        <CardDescription>Install services and track live job progress.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Tabs defaultValue="provision">
-                            <TabsList>
-                                <TabsTrigger value="provision">Provision</TabsTrigger>
-                                <TabsTrigger value="activity">
-                                    Activity
-                                    {runningJobsCount > 0 && (
-                                        <Badge variant="outline" className="ml-1 h-4 px-1 text-xs">
-                                            {runningJobsCount}
-                                        </Badge>
-                                    )}
-                                </TabsTrigger>
-                            </TabsList>
-
-                            <TabsContent value="provision">
-                                <div className="grid gap-3 pt-2">
-                                    {provisioningComponents
-                                        .filter((component) => component !== 'base')
-                                        .map((component) => (
-                                            <div key={component} className="grid gap-2">
-                                                <div className="flex items-center gap-2">
-                                                    <Checkbox
-                                                        id={`component-${component}`}
-                                                        checked={form.data.components.includes(component)}
-                                                        onCheckedChange={(checked) => toggleComponent(component, checked === true)}
-                                                    />
-                                                    <Label htmlFor={`component-${component}`}>
-                                                        {COMPONENT_LABELS[component] ?? component}
-                                                    </Label>
-                                                </div>
-
-                                                {component === 'php' && form.data.components.includes('php') && (
-                                                    <div className="ml-7 flex flex-wrap gap-3">
-                                                        {phpVersions.map((version) => (
-                                                            <div key={version} className="flex items-center gap-2">
-                                                                <Checkbox
-                                                                    id={`php-${version}`}
-                                                                    checked={form.data.php_versions.includes(version)}
-                                                                    onCheckedChange={(checked) =>
-                                                                        togglePhpVersion(version, checked === true)
-                                                                    }
-                                                                />
-                                                                <Label htmlFor={`php-${version}`} className="text-sm">
-                                                                    PHP {version}
-                                                                </Label>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {component === 'php' &&
-                                                    form.data.components.includes('php') &&
-                                                    form.errors.php_versions && (
-                                                        <p className="ml-7 text-sm text-destructive">{form.errors.php_versions}</p>
-                                                    )}
-                                            </div>
-                                        ))}
-                                </div>
-                                <div className="mt-4 flex items-center justify-between">
-                                    {form.errors.components && <p className="text-sm text-destructive">{form.errors.components}</p>}
-                                    <Button
-                                        onClick={submitProvision}
-                                        disabled={form.processing || form.data.components.length === 0 || liveStatus !== 'online'}
-                                    >
-                                        Provision selected services
-                                    </Button>
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="activity">
-                                {liveJobs.length === 0 ? (
-                                    <p className="text-muted-foreground pt-2 text-sm">No jobs dispatched yet.</p>
-                                ) : (
-                                    <div className="grid gap-2 pt-2">
-                                        {liveJobs.map((job) => (
-                                            <Collapsible key={job.uuid}>
-                                                <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-sm font-medium">{job.label ?? job.type}</span>
-                                                        {job.exit_code !== null && (
-                                                            <span className="text-muted-foreground text-xs">exit {job.exit_code}</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
-                                                        {job.output && (
-                                                            <CollapsibleTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-7 w-7">
-                                                                    <ChevronDownIcon />
-                                                                </Button>
-                                                            </CollapsibleTrigger>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                {job.output && (
-                                                    <CollapsibleContent>
-                                                        <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
-                                                            {job.output}
-                                                        </pre>
-                                                    </CollapsibleContent>
-                                                )}
-                                            </Collapsible>
-                                        ))}
-                                    </div>
-                                )}
-                            </TabsContent>
-                        </Tabs>
-                    </CardContent>
-                </Card>}
             </div>
         </AppLayout>
     );

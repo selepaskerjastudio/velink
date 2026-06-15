@@ -9,11 +9,11 @@ use Illuminate\Support\Facades\Redis;
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 test('php steps include the PPA and one install per version', function () {
-    $steps = app(ProvisioningCatalog::class)->steps('php', ['php_versions' => ['7.4', '8.3']]);
+    $steps = app(ProvisioningCatalog::class)->steps('php', ['php_versions' => ['8.1', '8.3']]);
 
     expect($steps)->toHaveCount(3); // PPA + 2 installs
     expect($steps[0]['params']['command'])->toContain('ppa:ondrej/php');
-    expect($steps[1]['params']['command'])->toContain('php7.4-fpm');
+    expect($steps[1]['params']['command'])->toContain('php8.1-fpm');
     expect($steps[2]['params']['command'])->toContain('php8.3-fpm');
 
     // Every step is a shell action with a timeout and a header echo.

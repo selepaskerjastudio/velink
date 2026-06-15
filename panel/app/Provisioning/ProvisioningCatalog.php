@@ -13,9 +13,15 @@ use InvalidArgumentException;
  */
 class ProvisioningCatalog
 {
+    public const CORE_COMPONENTS = [
+        'base', 'nginx', 'certbot', 'php', 'composer', 'node', 'supervisor', 'redis',
+    ];
+
+    public const DB_COMPONENTS = ['mariadb', 'postgresql', 'mongodb'];
+
     public const COMPONENTS = [
         'base', 'nginx', 'certbot', 'php', 'composer', 'node',
-        'supervisor', 'redis', 'mysql', 'mariadb', 'postgresql', 'mongodb',
+        'supervisor', 'redis', 'mariadb', 'postgresql', 'mongodb',
     ];
 
     public const PHP_VERSIONS = ['8.1', '8.2', '8.3', '8.4'];
@@ -76,12 +82,6 @@ class ProvisioningCatalog
                 export DEBIAN_FRONTEND=noninteractive
                 flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y redis-server
                 systemctl enable --now redis-server
-                SH)],
-
-            'mysql' => [$this->shell('Install MySQL', <<<'SH'
-                export DEBIAN_FRONTEND=noninteractive
-                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y mysql-server
-                systemctl enable --now mysql
                 SH)],
 
             'mariadb' => [$this->shell('Install MariaDB', <<<'SH'
