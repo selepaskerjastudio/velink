@@ -62,6 +62,18 @@ function formatGB(bytes: number): string {
     return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
 }
 
+function formatUptime(seconds: number): string {
+    if (seconds === 0) return '—';
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const parts: string[] = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0 || parts.length === 0) parts.push(`${m}m`);
+    return parts.join(' ');
+}
+
 const CORE_LABELS = ['Nginx', 'Certbot', 'Composer', 'Node.js 20', 'Supervisord', 'Redis'];
 
 const DB_OPTIONS = [
@@ -93,6 +105,7 @@ interface LatestMetric {
     disk_total: number;
     disk_used: number;
     load1: number;
+    uptime_seconds?: number;
 }
 
 interface Counts {
@@ -324,16 +337,16 @@ export default function ServersShow({
                                 </CardContent>
                             </Card>
 
-                            {/* CPU */}
+                            {/* Uptime */}
                             <Card>
                                 <CardHeader className="pb-2">
-                                    <CardTitle className="text-muted-foreground text-sm font-medium">CPU</CardTitle>
+                                    <CardTitle className="text-muted-foreground text-sm font-medium">Uptime</CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-3xl font-bold">
-                                        {latestMetric?.cpu_percent != null ? `${latestMetric.cpu_percent.toFixed(1)}%` : '—'}
+                                        {latestMetric?.uptime_seconds ? formatUptime(latestMetric.uptime_seconds) : '—'}
                                     </p>
-                                    <p className="text-muted-foreground mt-1 text-xs">current usage</p>
+                                    <p className="text-muted-foreground mt-1 text-xs">since last boot</p>
                                 </CardContent>
                             </Card>
                         </div>
@@ -569,8 +582,8 @@ export default function ServersShow({
                         {recentMetrics.length > 0 && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Resource usage</CardTitle>
-                                    <CardDescription>CPU and RAM % — last {recentMetrics.length} readings</CardDescription>
+                                    <CardTitle>Memory usage</CardTitle>
+                                    <CardDescription>RAM % — last {recentMetrics.length} readings</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <ResponsiveContainer width="100%" height={180}>
@@ -579,14 +592,6 @@ export default function ServersShow({
                                             <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 10 }} />
                                             <Tooltip formatter={(v: number) => `${v}%`} />
                                             <Legend />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="cpu"
-                                                name="CPU"
-                                                stroke="#3b82f6"
-                                                dot={false}
-                                                strokeWidth={1.5}
-                                            />
                                             <Line
                                                 type="monotone"
                                                 dataKey="ram"

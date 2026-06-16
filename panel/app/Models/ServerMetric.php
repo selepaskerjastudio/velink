@@ -18,6 +18,7 @@ class ServerMetric extends Model
         'disk_total',
         'disk_used',
         'load1',
+        'uptime_seconds',
         'recorded_at',
     ];
 
@@ -30,7 +31,8 @@ class ServerMetric extends Model
             'mem_used'    => 'integer',
             'disk_total'  => 'integer',
             'disk_used'   => 'integer',
-            'load1'       => 'float',
+            'load1'          => 'float',
+            'uptime_seconds' => 'integer',
         ];
     }
 

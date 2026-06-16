@@ -15,6 +15,8 @@ class Service extends Model
         'command',
         'status',
         'config',
+        'cpu_percent',
+        'memory_usage',
     ];
 
     protected function casts(): array

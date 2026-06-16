@@ -19,7 +19,7 @@ import {
     type DatabaseUserSummary,
     type SharedData,
 } from '@/types';
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -171,6 +171,7 @@ export default function ServerDatabaseUsers({
 }) {
     const { flash } = usePage<SharedData>().props;
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
+    const [search, setSearch] = useState('');
 
     useEffect(() => setLiveJobs(jobs), [jobs]);
 
@@ -225,6 +226,8 @@ export default function ServerDatabaseUsers({
 
     const engineDatabases = databases.filter((database) => database.engine === form.data.engine);
 
+    const filteredUsers = databaseUsers.filter((u) => u.username.toLowerCase().includes(search.toLowerCase()));
+
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
         { title: server.name, href: `/servers/${server.id}` },
@@ -237,6 +240,22 @@ export default function ServerDatabaseUsers({
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
                 <h1 className="text-xl font-semibold">Database users</h1>
+
+                {/* Tab navigation */}
+                <div className="flex border-b">
+                    <Link
+                        href={route('databases.index', server.id)}
+                        className="text-muted-foreground hover:text-foreground px-4 py-2 text-sm font-medium"
+                    >
+                        Databases
+                    </Link>
+                    <Link
+                        href={route('database-users.index', server.id)}
+                        className="border-primary text-primary border-b-2 px-4 py-2 text-sm font-medium"
+                    >
+                        Database Users
+                    </Link>
+                </div>
 
                 {flash.plainDbUserPassword && (
                     <Alert>
@@ -261,18 +280,27 @@ export default function ServerDatabaseUsers({
                         <CardTitle>Database users</CardTitle>
                         <CardDescription>Users that can connect to databases on this server.</CardDescription>
                     </CardHeader>
-                    {databaseUsers.length > 0 && (
-                        <CardContent className="grid gap-2">
-                            {databaseUsers.map((user) => (
-                                <DatabaseUserRow key={user.id} user={user} databases={databases} />
-                            ))}
-                        </CardContent>
-                    )}
-                    {databaseUsers.length === 0 && (
-                        <CardContent>
-                            <p className="text-muted-foreground text-sm">No database users yet.</p>
-                        </CardContent>
-                    )}
+                    <CardContent className="grid gap-3">
+                        {databaseUsers.length > 0 && (
+                            <Input
+                                placeholder="Search users..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="max-w-xs"
+                            />
+                        )}
+                        {filteredUsers.length > 0 && (
+                            <div className="grid gap-2">
+                                {filteredUsers.map((user) => (
+                                    <DatabaseUserRow key={user.id} user={user} databases={databases} />
+                                ))}
+                            </div>
+                        )}
+                        {databaseUsers.length === 0 && <p className="text-muted-foreground text-sm">No database users yet.</p>}
+                        {databaseUsers.length > 0 && filteredUsers.length === 0 && (
+                            <p className="text-muted-foreground text-sm">No users match your search.</p>
+                        )}
+                    </CardContent>
                 </Card>
 
                 <Card className="max-w-xl">

@@ -2,10 +2,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import ServerLayout from '@/layouts/server-layout';
 import { type BreadcrumbItem, type WorkerStatus } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { TriangleAlertIcon } from 'lucide-react';
+import { useState } from 'react';
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
     switch (status) {
@@ -27,6 +29,7 @@ interface ServerWorkerRow {
     application: {
         id: string;
         name: string;
+        root_path: string | null;
     };
 }
 
@@ -37,6 +40,14 @@ export default function ServerWorkers({
     server: { id: string; name: string; public_ip: string | null; status: string };
     workers: ServerWorkerRow[];
 }) {
+    const [search, setSearch] = useState('');
+
+    const filtered = workers.filter(
+        (w) =>
+            w.name.toLowerCase().includes(search.toLowerCase()) ||
+            w.application.name.toLowerCase().includes(search.toLowerCase()),
+    );
+
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
         { title: server.name, href: `/servers/${server.id}` },
@@ -72,7 +83,16 @@ export default function ServerWorkers({
                             </p>
                         ) : (
                             <div className="grid gap-2">
-                                {workers.map((worker) => (
+                                <Input
+                                    placeholder="Search by worker name or application..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="max-w-sm"
+                                />
+                                {filtered.length === 0 && (
+                                    <p className="text-muted-foreground text-sm">No workers match your search.</p>
+                                )}
+                                {filtered.map((worker) => (
                                     <div
                                         key={worker.id}
                                         className="flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
@@ -83,6 +103,9 @@ export default function ServerWorkers({
                                                 <span className="text-muted-foreground text-xs">x{worker.config?.numprocs ?? 1}</span>
                                             </div>
                                             <span className="text-muted-foreground font-mono text-xs">{worker.command}</span>
+                                            {worker.application.root_path && (
+                                                <span className="text-muted-foreground font-mono text-xs">{worker.application.root_path}</span>
+                                            )}
                                             <div className="flex items-center gap-1">
                                                 <span className="text-muted-foreground text-xs">App:</span>
                                                 <Link

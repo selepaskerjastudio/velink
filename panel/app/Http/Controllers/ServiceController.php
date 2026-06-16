@@ -21,7 +21,7 @@ class ServiceController extends Controller
             'services' => $server->services()
                 ->where('type', 'systemd')
                 ->orderBy('name')
-                ->get(['id', 'name', 'status', 'config']),
+                ->get(['id', 'name', 'status', 'config', 'cpu_percent', 'memory_usage']),
             'jobs' => $server->agentJobs()
                 ->where('type', 'shell')
                 ->latest('id')

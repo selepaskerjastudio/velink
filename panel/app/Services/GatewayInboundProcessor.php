@@ -97,8 +97,9 @@ class GatewayInboundProcessor
             'mem_used'    => (int) ($body['mem_used'] ?? 0),
             'disk_total'  => (int) ($body['disk_total'] ?? 0),
             'disk_used'   => (int) ($body['disk_used'] ?? 0),
-            'load1'       => (float) ($body['load1'] ?? 0),
-            'recorded_at' => now(),
+            'load1'          => (float) ($body['load1'] ?? 0),
+            'uptime_seconds' => (int) ($body['uptime_seconds'] ?? 0),
+            'recorded_at'    => now(),
         ]);
 
         // Keep only the last 2 hours (~240 readings at 30 s intervals).

@@ -26,6 +26,29 @@ class ApplicationController extends Controller
 
     private const BRANCH_REGEX = '/^[\w.\/-]+$/';
 
+    public function serverIndex(Server $server): Response
+    {
+        return Inertia::render('servers/applications', [
+            'server' => [
+                'id'        => $server->uuid,
+                'name'      => $server->name,
+                'public_ip' => $server->public_ip,
+                'status'    => $server->status,
+            ],
+            'applications' => $server->applications()
+                ->orderBy('name')
+                ->get(['uuid', 'name', 'domain', 'php_version', 'linux_user', 'status'])
+                ->map(fn (Application $a) => [
+                    'id'          => $a->uuid,
+                    'name'        => $a->name,
+                    'domain'      => $a->domain,
+                    'php_version' => $a->php_version,
+                    'linux_user'  => $a->linux_user,
+                    'status'      => $a->status,
+                ]),
+        ]);
+    }
+
     public function create(Server $server): Response
     {
         return Inertia::render('applications/create', [
@@ -82,6 +105,7 @@ class ApplicationController extends Controller
                 'env_content' => $application->env_content,
                 'webhook_url' => route('webhooks.github', $application),
                 'webhook_url_gitlab' => route('webhooks.gitlab', $application),
+                'ssl_provider' => null,
             ],
             'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'status' => $application->server->status],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
@@ -236,6 +260,41 @@ class ApplicationController extends Controller
         );
 
         return redirect()->route('applications.show', $application);
+    }
+
+    public function nginxConfig(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse
+    {
+        $validated = $request->validate([
+            'config' => ['required', 'string', 'max:65535'],
+        ]);
+
+        $configPath = "/etc/nginx/sites-available/{$application->domain}.conf";
+
+        $dispatcher->dispatch($application->server, 'write_file', [
+            'path'    => $configPath,
+            'content' => $validated['config'],
+        ], [
+            'application_id' => $application->id,
+            'user_id'        => $request->user()->id,
+            'label'          => 'Update NGINX config',
+        ]);
+
+        $dispatcher->dispatch($application->server, 'shell', [
+            'command' => 'sudo nginx -t && sudo systemctl reload nginx',
+        ], [
+            'application_id' => $application->id,
+            'user_id'        => $request->user()->id,
+            'label'          => 'Reload NGINX',
+        ]);
+
+        AuditLogger::log(
+            action: 'application.nginx_config_updated',
+            description: "NGINX config updated for '{$application->name}'",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+        );
+
+        return redirect()->route('applications.show', $application)->with('success', 'NGINX config updated and reloaded.');
     }
 
     public function updateEnv(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse

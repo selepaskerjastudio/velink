@@ -86,6 +86,7 @@ export interface Application {
     webhook_secret: string | null;
     webhook_url: string;
     webhook_url_gitlab: string;
+    ssl_provider: string | null;
 }
 
 export interface GitCredential {
@@ -140,16 +141,19 @@ export interface SystemdService {
     name: string;
     status: SystemdServiceStatus;
     config: { enabled?: boolean; label?: string } | null;
+    cpu_percent: number | null;
+    memory_usage: number | null;
 }
 
 export type DatabaseEngine = 'mysql' | 'mariadb' | 'postgres' | 'mongodb';
 
 export interface DatabaseInstanceSummary {
-    id: number;
+    id: string;
     engine: DatabaseEngine;
     name: string;
     charset: string | null;
     collation: string | null;
+    created_at: string | null;
 }
 
 export type CronJobStatus = 'active' | 'paused';

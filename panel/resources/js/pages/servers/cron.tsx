@@ -181,6 +181,13 @@ export default function ServerCron({
     jobs: AgentJob[];
 }) {
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
+    const [search, setSearch] = useState('');
+
+    const filteredJobs = cronJobs.filter(
+        (j) =>
+            j.command.toLowerCase().includes(search.toLowerCase()) ||
+            (j.application_name ?? '').toLowerCase().includes(search.toLowerCase()),
+    );
 
     useEffect(() => setLiveJobs(jobs), [jobs]);
 
@@ -265,7 +272,16 @@ export default function ServerCron({
                     </CardHeader>
                     {cronJobs.length > 0 && (
                         <CardContent className="grid gap-2">
-                            {cronJobs.map((cronJob) => (
+                            <Input
+                                placeholder="Search by label or command..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="max-w-sm"
+                            />
+                            {filteredJobs.length === 0 && (
+                                <p className="text-muted-foreground text-sm">No cron jobs match your search.</p>
+                            )}
+                            {filteredJobs.map((cronJob) => (
                                 <CronJobRow key={cronJob.id} cronJob={cronJob} applications={applications} />
                             ))}
                         </CardContent>

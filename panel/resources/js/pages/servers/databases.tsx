@@ -55,6 +55,7 @@ export default function ServersDatabases({
     jobs: AgentJob[];
 }) {
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
+    const [search, setSearch] = useState('');
 
     useEffect(() => setLiveJobs(jobs), [jobs]);
 
@@ -108,6 +109,8 @@ export default function ServersDatabases({
 
     const showCharsetFields = form.data.engine !== 'mongodb';
 
+    const filtered = databases.filter((d) => d.name.toLowerCase().includes(search.toLowerCase()));
+
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
         { title: server.name, href: `/servers/${server.id}` },
@@ -119,11 +122,22 @@ export default function ServersDatabases({
             <Head title={`Databases — ${server.name}`} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-xl font-semibold">Databases</h1>
-                    <Button asChild variant="outline" size="sm">
-                        <Link href={route('database-users.index', server.id)}>Database users</Link>
-                    </Button>
+                <h1 className="text-xl font-semibold">Databases</h1>
+
+                {/* Tab navigation */}
+                <div className="flex border-b">
+                    <Link
+                        href={route('databases.index', server.id)}
+                        className="border-primary text-primary border-b-2 px-4 py-2 text-sm font-medium"
+                    >
+                        Databases
+                    </Link>
+                    <Link
+                        href={route('database-users.index', server.id)}
+                        className="text-muted-foreground hover:text-foreground px-4 py-2 text-sm font-medium"
+                    >
+                        Database Users
+                    </Link>
                 </div>
 
                 <Card className="max-w-xl">
@@ -131,39 +145,51 @@ export default function ServersDatabases({
                         <CardTitle>Databases</CardTitle>
                         <CardDescription>Schemas provisioned on this server, across MySQL/MariaDB, PostgreSQL, and MongoDB.</CardDescription>
                     </CardHeader>
-                    {databases.length > 0 && (
-                        <CardContent className="grid gap-2">
-                            {databases.map((database) => (
-                                <div key={database.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                                    <div className="flex flex-col gap-1">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="outline">{ENGINE_LABELS[database.engine]}</Badge>
-                                            <span className="font-mono text-sm">{database.name}</span>
+                    <CardContent className="grid gap-3">
+                        {databases.length > 0 && (
+                            <Input
+                                placeholder="Search databases..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="max-w-xs"
+                            />
+                        )}
+                        {filtered.length > 0 && (
+                            <div className="grid gap-2">
+                                {filtered.map((database) => (
+                                    <div key={database.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant="outline">{ENGINE_LABELS[database.engine]}</Badge>
+                                                <span className="font-mono text-sm">{database.name}</span>
+                                            </div>
+                                            <div className="text-muted-foreground flex gap-3 text-xs">
+                                                {(database.charset || database.collation) && (
+                                                    <span>
+                                                        {database.charset ?? '—'}
+                                                        {database.collation ? ` · ${database.collation}` : ''}
+                                                    </span>
+                                                )}
+                                                {database.created_at && <span>Added {database.created_at}</span>}
+                                            </div>
                                         </div>
-                                        {(database.charset || database.collation) && (
-                                            <span className="text-muted-foreground text-xs">
-                                                {database.charset ?? '—'}
-                                                {database.collation ? ` · ${database.collation}` : ''}
-                                            </span>
-                                        )}
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={() => submitDestroy(database)}
+                                            disabled={destroyForm.processing}
+                                        >
+                                            Drop
+                                        </Button>
                                     </div>
-                                    <Button
-                                        variant="destructive"
-                                        size="sm"
-                                        onClick={() => submitDestroy(database)}
-                                        disabled={destroyForm.processing}
-                                    >
-                                        Drop
-                                    </Button>
-                                </div>
-                            ))}
-                        </CardContent>
-                    )}
-                    {databases.length === 0 && (
-                        <CardContent>
-                            <p className="text-muted-foreground text-sm">No databases yet.</p>
-                        </CardContent>
-                    )}
+                                ))}
+                            </div>
+                        )}
+                        {databases.length === 0 && <p className="text-muted-foreground text-sm">No databases yet.</p>}
+                        {databases.length > 0 && filtered.length === 0 && (
+                            <p className="text-muted-foreground text-sm">No databases match your search.</p>
+                        )}
+                    </CardContent>
                 </Card>
 
                 <Card className="max-w-xl">

@@ -46,7 +46,15 @@ class DatabaseInstanceController extends Controller
             ],
             'databases' => $server->databases()
                 ->orderBy('name')
-                ->get(['id', 'engine', 'name', 'charset', 'collation']),
+                ->get(['uuid', 'engine', 'name', 'charset', 'collation', 'created_at'])
+                ->map(fn ($d) => [
+                    'id'         => $d->uuid,
+                    'engine'     => $d->engine,
+                    'name'       => $d->name,
+                    'charset'    => $d->charset,
+                    'collation'  => $d->collation,
+                    'created_at' => $d->created_at?->format('d M Y'),
+                ]),
             'jobs' => $server->agentJobs()
                 ->where('type', 'shell')
                 ->latest('id')

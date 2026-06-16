@@ -32,8 +32,9 @@ class WorkerController extends Controller
                 'status' => $w->status,
                 'config' => $w->config,
                 'application' => [
-                    'id' => $app->uuid,
-                    'name' => $app->name,
+                    'id'        => $app->uuid,
+                    'name'      => $app->name,
+                    'root_path' => $app->root_path,
                 ],
             ]))
             ->values();

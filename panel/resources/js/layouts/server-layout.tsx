@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/sidebar';
 import { type BreadcrumbItem } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { ChevronLeft, Clock, Cpu, Database, Globe, LayoutGrid, Layers, ScrollText, Settings } from 'lucide-react';
+import { Activity, ChevronLeft, Clock, Cpu, Database, Globe, LayoutGrid, Layers, ScrollText, Settings } from 'lucide-react';
 
 interface ServerLayoutProps {
     children: React.ReactNode;
@@ -35,7 +35,8 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
 
     const mainNavItems = [
         { title: 'Dashboard', url: dashboardUrl, icon: LayoutGrid, exact: true },
-        { title: 'Web Applications', url: `/servers/${server.id}`, icon: Globe, exact: true },
+        { title: 'Monitoring', url: `/servers/${server.id}/monitoring`, icon: Activity, exact: false },
+        { title: 'Web Applications', url: `/servers/${server.id}/applications`, icon: Globe, exact: false },
         { title: 'Databases', url: `/servers/${server.id}/databases`, icon: Database, exact: false },
         { title: 'Services', url: `/servers/${server.id}/services`, icon: Cpu, exact: false },
     ];

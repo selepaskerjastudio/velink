@@ -7,18 +7,20 @@ import (
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // Snapshot holds a single point-in-time reading of system resources.
 type Snapshot struct {
-	CpuPercent float64 `json:"cpu_percent"`
-	MemTotal   uint64  `json:"mem_total"`
-	MemUsed    uint64  `json:"mem_used"`
-	DiskTotal  uint64  `json:"disk_total"`
-	DiskUsed   uint64  `json:"disk_used"`
-	Load1      float64 `json:"load1"`
+	CpuPercent    float64 `json:"cpu_percent"`
+	MemTotal      uint64  `json:"mem_total"`
+	MemUsed       uint64  `json:"mem_used"`
+	DiskTotal     uint64  `json:"disk_total"`
+	DiskUsed      uint64  `json:"disk_used"`
+	Load1         float64 `json:"load1"`
+	UptimeSeconds uint64  `json:"uptime_seconds"`
 }
 
 // Collect gathers a point-in-time snapshot. ctx is used for cancellation.
@@ -50,12 +52,18 @@ func Collect(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 
+	uptimeSec, err := host.UptimeWithContext(ctx)
+	if err != nil {
+		uptimeSec = 0
+	}
+
 	return Snapshot{
-		CpuPercent: cpuPct,
-		MemTotal:   vmStat.Total,
-		MemUsed:    vmStat.Used,
-		DiskTotal:  diskStat.Total,
-		DiskUsed:   diskStat.Used,
-		Load1:      math.Round(avgStat.Load1*100) / 100,
+		CpuPercent:    cpuPct,
+		MemTotal:      vmStat.Total,
+		MemUsed:       vmStat.Used,
+		DiskTotal:     diskStat.Total,
+		DiskUsed:      diskStat.Used,
+		Load1:         math.Round(avgStat.Load1*100) / 100,
+		UptimeSeconds: uptimeSec,
 	}, nil
 }
