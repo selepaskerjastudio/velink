@@ -21,7 +21,7 @@ class GatewayInboundProcessor
      * Components and PHP version provisioned automatically on first agent connect.
      * 'base' is implicitly prepended by ProvisionService::order().
      */
-    private const AUTO_COMPONENTS = ['nginx', 'certbot', 'supervisor', 'redis', 'php', 'composer'];
+    private const AUTO_COMPONENTS = ['nginx', 'certbot', 'supervisor', 'redis', 'php', 'composer', 'node'];
 
     private const AUTO_PHP_VERSIONS = ['7.4', '8.1', '8.2', '8.3', '8.4'];
 
