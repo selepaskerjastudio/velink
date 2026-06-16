@@ -122,6 +122,41 @@ function jobStatusIcon(status: AgentJob['status']) {
     }
 }
 
+const ACTION_LABELS: Record<ServiceAction, string> = {
+    start: 'Start',
+    restart: 'Restart',
+    reload: 'Reload',
+    stop: 'Stop',
+};
+
+// Only services whose systemd unit defines a graceful reload (ExecReload).
+function supportsReload(name: string): boolean {
+    const n = name.toLowerCase();
+    return (
+        n.startsWith('nginx') ||
+        n.startsWith('php') ||
+        n.startsWith('apache') ||
+        n.startsWith('httpd') ||
+        n.startsWith('mariadb') ||
+        n.startsWith('mysql') ||
+        n.startsWith('postgres')
+    );
+}
+
+// Actions that make sense for the current status (and service). A service that
+// is waiting/installing/restarting/not-installed has no actionable controls.
+function availableActions(status: string, name: string): ServiceAction[] {
+    const running = status === 'running' || status === 'active';
+    const stopped = status === 'stopped' || status === 'inactive';
+    const transient = status === 'waiting' || status === 'installing' || status === 'restarting' || status === 'not_installed';
+
+    if (transient) return [];
+    if (stopped) return ['start'];
+    if (running) return supportsReload(name) ? ['reload', 'restart', 'stop'] : ['restart', 'stop'];
+    // unknown / legacy fallback
+    return supportsReload(name) ? ['start', 'reload', 'restart', 'stop'] : ['start', 'restart', 'stop'];
+}
+
 function ServiceRow({ service }: { service: SystemdService }) {
     const controlForm = useForm<{ action: ServiceAction }>({ action: 'restart' });
 
@@ -132,6 +167,7 @@ function ServiceRow({ service }: { service: SystemdService }) {
 
     const icon = serviceIcon(service.name);
     const label = service.config?.label ?? service.name;
+    const actions = availableActions(service.status, service.name);
 
     return (
         <tr className="border-b last:border-0 hover:bg-muted/30 transition-colors">
@@ -156,22 +192,35 @@ function ServiceRow({ service }: { service: SystemdService }) {
                 {statusBadge(service.status)}
             </td>
             <td className="py-3 pl-2 pr-4 text-right">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" disabled={controlForm.processing}>
-                            <EllipsisIcon className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => dispatch('start')}>Start</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => dispatch('restart')}>Restart</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => dispatch('reload')}>Reload</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => dispatch('stop')} className="text-destructive focus:text-destructive">
-                            Stop
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                {actions.length > 0 && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={controlForm.processing}>
+                                <EllipsisIcon className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            {actions
+                                .filter((a) => a !== 'stop')
+                                .map((a) => (
+                                    <DropdownMenuItem key={a} onClick={() => dispatch(a)}>
+                                        {ACTION_LABELS[a]}
+                                    </DropdownMenuItem>
+                                ))}
+                            {actions.includes('stop') && (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        onClick={() => dispatch('stop')}
+                                        className="text-destructive focus:text-destructive"
+                                    >
+                                        Stop
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
             </td>
         </tr>
     );
