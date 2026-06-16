@@ -2,15 +2,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import echo from '@/echo';
 import ServerLayout from '@/layouts/server-layout';
 import {
     type AgentJob,
-    type AgentJobStatus,
     type ApplicationSummary,
     type BreadcrumbItem,
     type Server,
@@ -18,7 +13,7 @@ import {
     type SharedData,
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { CheckIcon, ChevronDownIcon, ClipboardIcon, TriangleAlertIcon } from 'lucide-react';
+import { CheckIcon, ClipboardIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
@@ -74,23 +69,6 @@ function formatUptime(seconds: number): string {
     return parts.join(' ');
 }
 
-const CORE_LABELS = ['Nginx', 'Certbot', 'Composer', 'Node.js 20', 'Supervisord', 'Redis'];
-
-const DB_OPTIONS = [
-    { key: 'mariadb', label: 'MariaDB' },
-    { key: 'postgresql', label: 'PostgreSQL' },
-    { key: 'mongodb', label: 'MongoDB' },
-];
-
-interface AgentJobUpdatedEvent {
-    uuid: string;
-    type: string;
-    label: string | null;
-    status: AgentJobStatus;
-    exit_code: number | null;
-    output: string | null;
-}
-
 interface ServerPresenceEvent {
     id: string;
     status: string;
@@ -118,9 +96,6 @@ interface Counts {
 export default function ServersShow({
     server,
     applications,
-    jobs,
-    phpVersions,
-    dbComponents: dbComponentKeys,
     recentMetrics,
     latestMetric,
     counts,
@@ -136,23 +111,11 @@ export default function ServersShow({
 }) {
     const { flash } = usePage<SharedData>().props;
     const [liveStatus, setLiveStatus] = useState(server.status);
-    const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs ?? []);
 
-    useEffect(() => setLiveJobs(jobs ?? []), [jobs]);
     useEffect(() => setLiveStatus(server.status), [server.status]);
 
     useEffect(() => {
         const channel = echo.private(`server.${server.id}`);
-
-        channel.listen('.agent-job.updated', (event: AgentJobUpdatedEvent) => {
-            setLiveJobs((current) => {
-                const index = current.findIndex((job) => job.uuid === event.uuid);
-                if (index === -1) return current;
-                const next = [...current];
-                next[index] = { ...next[index], ...event };
-                return next;
-            });
-        });
 
         channel.listen('.server.presence', (event: ServerPresenceEvent) => {
             setLiveStatus(event.status);
@@ -171,38 +134,10 @@ export default function ServersShow({
         };
     }, [server.id]);
 
-    const form = useForm<{ php_versions: string[]; db_components: string[] }>({
-        php_versions: [],
-        db_components: [],
-    });
-
     const tokenForm = useForm({});
-
-    const togglePhpVersion = (version: string, checked: boolean) => {
-        form.setData(
-            'php_versions',
-            checked ? [...form.data.php_versions, version] : form.data.php_versions.filter((v) => v !== version),
-        );
-    };
-
-    const toggleDb = (key: string, checked: boolean) => {
-        form.setData(
-            'db_components',
-            checked ? [...form.data.db_components, key] : form.data.db_components.filter((k) => k !== key),
-        );
-    };
-
-    const submitProvision = () => {
-        form.transform((data) => ({
-            components: ['base', 'nginx', 'certbot', 'php', 'composer', 'node', 'supervisor', 'redis', ...data.db_components],
-            php_versions: data.php_versions,
-        }));
-        form.post(route('servers.provision', server.id), { preserveScroll: true });
-    };
 
     const isOnline = liveStatus === 'online';
     const isPending = liveStatus === 'pending';
-    const runningJobsCount = liveJobs.filter((job) => job.status === 'running' || job.status === 'pending').length;
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
@@ -279,6 +214,41 @@ export default function ServersShow({
                 )}
 
                 {!isPending && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Server details</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-2 text-sm">
+                            {(
+                                [
+                                    ['Hostname', server.hostname],
+                                    ['Public IP', server.public_ip],
+                                    ['Private IP', server.private_ip],
+                                    ['OS', server.os],
+                                    ['Agent version', server.agent_version],
+                                    ['Last seen', server.last_seen_at ?? 'Never'],
+                                ] as [string, string | null | undefined][]
+                            ).map(([label, value]) => (
+                                <div key={label} className="flex justify-between gap-2">
+                                    <span className="text-muted-foreground shrink-0">{label}</span>
+                                    <span className="text-right">{value ?? '—'}</span>
+                                </div>
+                            ))}
+                        </CardContent>
+                        <CardFooter>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={tokenForm.processing}
+                                onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
+                            >
+                                Regenerate install command
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                )}
+
+                {!isPending && (
                     <>
                         {/* Metric cards */}
                         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -344,7 +314,7 @@ export default function ServersShow({
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-3xl font-bold">
-                                        {latestMetric?.uptime_seconds ? formatUptime(latestMetric.uptime_seconds) : '—'}
+                                        {latestMetric?.uptime_seconds != null ? formatUptime(latestMetric.uptime_seconds) : '—'}
                                     </p>
                                     <p className="text-muted-foreground mt-1 text-xs">since last boot</p>
                                 </CardContent>
@@ -434,150 +404,6 @@ export default function ServersShow({
                             </CardContent>
                         </Card>
 
-                        {/* Provisioning / Activity tabs */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Provisioning</CardTitle>
-                                <CardDescription>Install services and track live job progress.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Tabs defaultValue="provision">
-                                    <TabsList>
-                                        <TabsTrigger value="provision">Provision</TabsTrigger>
-                                        <TabsTrigger value="activity">
-                                            Activity
-                                            {runningJobsCount > 0 && (
-                                                <Badge variant="outline" className="ml-1 h-4 px-1 text-xs">
-                                                    {runningJobsCount}
-                                                </Badge>
-                                            )}
-                                        </TabsTrigger>
-                                    </TabsList>
-
-                                    <TabsContent value="provision">
-                                        <div className="grid gap-5 pt-3">
-                                            {/* Core stack */}
-                                            <div>
-                                                <p className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wide">
-                                                    Always installed
-                                                </p>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {CORE_LABELS.map((s) => (
-                                                        <span
-                                                            key={s}
-                                                            className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-xs"
-                                                        >
-                                                            {s}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* PHP versions */}
-                                            <div>
-                                                <p className="mb-2 text-sm font-medium">
-                                                    PHP version <span className="text-destructive">*</span>
-                                                </p>
-                                                <div className="flex flex-wrap gap-3">
-                                                    {phpVersions.map((version) => (
-                                                        <div key={version} className="flex items-center gap-2">
-                                                            <Checkbox
-                                                                id={`php-${version}`}
-                                                                checked={form.data.php_versions.includes(version)}
-                                                                onCheckedChange={(checked) =>
-                                                                    togglePhpVersion(version, checked === true)
-                                                                }
-                                                            />
-                                                            <Label htmlFor={`php-${version}`} className="text-sm">
-                                                                PHP {version}
-                                                            </Label>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                                {form.errors.php_versions && (
-                                                    <p className="mt-1 text-sm text-destructive">{form.errors.php_versions}</p>
-                                                )}
-                                            </div>
-
-                                            {/* Optional databases */}
-                                            <div>
-                                                <p className="mb-2 text-sm font-medium">
-                                                    Databases{' '}
-                                                    <span className="text-muted-foreground text-xs font-normal">(optional)</span>
-                                                </p>
-                                                <div className="flex flex-wrap gap-3">
-                                                    {DB_OPTIONS.map(({ key, label }) => (
-                                                        <div key={key} className="flex items-center gap-2">
-                                                            <Checkbox
-                                                                id={`db-${key}`}
-                                                                checked={form.data.db_components.includes(key)}
-                                                                onCheckedChange={(checked) => toggleDb(key, checked === true)}
-                                                            />
-                                                            <Label htmlFor={`db-${key}`} className="text-sm">
-                                                                {label}
-                                                            </Label>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-3">
-                                                <Button
-                                                    onClick={submitProvision}
-                                                    disabled={form.processing || form.data.php_versions.length === 0 || !isOnline}
-                                                >
-                                                    Provision server
-                                                </Button>
-                                                {form.data.php_versions.length === 0 && (
-                                                    <p className="text-muted-foreground text-sm">Select at least one PHP version</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </TabsContent>
-
-                                    <TabsContent value="activity">
-                                        {liveJobs.length === 0 ? (
-                                            <p className="text-muted-foreground pt-2 text-sm">No jobs dispatched yet.</p>
-                                        ) : (
-                                            <div className="grid gap-2 pt-2">
-                                                {liveJobs.map((job) => (
-                                                    <Collapsible key={job.uuid}>
-                                                        <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-sm font-medium">{job.label ?? job.type}</span>
-                                                                {job.exit_code !== null && (
-                                                                    <span className="text-muted-foreground text-xs">
-                                                                        exit {job.exit_code}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
-                                                                {job.output && (
-                                                                    <CollapsibleTrigger asChild>
-                                                                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                                                                            <ChevronDownIcon />
-                                                                        </Button>
-                                                                    </CollapsibleTrigger>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        {job.output && (
-                                                            <CollapsibleContent>
-                                                                <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
-                                                                    {job.output}
-                                                                </pre>
-                                                            </CollapsibleContent>
-                                                        )}
-                                                    </Collapsible>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </TabsContent>
-                                </Tabs>
-                            </CardContent>
-                        </Card>
-
                         {/* Resource usage chart */}
                         {recentMetrics.length > 0 && (
                             <Card>
@@ -608,41 +434,6 @@ export default function ServersShow({
                     </>
                 )}
 
-                {/* Server details card — hidden while agent hasn't connected yet */}
-                {!isPending && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Server details</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid gap-2 text-sm">
-                            {(
-                                [
-                                    ['Hostname', server.hostname],
-                                    ['Public IP', server.public_ip],
-                                    ['Private IP', server.private_ip],
-                                    ['OS', server.os],
-                                    ['Agent version', server.agent_version],
-                                    ['Last seen', server.last_seen_at ?? 'Never'],
-                                ] as [string, string | null | undefined][]
-                            ).map(([label, value]) => (
-                                <div key={label} className="flex justify-between gap-2">
-                                    <span className="text-muted-foreground shrink-0">{label}</span>
-                                    <span className="text-right">{value ?? '—'}</span>
-                                </div>
-                            ))}
-                        </CardContent>
-                        <CardFooter>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={tokenForm.processing}
-                                onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
-                            >
-                                Regenerate install command
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                )}
 
                 {/* Manage quick links */}
                 {!isPending && (

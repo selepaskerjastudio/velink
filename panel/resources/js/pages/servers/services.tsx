@@ -3,7 +3,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -17,7 +16,7 @@ import echo from '@/echo';
 import ServerLayout from '@/layouts/server-layout';
 import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type SystemdService } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
-import { ChevronDownIcon, EllipsisIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
+import { EllipsisIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 type ServiceAction = 'start' | 'stop' | 'restart' | 'reload';
@@ -115,30 +114,12 @@ function ServiceRow({ service }: { service: SystemdService }) {
 export default function ServerServices({
     server,
     services,
-    jobs,
 }: {
     server: { id: string; name: string; status: string; public_ip: string | null };
     services: SystemdService[];
     jobs: AgentJob[];
 }) {
-    const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
     const [search, setSearch] = useState('');
-
-    useEffect(() => setLiveJobs(jobs), [jobs]);
-
-    useEffect(() => {
-        const channel = echo.private(`server.${server.id}`);
-        channel.listen('.agent-job.updated', (event: AgentJobUpdatedEvent) => {
-            setLiveJobs((current) => {
-                const index = current.findIndex((job) => job.uuid === event.uuid);
-                if (index === -1) return current;
-                const next = [...current];
-                next[index] = { ...next[index], ...event };
-                return next;
-            });
-        });
-        return () => { echo.leave(`server.${server.id}`); };
-    }, [server.id]);
 
     const filtered = services.filter((s) =>
         s.name.toLowerCase().includes(search.toLowerCase()),
@@ -175,6 +156,10 @@ export default function ServerServices({
                         </AlertDescription>
                     </Alert>
                 )}
+
+                <p className="text-muted-foreground text-sm">
+                    Enable or disable services running on your server. Start, stop, reload, or restart any tracked systemd unit.
+                </p>
 
                 <Card>
                     <CardHeader>
@@ -221,15 +206,18 @@ export default function ServerServices({
                                         )}
                                     </tbody>
                                 </table>
+                                <p className="text-muted-foreground border-t px-4 py-3 text-xs">
+                                    Showing {filtered.length} of {services.length} service{services.length !== 1 ? 's' : ''}
+                                </p>
                             </>
                         )}
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="max-w-xl">
                     <CardHeader>
-                        <CardTitle>Register a service</CardTitle>
-                        <CardDescription>Track a systemd unit by name, e.g. nginx or php8.3-fpm.service.</CardDescription>
+                        <CardTitle>Track a service</CardTitle>
+                        <CardDescription>Add a systemd unit by name, e.g. nginx or php8.3-fpm.service.</CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-4">
                         <div className="grid gap-2">
@@ -257,49 +245,10 @@ export default function ServerServices({
                     </CardContent>
                     <CardFooter>
                         <Button onClick={submitRegister} disabled={registerForm.processing || registerForm.data.name === ''}>
-                            Register service
+                            Track service
                         </Button>
                     </CardFooter>
                 </Card>
-
-                {liveJobs.length > 0 && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Job progress</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid gap-2">
-                            {liveJobs.map((job) => (
-                                <Collapsible key={job.uuid}>
-                                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium">{job.label ?? job.type}</span>
-                                            {job.exit_code !== null && (
-                                                <span className="text-muted-foreground text-xs">exit {job.exit_code}</span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
-                                            {job.output && (
-                                                <CollapsibleTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                                                        <ChevronDownIcon />
-                                                    </Button>
-                                                </CollapsibleTrigger>
-                                            )}
-                                        </div>
-                                    </div>
-                                    {job.output && (
-                                        <CollapsibleContent>
-                                            <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
-                                                {job.output}
-                                            </pre>
-                                        </CollapsibleContent>
-                                    )}
-                                </Collapsible>
-                            ))}
-                        </CardContent>
-                    </Card>
-                )}
             </div>
         </ServerLayout>
     );

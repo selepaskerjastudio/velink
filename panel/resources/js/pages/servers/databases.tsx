@@ -264,45 +264,6 @@ export default function ServersDatabases({
                     </CardFooter>
                 </Card>
 
-                {liveJobs.length > 0 && (
-                    <Card className="max-w-xl">
-                        <CardHeader>
-                            <CardTitle>Job progress</CardTitle>
-                            <CardDescription>Live status of database jobs dispatched to this server.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid gap-2">
-                            {liveJobs.map((job) => (
-                                <Collapsible key={job.uuid}>
-                                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium">{job.label ?? job.type}</span>
-                                            {job.exit_code !== null && (
-                                                <span className="text-muted-foreground text-xs">exit {job.exit_code}</span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
-                                            {job.output && (
-                                                <CollapsibleTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                                                        <ChevronDownIcon />
-                                                    </Button>
-                                                </CollapsibleTrigger>
-                                            )}
-                                        </div>
-                                    </div>
-                                    {job.output && (
-                                        <CollapsibleContent>
-                                            <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
-                                                {job.output}
-                                            </pre>
-                                        </CollapsibleContent>
-                                    )}
-                                </Collapsible>
-                            ))}
-                        </CardContent>
-                    </Card>
-                )}
             </div>
         </ServerLayout>
     );
