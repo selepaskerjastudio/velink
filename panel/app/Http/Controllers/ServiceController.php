@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Server;
 use App\Models\Service;
+use App\Provisioning\ProvisioningCatalog;
 use App\Services\AuditLogger;
+use App\Services\ProvisionService;
 use App\Services\ServiceManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +19,7 @@ class ServiceController extends Controller
     public function index(Server $server): Response
     {
         return Inertia::render('servers/services', [
-            'server' => ['id' => $server->uuid, 'name' => $server->name, 'status' => $server->status],
+            'server' => ['id' => $server->uuid, 'name' => $server->name, 'status' => $server->status, 'public_ip' => $server->public_ip],
             'services' => $server->services()
                 ->where('type', 'systemd')
                 ->orderBy('name')
@@ -53,6 +55,33 @@ class ServiceController extends Controller
             userId: $request->user()->id,
             serverId: $server->id,
             properties: ['server_uuid' => $server->uuid],
+        );
+
+        return redirect()->route('services.index', $server);
+    }
+
+    public function provision(Request $request, Server $server, ProvisionService $provisionService, ServiceManager $manager): RedirectResponse
+    {
+        $validated = $request->validate([
+            'components' => ['required', 'array', 'min:1'],
+            'components.*' => ['required', 'string', Rule::in(ProvisioningCatalog::COMPONENTS)],
+            'php_versions' => ['nullable', 'array'],
+            'php_versions.*' => ['required', 'string', Rule::in(ProvisioningCatalog::PHP_VERSIONS)],
+        ]);
+
+        $components = $validated['components'];
+        $phpVersions = $validated['php_versions'] ?? ['8.3'];
+        $opts = in_array('php', $components, true) ? ['php_versions' => $phpVersions] : [];
+
+        $provisionService->provision($server, $components, $opts, $request->user()->id);
+        $manager->seedForServer($server, $components, $phpVersions);
+
+        AuditLogger::log(
+            action: 'server.provisioned',
+            description: "Provisioning started on '{$server->name}': ".implode(', ', $components),
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['components' => $components, 'php_versions' => $phpVersions],
         );
 
         return redirect()->route('services.index', $server);

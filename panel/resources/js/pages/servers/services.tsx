@@ -1,7 +1,18 @@
+import { useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -9,19 +20,32 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import ServerLayout from '@/layouts/server-layout';
-import { type BreadcrumbItem, type SystemdService } from '@/types';
-import { Head, router, useForm } from '@inertiajs/react';
-import { EllipsisIcon, TriangleAlertIcon } from 'lucide-react';
+import { type AgentJob, type BreadcrumbItem, type SystemdService } from '@/types';
+import { Head, useForm } from '@inertiajs/react';
+import { CheckCircle2Icon, CircleDashedIcon, EllipsisIcon, LoaderIcon, PackagePlusIcon, TriangleAlertIcon, XCircleIcon } from 'lucide-react';
 
 type ServiceAction = 'start' | 'stop' | 'restart' | 'reload';
 
-interface ServiceIconConfig {
-    bg: string;
-    letter: string;
-}
+const COMPONENTS = [
+    { key: 'nginx', label: 'NGINX', group: 'Web' },
+    { key: 'certbot', label: 'Certbot (SSL)', group: 'Web' },
+    { key: 'php', label: 'PHP-FPM', group: 'PHP' },
+    { key: 'composer', label: 'Composer', group: 'PHP' },
+    { key: 'redis', label: 'Redis', group: 'Database' },
+    { key: 'mariadb', label: 'MariaDB', group: 'Database' },
+    { key: 'postgresql', label: 'PostgreSQL', group: 'Database' },
+    { key: 'mongodb', label: 'MongoDB', group: 'Database' },
+    { key: 'supervisor', label: 'Supervisord', group: 'Runtime' },
+    { key: 'node', label: 'Node.js', group: 'Runtime' },
+] as const;
 
-function serviceIcon(name: string): ServiceIconConfig {
+const PHP_VERSIONS = ['8.1', '8.2', '8.3', '8.4'] as const;
+
+const COMPONENT_GROUPS = ['Web', 'PHP', 'Database', 'Runtime'] as const;
+
+function serviceIcon(name: string): { bg: string; letter: string } {
     const n = name.toLowerCase();
     if (n.startsWith('nginx')) return { bg: 'bg-green-600', letter: 'N' };
     if (n.startsWith('redis')) return { bg: 'bg-red-600', letter: 'R' };
@@ -51,6 +75,20 @@ function formatMemory(bytes: number): string {
     if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
     if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
     return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+function jobStatusIcon(status: AgentJob['status']) {
+    switch (status) {
+        case 'succeeded':
+            return <CheckCircle2Icon className="h-3.5 w-3.5 text-green-500" />;
+        case 'failed':
+        case 'timeout':
+            return <XCircleIcon className="h-3.5 w-3.5 text-red-500" />;
+        case 'running':
+            return <LoaderIcon className="h-3.5 w-3.5 animate-spin text-blue-500" />;
+        default:
+            return <CircleDashedIcon className="h-3.5 w-3.5 text-muted-foreground" />;
+    }
 }
 
 function ServiceRow({ service }: { service: SystemdService }) {
@@ -108,12 +146,128 @@ function ServiceRow({ service }: { service: SystemdService }) {
     );
 }
 
+function ProvisionDialog({ serverId }: { serverId: string }) {
+    const [open, setOpen] = useState(false);
+    const [selectedComponents, setSelectedComponents] = useState<string[]>(['nginx', 'php', 'redis', 'supervisor']);
+    const [selectedVersions, setSelectedVersions] = useState<string[]>(['8.3']);
+
+    const form = useForm<{ components: string[]; php_versions: string[] }>({
+        components: [],
+        php_versions: [],
+    });
+
+    const toggleComponent = (key: string) => {
+        setSelectedComponents((prev) =>
+            prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key],
+        );
+    };
+
+    const toggleVersion = (v: string) => {
+        setSelectedVersions((prev) =>
+            prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v],
+        );
+    };
+
+    const handleSubmit = () => {
+        form.transform(() => ({
+            components: selectedComponents,
+            php_versions: selectedVersions,
+        }));
+        form.post(route('services.provision', serverId), {
+            onSuccess: () => setOpen(false),
+        });
+    };
+
+    const phpSelected = selectedComponents.includes('php');
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button size="sm">
+                    <PackagePlusIcon className="mr-1.5 h-4 w-4" />
+                    Provision Stack
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Provision Server Stack</DialogTitle>
+                    <DialogDescription>
+                        Select the services to install on this server. This runs apt-based installation via the agent.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-2">
+                    {COMPONENT_GROUPS.map((group) => {
+                        const items = COMPONENTS.filter((c) => c.group === group);
+                        return (
+                            <div key={group}>
+                                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group}</p>
+                                <div className="space-y-2">
+                                    {items.map(({ key, label }) => (
+                                        <div key={key} className="flex items-center gap-2">
+                                            <Checkbox
+                                                id={`comp-${key}`}
+                                                checked={selectedComponents.includes(key)}
+                                                onCheckedChange={() => toggleComponent(key)}
+                                            />
+                                            <Label htmlFor={`comp-${key}`} className="cursor-pointer text-sm font-normal">
+                                                {label}
+                                            </Label>
+                                        </div>
+                                    ))}
+                                    {group === 'PHP' && phpSelected && (
+                                        <div className="ml-6 mt-2 space-y-1.5 border-l pl-3">
+                                            <p className="text-xs text-muted-foreground">PHP versions to install:</p>
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                                                {PHP_VERSIONS.map((v) => (
+                                                    <div key={v} className="flex items-center gap-1.5">
+                                                        <Checkbox
+                                                            id={`php-${v}`}
+                                                            checked={selectedVersions.includes(v)}
+                                                            onCheckedChange={() => toggleVersion(v)}
+                                                        />
+                                                        <Label htmlFor={`php-${v}`} className="cursor-pointer text-sm font-normal">
+                                                            {v}
+                                                        </Label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {form.errors.components && (
+                    <p className="text-xs text-destructive">{form.errors.components}</p>
+                )}
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setOpen(false)} disabled={form.processing}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={form.processing || selectedComponents.length === 0 || (phpSelected && selectedVersions.length === 0)}
+                    >
+                        {form.processing ? 'Installing…' : `Install ${selectedComponents.length} component${selectedComponents.length !== 1 ? 's' : ''}`}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function ServerServices({
     server,
     services,
+    jobs,
 }: {
     server: { id: string; name: string; status: string; public_ip: string | null };
     services: SystemdService[];
+    jobs: AgentJob[];
 }) {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
@@ -128,11 +282,14 @@ export default function ServerServices({
             <Head title={`${server.name} — Services`} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div>
-                    <h1 className="text-xl font-semibold">Services</h1>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                        Enable or disable services running on your server. Depending on usage, NGINX, PHP-FPM, and Supervisord will start or stop automatically.
-                    </p>
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h1 className="text-xl font-semibold">Services</h1>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                            Install and manage services running on your server.
+                        </p>
+                    </div>
+                    <ProvisionDialog serverId={server.id} />
                 </div>
 
                 {server.status !== 'online' && (
@@ -148,9 +305,12 @@ export default function ServerServices({
                 <Card>
                     <CardContent className="p-0">
                         {services.length === 0 ? (
-                            <p className="text-muted-foreground px-4 py-8 text-center text-sm">
-                                No services registered. Provision your server to auto-register services.
-                            </p>
+                            <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
+                                <PackagePlusIcon className="h-8 w-8 text-muted-foreground/50" />
+                                <p className="text-sm text-muted-foreground">
+                                    No services installed yet. Use <strong>Provision Stack</strong> to install nginx, PHP, Redis, and more.
+                                </p>
+                            </div>
                         ) : (
                             <>
                                 <table className="w-full">
@@ -176,6 +336,28 @@ export default function ServerServices({
                         )}
                     </CardContent>
                 </Card>
+
+                {jobs.length > 0 && (
+                    <Card>
+                        <CardContent className="p-0">
+                            <p className="border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">Recent Jobs</p>
+                            <div className="divide-y">
+                                {jobs.map((job) => (
+                                    <div key={job.uuid} className="flex items-center gap-3 px-4 py-2.5">
+                                        {jobStatusIcon(job.status)}
+                                        <span className="flex-1 truncate text-sm">{job.label ?? job.type}</span>
+                                        <Badge
+                                            variant={job.status === 'succeeded' ? 'outline' : job.status === 'failed' || job.status === 'timeout' ? 'destructive' : 'secondary'}
+                                            className="text-xs"
+                                        >
+                                            {job.status}
+                                        </Badge>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </ServerLayout>
     );

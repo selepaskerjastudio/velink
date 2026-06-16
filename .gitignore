@@ -5,6 +5,7 @@
 .vscode/
 .codegraph/
 .cursor/
+.claude/worktrees/
 
 # Environment files (panel has its own .gitignore for panel/.env)
 .env
