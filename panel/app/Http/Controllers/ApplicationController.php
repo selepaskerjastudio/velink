@@ -223,7 +223,7 @@ class ApplicationController extends Controller
         return Inertia::render('applications/show', [
             'application' => [
                 ...$application->only([
-                    'name', 'domain', 'root_path', 'linux_user', 'php_version', 'status', 'created_at',
+                    'name', 'domain', 'root_path', 'linux_user', 'php_version', 'app_type', 'stack_mode', 'status', 'created_at',
                     'repository', 'branch', 'deploy_mode', 'deploy_script', 'webhook_secret',
                 ]),
                 'id' => $application->uuid,

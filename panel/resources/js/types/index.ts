@@ -75,6 +75,8 @@ export interface Application {
     root_path: string;
     linux_user: string;
     php_version: string;
+    app_type: string;
+    stack_mode: string;
     status: string;
     created_at?: string;
     env_content: string | null;

@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import echo from '@/echo';
 import AppLayout from '@/layouts/app-layout';
+import { cn } from '@/lib/utils';
 import {
     type AgentJob,
     type AgentJobStatus,
@@ -21,7 +22,7 @@ import {
     type GitCredential,
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ChevronDownIcon, ShieldCheckIcon, TriangleAlertIcon } from 'lucide-react';
+import { ChevronDownIcon, ExternalLinkIcon, ShieldCheckIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -30,6 +31,17 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 const NO_CREDENTIAL = 'none';
+
+type SidebarItem = { id: string; label: string } | { header: string };
+
+const SECTIONS: SidebarItem[] = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'ssl', label: 'SSL / HTTPS' },
+    { id: 'deploy', label: 'Git & Deploy' },
+    { header: 'Web Settings' },
+    { id: 'settings', label: 'Settings' },
+    { id: 'activity', label: 'Activity Log' },
+];
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' {
     switch (status) {
@@ -90,6 +102,9 @@ export default function ApplicationsShow({
         const m = server.os?.match(/Ubuntu\s+(\d+)/i);
         return m && parseInt(m[1], 10) >= 24 ? phpVersions.filter((v) => v !== '7.4') : phpVersions;
     })();
+
+    const [section, setSection] = useState('dashboard');
+    const publicPath = application.app_type === 'wordpress' ? application.root_path : `${application.root_path}/public`;
 
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs ?? []);
     const [liveDeployments, setLiveDeployments] = useState<Deployment[]>(deployments ?? []);
@@ -239,13 +254,28 @@ export default function ApplicationsShow({
             <Head title={application.name} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-xl font-semibold">{application.name}</h1>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1.5">
+                        <h1 className="text-xl font-semibold">{application.name}</h1>
+                        <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                            <span className="font-mono">{application.linux_user}</span>
+                            {application.app_type !== 'static' && <span>PHP {application.php_version}</span>}
+                            <span className="capitalize">{application.app_type}</span>
+                            <Badge variant={statusVariant(application.status)}>{application.status}</Badge>
+                        </div>
+                    </div>
                     <div className="flex items-center gap-2">
+                        {application.domain && (
+                            <Button asChild variant="outline" size="sm">
+                                <a href={`${application.ssl_enabled ? 'https' : 'http'}://${application.domain}`} target="_blank" rel="noreferrer">
+                                    <ExternalLinkIcon className="h-4 w-4" />
+                                    Open Site
+                                </a>
+                            </Button>
+                        )}
                         <Button asChild variant="outline" size="sm">
                             <Link href={route('workers.index', application.id)}>Workers</Link>
                         </Button>
-                        <Badge variant={statusVariant(application.status)}>{application.status}</Badge>
                     </div>
                 </div>
 
@@ -260,254 +290,328 @@ export default function ApplicationsShow({
                     </Alert>
                 )}
 
-                <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-                    <div className="flex flex-col gap-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Application details</CardTitle>
-                            </CardHeader>
-                            <CardContent className="grid gap-2 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Domain</span>
-                                    <span>{application.domain ?? '—'}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Root path</span>
-                                    <span className="font-mono">{application.root_path}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Linux user</span>
-                                    <span className="font-mono">{application.linux_user}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">PHP version</span>
-                                    <span>{application.php_version}</span>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>PHP version</CardTitle>
-                                <CardDescription>Switch the PHP-FPM pool used by this application. Nginx is not reloaded.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Select value={phpForm.data.php_version} onValueChange={(value) => phpForm.setData('php_version', value)}>
-                                    <SelectTrigger className="max-w-40">
-                                        <SelectValue placeholder="Select a PHP version" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {availablePhpVersions.map((version) => (
-                                            <SelectItem key={version} value={version}>
-                                                PHP {version}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </CardContent>
-                            <CardFooter>
-                                <Button
-                                    onClick={submitPhpVersion}
-                                    disabled={phpForm.processing || phpForm.data.php_version === application.php_version}
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                    {/* App-scoped sidebar */}
+                    <nav className="flex flex-row flex-wrap gap-1 lg:w-52 lg:shrink-0 lg:flex-col">
+                        {SECTIONS.map((item) =>
+                            'header' in item ? (
+                                <p
+                                    key={`h-${item.header}`}
+                                    className="text-muted-foreground px-3 pt-3 pb-1 text-xs font-medium tracking-wide uppercase"
                                 >
-                                    Switch PHP version
-                                </Button>
-                            </CardFooter>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>SSL / HTTPS</CardTitle>
-                                <CardDescription>
-                                    Issue a free Let's Encrypt certificate via certbot. Requires certbot to be installed on the server and the domain
-                                    to point to this server.
-                                </CardDescription>
-                            </CardHeader>
-                            {application.ssl_enabled ? (
-                                <>
-                                    <CardContent>
-                                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                                            <Badge variant="success" className="gap-1">
-                                                <ShieldCheckIcon className="h-3.5 w-3.5" />
-                                                HTTPS active
-                                            </Badge>
-                                            <span className="text-muted-foreground">
-                                                Let's Encrypt
-                                                {application.ssl_enabled_at
-                                                    ? ` · since ${new Date(application.ssl_enabled_at).toLocaleDateString()}`
-                                                    : ''}
-                                            </span>
-                                        </div>
-                                    </CardContent>
-                                    <CardFooter>
-                                        <Button variant="outline" onClick={submitSsl} disabled={sslForm.processing || !application.domain}>
-                                            Re-issue certificate
-                                        </Button>
-                                    </CardFooter>
-                                </>
+                                    {item.header}
+                                </p>
                             ) : (
-                                <CardFooter>
-                                    <div className="flex flex-col gap-1">
-                                        <Button
-                                            variant="secondary"
-                                            onClick={submitSsl}
-                                            disabled={sslForm.processing || !application.domain || application.status === 'pending'}
-                                        >
-                                            Enable SSL
-                                        </Button>
-                                        {!application.domain && <p className="text-muted-foreground text-xs">No domain set</p>}
-                                    </div>
-                                </CardFooter>
-                            )}
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Environment (.env)</CardTitle>
-                                <CardDescription>Written to {application.root_path}/.env on the server.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Textarea
-                                    value={envForm.data.env_content}
-                                    onChange={(e) => envForm.setData('env_content', e.target.value)}
-                                    rows={10}
-                                    className="font-mono text-sm"
-                                    spellCheck={false}
-                                />
-                            </CardContent>
-                            <CardFooter>
-                                <Button onClick={submitEnv} disabled={envForm.processing}>
-                                    Save .env
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    </div>
-
-                    <div className="flex flex-col gap-4">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Deploy</CardTitle>
-                                <CardDescription>Configure the repository and script used to deploy this application.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="grid gap-4">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="repository">Repository</Label>
-                                    {isGitHub ? (
-                                        <div className="relative">
-                                            <Input
-                                                id="repository"
-                                                value={deployForm.data.repository}
-                                                onChange={(e) => handleRepoInput(e.target.value)}
-                                                onFocus={handleRepoFocus}
-                                                onBlur={() => setTimeout(() => setRepoOpen(false), 150)}
-                                                placeholder="Search repositories…"
-                                                autoComplete="off"
-                                            />
-                                            {repoOpen && (repoLoading || repoOptions.length > 0) && (
-                                                <div className="bg-popover absolute z-10 mt-1 w-full rounded-md border shadow-md">
-                                                    {repoLoading && <div className="text-muted-foreground px-3 py-2 text-sm">Searching…</div>}
-                                                    {repoOptions.map((repo) => (
-                                                        <button
-                                                            key={repo.full_name}
-                                                            type="button"
-                                                            className="hover:bg-accent flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-                                                            onMouseDown={() => selectRepo(repo)}
-                                                        >
-                                                            <span className="flex-1">{repo.full_name}</span>
-                                                            {repo.private && (
-                                                                <Badge variant="secondary" className="text-xs">
-                                                                    private
-                                                                </Badge>
-                                                            )}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <Input
-                                            id="repository"
-                                            value={deployForm.data.repository}
-                                            onChange={(e) => deployForm.setData('repository', e.target.value)}
-                                            placeholder="owner/repo"
-                                        />
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => setSection(item.id)}
+                                    className={cn(
+                                        'rounded-md px-3 py-2 text-left text-sm transition-colors',
+                                        section === item.id ? 'bg-muted text-foreground font-medium' : 'text-muted-foreground hover:bg-muted/50',
                                     )}
-                                    <InputError message={deployForm.errors.repository ?? pageErrors.repository} />
-                                </div>
+                                >
+                                    {item.label}
+                                </button>
+                            ),
+                        )}
+                    </nav>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="branch">Branch</Label>
-                                    <Input
-                                        id="branch"
-                                        value={deployForm.data.branch}
-                                        onChange={(e) => deployForm.setData('branch', e.target.value)}
-                                        className="max-w-40"
-                                    />
-                                    <InputError message={deployForm.errors.branch} />
-                                </div>
+                    {/* Section content */}
+                    <div className="flex min-w-0 flex-1 flex-col gap-4">
+                        {section === 'dashboard' && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Summary</CardTitle>
+                                </CardHeader>
+                                <CardContent className="grid gap-2 text-sm">
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Domain</span>
+                                        <span className="truncate text-right">{application.domain ?? '—'}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Application type</span>
+                                        <span className="capitalize">{application.app_type}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Mode</span>
+                                        <span className="capitalize">{application.stack_mode}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Root path</span>
+                                        <span className="truncate text-right font-mono">{application.root_path}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Public path</span>
+                                        <span className="truncate text-right font-mono">{publicPath}</span>
+                                    </div>
+                                    {application.app_type !== 'static' && (
+                                        <div className="flex justify-between gap-4">
+                                            <span className="text-muted-foreground">PHP version</span>
+                                            <span>{application.php_version}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Linux user</span>
+                                        <span className="font-mono">{application.linux_user}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">SSL provider</span>
+                                        <span>{application.ssl_enabled ? "Let's Encrypt" : 'Not enabled'}</span>
+                                    </div>
+                                    {application.repository && (
+                                        <div className="flex justify-between gap-4">
+                                            <span className="text-muted-foreground">Repository</span>
+                                            <span className="truncate text-right font-mono">{application.repository}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Branch</span>
+                                        <span className="font-mono">{application.branch}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-4">
+                                        <span className="text-muted-foreground">Status</span>
+                                        <Badge variant={statusVariant(application.status)}>{application.status}</Badge>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="git_credential_id">Git credential</Label>
-                                    <Select
-                                        value={deployForm.data.git_credential_id}
-                                        onValueChange={(value) => deployForm.setData('git_credential_id', value)}
-                                    >
-                                        <SelectTrigger id="git_credential_id" className="max-w-72">
-                                            <SelectValue placeholder="None (public repository)" />
+                        {section === 'settings' && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>PHP version</CardTitle>
+                                    <CardDescription>Switch the PHP-FPM pool used by this application. Nginx is not reloaded.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Select value={phpForm.data.php_version} onValueChange={(value) => phpForm.setData('php_version', value)}>
+                                        <SelectTrigger className="max-w-40">
+                                            <SelectValue placeholder="Select a PHP version" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value={NO_CREDENTIAL}>None (public repository)</SelectItem>
-                                            {gitCredentials.map((credential) => (
-                                                <SelectItem key={credential.id} value={String(credential.id)}>
-                                                    {PROVIDER_LABELS[credential.provider.type] ?? credential.provider.type}
-                                                    {credential.account_username ? ` — ${credential.account_username}` : ''}
+                                            {availablePhpVersions.map((version) => (
+                                                <SelectItem key={version} value={version}>
+                                                    PHP {version}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    <InputError message={deployForm.errors.git_credential_id} />
-                                </div>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button
+                                        onClick={submitPhpVersion}
+                                        disabled={phpForm.processing || phpForm.data.php_version === application.php_version}
+                                    >
+                                        Switch PHP version
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                        )}
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="deploy_mode">Deploy mode</Label>
-                                    <Select value={deployForm.data.deploy_mode} onValueChange={(value) => deployForm.setData('deploy_mode', value)}>
-                                        <SelectTrigger id="deploy_mode" className="max-w-60">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="inplace">In-place</SelectItem>
-                                            <SelectItem value="zero_downtime" disabled>
-                                                Zero-downtime (coming soon)
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <InputError message={deployForm.errors.deploy_mode} />
-                                </div>
+                        {section === 'ssl' && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>SSL / HTTPS</CardTitle>
+                                    <CardDescription>
+                                        Issue a free Let's Encrypt certificate via certbot. Requires certbot to be installed on the server and the
+                                        domain to point to this server.
+                                    </CardDescription>
+                                </CardHeader>
+                                {application.ssl_enabled ? (
+                                    <>
+                                        <CardContent>
+                                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                                                <Badge variant="success" className="gap-1">
+                                                    <ShieldCheckIcon className="h-3.5 w-3.5" />
+                                                    HTTPS active
+                                                </Badge>
+                                                <span className="text-muted-foreground">
+                                                    Let's Encrypt
+                                                    {application.ssl_enabled_at
+                                                        ? ` · since ${new Date(application.ssl_enabled_at).toLocaleDateString()}`
+                                                        : ''}
+                                                </span>
+                                            </div>
+                                        </CardContent>
+                                        <CardFooter>
+                                            <Button variant="outline" onClick={submitSsl} disabled={sslForm.processing || !application.domain}>
+                                                Re-issue certificate
+                                            </Button>
+                                        </CardFooter>
+                                    </>
+                                ) : (
+                                    <CardFooter>
+                                        <div className="flex flex-col gap-1">
+                                            <Button
+                                                variant="secondary"
+                                                onClick={submitSsl}
+                                                disabled={sslForm.processing || !application.domain || application.status === 'pending'}
+                                            >
+                                                Enable SSL
+                                            </Button>
+                                            {!application.domain && <p className="text-muted-foreground text-xs">No domain set</p>}
+                                        </div>
+                                    </CardFooter>
+                                )}
+                            </Card>
+                        )}
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="deploy_script">Deploy script</Label>
+                        {section === 'settings' && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Environment (.env)</CardTitle>
+                                    <CardDescription>Written to {application.root_path}/.env on the server.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
                                     <Textarea
-                                        id="deploy_script"
-                                        value={deployForm.data.deploy_script}
-                                        onChange={(e) => deployForm.setData('deploy_script', e.target.value)}
-                                        rows={12}
+                                        value={envForm.data.env_content}
+                                        onChange={(e) => envForm.setData('env_content', e.target.value)}
+                                        rows={10}
                                         className="font-mono text-sm"
                                         spellCheck={false}
                                     />
-                                    <InputError message={deployForm.errors.deploy_script} />
-                                </div>
-                            </CardContent>
-                            <CardFooter className="gap-2">
-                                <Button onClick={submitDeploySettings} disabled={deployForm.processing}>
-                                    Save deploy settings
-                                </Button>
-                                <Button variant="secondary" onClick={submitDeployNow} disabled={deployNowForm.processing || !application.repository}>
-                                    Deploy now
-                                </Button>
-                            </CardFooter>
-                        </Card>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button onClick={submitEnv} disabled={envForm.processing}>
+                                        Save .env
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                        )}
 
-                        {application.repository && (
+                        {section === 'deploy' && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Deploy</CardTitle>
+                                    <CardDescription>Configure the repository and script used to deploy this application.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="grid gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="repository">Repository</Label>
+                                        {isGitHub ? (
+                                            <div className="relative">
+                                                <Input
+                                                    id="repository"
+                                                    value={deployForm.data.repository}
+                                                    onChange={(e) => handleRepoInput(e.target.value)}
+                                                    onFocus={handleRepoFocus}
+                                                    onBlur={() => setTimeout(() => setRepoOpen(false), 150)}
+                                                    placeholder="Search repositories…"
+                                                    autoComplete="off"
+                                                />
+                                                {repoOpen && (repoLoading || repoOptions.length > 0) && (
+                                                    <div className="bg-popover absolute z-10 mt-1 w-full rounded-md border shadow-md">
+                                                        {repoLoading && <div className="text-muted-foreground px-3 py-2 text-sm">Searching…</div>}
+                                                        {repoOptions.map((repo) => (
+                                                            <button
+                                                                key={repo.full_name}
+                                                                type="button"
+                                                                className="hover:bg-accent flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+                                                                onMouseDown={() => selectRepo(repo)}
+                                                            >
+                                                                <span className="flex-1">{repo.full_name}</span>
+                                                                {repo.private && (
+                                                                    <Badge variant="secondary" className="text-xs">
+                                                                        private
+                                                                    </Badge>
+                                                                )}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <Input
+                                                id="repository"
+                                                value={deployForm.data.repository}
+                                                onChange={(e) => deployForm.setData('repository', e.target.value)}
+                                                placeholder="owner/repo"
+                                            />
+                                        )}
+                                        <InputError message={deployForm.errors.repository ?? pageErrors.repository} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="branch">Branch</Label>
+                                        <Input
+                                            id="branch"
+                                            value={deployForm.data.branch}
+                                            onChange={(e) => deployForm.setData('branch', e.target.value)}
+                                            className="max-w-40"
+                                        />
+                                        <InputError message={deployForm.errors.branch} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="git_credential_id">Git credential</Label>
+                                        <Select
+                                            value={deployForm.data.git_credential_id}
+                                            onValueChange={(value) => deployForm.setData('git_credential_id', value)}
+                                        >
+                                            <SelectTrigger id="git_credential_id" className="max-w-72">
+                                                <SelectValue placeholder="None (public repository)" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value={NO_CREDENTIAL}>None (public repository)</SelectItem>
+                                                {gitCredentials.map((credential) => (
+                                                    <SelectItem key={credential.id} value={String(credential.id)}>
+                                                        {PROVIDER_LABELS[credential.provider.type] ?? credential.provider.type}
+                                                        {credential.account_username ? ` — ${credential.account_username}` : ''}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <InputError message={deployForm.errors.git_credential_id} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="deploy_mode">Deploy mode</Label>
+                                        <Select
+                                            value={deployForm.data.deploy_mode}
+                                            onValueChange={(value) => deployForm.setData('deploy_mode', value)}
+                                        >
+                                            <SelectTrigger id="deploy_mode" className="max-w-60">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="inplace">In-place</SelectItem>
+                                                <SelectItem value="zero_downtime" disabled>
+                                                    Zero-downtime (coming soon)
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <InputError message={deployForm.errors.deploy_mode} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="deploy_script">Deploy script</Label>
+                                        <Textarea
+                                            id="deploy_script"
+                                            value={deployForm.data.deploy_script}
+                                            onChange={(e) => deployForm.setData('deploy_script', e.target.value)}
+                                            rows={12}
+                                            className="font-mono text-sm"
+                                            spellCheck={false}
+                                        />
+                                        <InputError message={deployForm.errors.deploy_script} />
+                                    </div>
+                                </CardContent>
+                                <CardFooter className="gap-2">
+                                    <Button onClick={submitDeploySettings} disabled={deployForm.processing}>
+                                        Save deploy settings
+                                    </Button>
+                                    <Button
+                                        variant="secondary"
+                                        onClick={submitDeployNow}
+                                        disabled={deployNowForm.processing || !application.repository}
+                                    >
+                                        Deploy now
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                        )}
+
+                        {section === 'deploy' && application.repository && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Auto-deploy webhook</CardTitle>
@@ -605,7 +709,7 @@ export default function ApplicationsShow({
                             </Card>
                         )}
 
-                        {liveDeployments.length > 0 && (
+                        {section === 'activity' && liveDeployments.length > 0 && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Deployment history</CardTitle>
@@ -645,7 +749,7 @@ export default function ApplicationsShow({
                             </Card>
                         )}
 
-                        {liveJobs.length > 0 && (
+                        {section === 'activity' && liveJobs.length > 0 && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Provisioning progress</CardTitle>
@@ -683,6 +787,10 @@ export default function ApplicationsShow({
                                     ))}
                                 </CardContent>
                             </Card>
+                        )}
+
+                        {section === 'activity' && liveDeployments.length === 0 && liveJobs.length === 0 && (
+                            <p className="text-muted-foreground text-sm">No activity recorded for this application yet.</p>
                         )}
                     </div>
                 </div>
