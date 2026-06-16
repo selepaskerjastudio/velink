@@ -4,9 +4,9 @@ set -e
 # ── Colors ────────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
-DIM='\033[2m'
 RESET='\033[0m'
 
 # ── ASCII banner ───────────────────────────────────────────────────────────────
@@ -29,11 +29,36 @@ step() {
 }
 
 ok() {
-    echo -e "    ${GREEN}✓ $1${RESET}"
+    echo -e "    ${GREEN}✓${RESET} $1"
 }
 
-info() {
-    echo -e "    ${DIM}$1${RESET}"
+spin() {
+    local pid=$1 msg="$2"
+    local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠣⠏'
+    local i=0
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r    ${YELLOW}${frames:$i:1}${RESET} %s" "$msg"
+        i=$(( (i + 1) % ${#frames} ))
+        sleep 0.08
+    done
+    printf "\r\033[K"
+}
+
+run() {
+    local msg="$1"; shift
+    local tmp; tmp=$(mktemp)
+    "$@" >"$tmp" 2>&1 &
+    local pid=$!
+    spin "$pid" "$msg"
+    wait "$pid"; local code=$?
+    if [ $code -ne 0 ]; then
+        echo -e "    ${RED}✗ $msg${RESET}"
+        cat "$tmp"
+        rm -f "$tmp"
+        exit $code
+    fi
+    rm -f "$tmp"
+    ok "$msg"
 }
 
 # ── Args ───────────────────────────────────────────────────────────────────────
@@ -48,43 +73,34 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ── Steps ──────────────────────────────────────────────────────────────────────
 step "Pulling latest code"
-cd "$REPO_DIR"
-git pull
-ok "Repository up to date"
+run "git pull" git -C "$REPO_DIR" pull
 
 step "Installing PHP dependencies"
 cd "$REPO_DIR/panel"
-composer install --no-dev --optimize-autoloader --quiet
-ok "Composer packages installed"
+run "Composer install" composer install --no-dev --optimize-autoloader --quiet
 
 step "Building frontend assets"
-npm ci --silent
-npm run build --silent
-ok "Vite build complete"
+run "npm install" npm ci --silent
+run "Vite build" npm run build
 
 step "Running database migrations"
-php artisan migrate --force
-ok "Migrations done"
+run "Migrate" php artisan migrate --force
 
-step "Caching config / routes / views"
-php artisan config:cache  && info "Config cached"
-php artisan route:cache   && info "Routes cached"
-php artisan view:cache    && info "Views cached"
-ok "All caches refreshed"
+step "Refreshing caches"
+run "Config cache" php artisan config:cache
+run "Route cache"  php artisan route:cache
+run "View cache"   php artisan view:cache
 
 step "Restarting panel services"
-systemctl restart velink-queue       && info "velink-queue restarted"
-systemctl restart velink-reverb      && info "velink-reverb restarted"
-systemctl restart velink-agent-listen && info "velink-agent-listen restarted"
-ok "Panel services running"
+run "velink-queue"        systemctl restart velink-queue
+run "velink-reverb"       systemctl restart velink-reverb
+run "velink-agent-listen" systemctl restart velink-agent-listen
 
 if [ "$RESTART_GATEWAY" = true ]; then
     step "Rebuilding and restarting gateway"
     cd "$REPO_DIR/gateway"
-    go build -o /usr/local/bin/velink-gateway ./cmd/gateway
-    info "Binary built"
-    systemctl restart velink-gateway
-    ok "Gateway restarted"
+    run "Build gateway binary" go build -o /usr/local/bin/velink-gateway ./cmd/gateway
+    run "velink-gateway"       systemctl restart velink-gateway
 fi
 
 echo -e "\n${GREEN}${BOLD}Deploy complete.${RESET}\n"
