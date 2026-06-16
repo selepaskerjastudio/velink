@@ -2,6 +2,7 @@
 
 use App\Models\AgentJob;
 use App\Models\Server;
+use App\Models\Service;
 use App\Models\User;
 use Illuminate\Support\Facades\Redis;
 
@@ -33,6 +34,40 @@ test('authenticated users can provision selected components', function () {
     expect($server->agentJobs()->count())->toBe(4);
     expect($server->agentJobs()->pluck('label'))->toContain('Install nginx', 'Install PHP 8.3');
     expect($server->agentJobs()->pluck('type')->unique()->all())->toBe(['shell']);
+});
+
+test('provisioning auto-seeds well-known services', function () {
+    $conn = Mockery::mock();
+    $conn->shouldReceive('publish')->andReturn(1);
+    Redis::shouldReceive('connection')->andReturn($conn);
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    $this->post(route('servers.provision', $server), [
+        'components' => ['nginx', 'redis', 'php'],
+        'php_versions' => ['8.3', '8.4'],
+    ])->assertRedirect();
+
+    $services = $server->services()->where('type', 'systemd')->pluck('name')->sort()->values();
+
+    expect($services->all())->toEqual(['nginx', 'php8.3-fpm', 'php8.4-fpm', 'redis-server']);
+});
+
+test('provisioning auto-seeding is idempotent when run twice', function () {
+    $conn = Mockery::mock();
+    $conn->shouldReceive('publish')->andReturn(1);
+    Redis::shouldReceive('connection')->andReturn($conn);
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    $payload = ['components' => ['nginx', 'supervisor'], 'php_versions' => []];
+    $this->post(route('servers.provision', $server), $payload)->assertRedirect();
+    $this->post(route('servers.provision', $server), $payload)->assertRedirect();
+
+    expect($server->services()->where('type', 'systemd')->where('name', 'nginx')->count())->toBe(1);
+    expect($server->services()->where('type', 'systemd')->count())->toBe(2);
 });
 
 test('php component requires at least one php version', function () {

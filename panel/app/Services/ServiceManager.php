@@ -21,6 +21,19 @@ class ServiceManager
      */
     public const UNIT_NAME_REGEX = '/^[a-zA-Z0-9\-_.@:]{1,255}$/';
 
+    /**
+     * Maps provisioning component names to their systemd unit name and display label.
+     * PHP FPM units are handled separately (one per version).
+     */
+    public const WELL_KNOWN_SERVICES = [
+        'nginx'      => ['unit' => 'nginx',        'label' => 'NGINX'],
+        'supervisor' => ['unit' => 'supervisor',   'label' => 'Supervisord'],
+        'redis'      => ['unit' => 'redis-server', 'label' => 'Redis'],
+        'mariadb'    => ['unit' => 'mariadb',      'label' => 'MariaDB'],
+        'postgresql' => ['unit' => 'postgresql',   'label' => 'PostgreSQL'],
+        'mongodb'    => ['unit' => 'mongod',       'label' => 'MongoDB'],
+    ];
+
     public function __construct(private JobDispatcher $dispatcher)
     {
     }
@@ -89,6 +102,36 @@ class ServiceManager
             'command' => "systemctl is-active {$name}; systemctl is-enabled {$name}",
             'timeout' => 30,
         ], ['user_id' => auth()->id(), 'label' => "Check status: {$service->name}"]);
+    }
+
+    /**
+     * Auto-register well-known systemd services for a server based on the
+     * provisioned components. Uses firstOrCreate so it is safe to call
+     * multiple times (idempotent).
+     *
+     * @param  array<int, string>  $components  e.g. ['nginx', 'php', 'redis']
+     * @param  array<int, string>  $phpVersions e.g. ['8.3', '8.4']
+     */
+    public function seedForServer(Server $server, array $components, array $phpVersions = []): void
+    {
+        foreach ($components as $component) {
+            if (isset(self::WELL_KNOWN_SERVICES[$component])) {
+                $def = self::WELL_KNOWN_SERVICES[$component];
+                Service::firstOrCreate(
+                    ['server_id' => $server->id, 'name' => $def['unit'], 'type' => 'systemd'],
+                    ['status' => 'unknown', 'config' => ['label' => $def['label']], 'application_id' => null],
+                );
+            }
+        }
+
+        if (in_array('php', $components, true)) {
+            foreach ($phpVersions as $version) {
+                Service::firstOrCreate(
+                    ['server_id' => $server->id, 'name' => "php{$version}-fpm", 'type' => 'systemd'],
+                    ['status' => 'unknown', 'config' => ['label' => "PHP {$version} FPM"], 'application_id' => null],
+                );
+            }
+        }
     }
 
     /**

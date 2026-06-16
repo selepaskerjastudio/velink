@@ -1,8 +1,7 @@
-import InputError from '@/components/input-error';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -10,27 +9,41 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import echo from '@/echo';
 import ServerLayout from '@/layouts/server-layout';
-import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type SystemdService } from '@/types';
+import { type BreadcrumbItem, type SystemdService } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
-import { EllipsisIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { EllipsisIcon, TriangleAlertIcon } from 'lucide-react';
 
 type ServiceAction = 'start' | 'stop' | 'restart' | 'reload';
 
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+interface ServiceIconConfig {
+    bg: string;
+    letter: string;
+}
+
+function serviceIcon(name: string): ServiceIconConfig {
+    const n = name.toLowerCase();
+    if (n.startsWith('nginx')) return { bg: 'bg-green-600', letter: 'N' };
+    if (n.startsWith('redis')) return { bg: 'bg-red-600', letter: 'R' };
+    if (n.startsWith('mariadb') || n.startsWith('mysql')) return { bg: 'bg-orange-500', letter: 'M' };
+    if (n.startsWith('postgresql') || n.startsWith('postgres')) return { bg: 'bg-blue-600', letter: 'P' };
+    if (n.startsWith('supervisor')) return { bg: 'bg-indigo-600', letter: 'S' };
+    if (n.startsWith('php')) return { bg: 'bg-purple-600', letter: 'P' };
+    if (n.startsWith('mongod')) return { bg: 'bg-green-700', letter: 'M' };
+    if (n.startsWith('apache') || n.startsWith('httpd')) return { bg: 'bg-red-700', letter: 'A' };
+    return { bg: 'bg-slate-500', letter: (name[0] ?? '?').toUpperCase() };
+}
+
+function statusBadge(status: string) {
     switch (status) {
         case 'active':
-        case 'succeeded':
-            return 'default';
+            return <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">Running</Badge>;
+        case 'inactive':
+            return <Badge variant="secondary">Stopped</Badge>;
         case 'failed':
-        case 'timeout':
-            return 'destructive';
+            return <Badge variant="destructive">Failed</Badge>;
         default:
-            return 'secondary';
+            return <Badge variant="outline">Unknown</Badge>;
     }
 }
 
@@ -38,15 +51,6 @@ function formatMemory(bytes: number): string {
     if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
     if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
     return `${(bytes / 1024).toFixed(0)} KB`;
-}
-
-interface AgentJobUpdatedEvent {
-    uuid: string;
-    type: string;
-    label: string | null;
-    status: AgentJobStatus;
-    exit_code: number | null;
-    output: string | null;
 }
 
 function ServiceRow({ service }: { service: SystemdService }) {
@@ -57,30 +61,30 @@ function ServiceRow({ service }: { service: SystemdService }) {
         controlForm.post(route('services.control', service.id), { preserveScroll: true });
     };
 
-    const remove = () => {
-        if (confirm(`Stop tracking ${service.name}? This does not stop or uninstall the service on the server.`)) {
-            router.delete(route('services.destroy', service.id), { preserveScroll: true });
-        }
-    };
+    const icon = serviceIcon(service.name);
+    const label = service.config?.label ?? service.name;
 
     return (
-        <tr className="border-b last:border-0">
+        <tr className="border-b last:border-0 hover:bg-muted/30 transition-colors">
             <td className="py-3 pl-4 pr-2">
-                <div className="flex flex-col">
-                    <span className="text-sm font-medium">{service.name}</span>
-                    {service.config?.label && (
-                        <span className="text-muted-foreground text-xs">{service.config.label}</span>
-                    )}
+                <div className="flex items-center gap-3">
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded text-xs font-bold text-white ${icon.bg}`}>
+                        {icon.letter}
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-sm font-medium">{label}</span>
+                        <span className="text-muted-foreground text-xs">{service.name}</span>
+                    </div>
                 </div>
             </td>
             <td className="px-4 py-3 text-sm text-muted-foreground">
-                {service.cpu_percent != null ? `${service.cpu_percent.toFixed(2)}%` : '—'}
+                {service.cpu_percent != null ? `${service.cpu_percent.toFixed(4)}%` : '—'}
             </td>
             <td className="px-4 py-3 text-sm text-muted-foreground">
                 {service.memory_usage != null ? formatMemory(service.memory_usage) : '—'}
             </td>
-            <td className="px-2 py-3">
-                <Badge variant={statusVariant(service.status)}>{service.status}</Badge>
+            <td className="px-4 py-3">
+                {statusBadge(service.status)}
             </td>
             <td className="py-3 pl-2 pr-4 text-right">
                 <DropdownMenu>
@@ -91,18 +95,11 @@ function ServiceRow({ service }: { service: SystemdService }) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => dispatch('start')}>Start</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => dispatch('stop')}>Stop</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => dispatch('restart')}>Restart</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => dispatch('reload')}>Reload</DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={() => router.post(route('services.refresh-status', service.id), {}, { preserveScroll: true })}
-                        >
-                            Refresh status
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={remove} className="text-destructive focus:text-destructive">
-                            Remove
+                        <DropdownMenuItem onClick={() => dispatch('stop')} className="text-destructive focus:text-destructive">
+                            Stop
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -117,35 +114,26 @@ export default function ServerServices({
 }: {
     server: { id: string; name: string; status: string; public_ip: string | null };
     services: SystemdService[];
-    jobs: AgentJob[];
 }) {
-    const [search, setSearch] = useState('');
-
-    const filtered = services.filter((s) =>
-        s.name.toLowerCase().includes(search.toLowerCase()),
-    );
-
-    const registerForm = useForm<{ name: string; label: string }>({ name: '', label: '' });
-
-    const submitRegister = () => {
-        registerForm.post(route('services.store', server.id), {
-            preserveScroll: true,
-            onSuccess: () => registerForm.reset(),
-        });
-    };
-
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
         { title: server.name, href: `/servers/${server.id}` },
         { title: 'Services', href: `/servers/${server.id}/services` },
     ];
 
+    const running = services.filter((s) => s.status === 'active').length;
+
     return (
         <ServerLayout breadcrumbs={breadcrumbs} server={server}>
             <Head title={`${server.name} — Services`} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                <h1 className="text-xl font-semibold">Services</h1>
+                <div>
+                    <h1 className="text-xl font-semibold">Services</h1>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                        Enable or disable services running on your server. Depending on usage, NGINX, PHP-FPM, and Supervisord will start or stop automatically.
+                    </p>
+                </div>
 
                 {server.status !== 'online' && (
                     <Alert variant="destructive">
@@ -157,97 +145,36 @@ export default function ServerServices({
                     </Alert>
                 )}
 
-                <p className="text-muted-foreground text-sm">
-                    Enable or disable services running on your server. Start, stop, reload, or restart any tracked systemd unit.
-                </p>
-
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Services</CardTitle>
-                        <CardDescription>Systemd units tracked on this server.</CardDescription>
-                    </CardHeader>
                     <CardContent className="p-0">
                         {services.length === 0 ? (
-                            <p className="text-muted-foreground px-4 pb-4 text-sm">No services registered yet.</p>
+                            <p className="text-muted-foreground px-4 py-8 text-center text-sm">
+                                No services registered. Provision your server to auto-register services.
+                            </p>
                         ) : (
                             <>
-                                <div className="border-b px-4 py-3">
-                                    <div className="relative max-w-xs">
-                                        <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                                        <Input
-                                            placeholder="Search services..."
-                                            value={search}
-                                            onChange={(e) => setSearch(e.target.value)}
-                                            className="pl-9"
-                                        />
-                                    </div>
-                                </div>
                                 <table className="w-full">
                                     <thead>
-                                        <tr className="border-b">
-                                            <th className="py-2 pl-4 pr-2 text-left text-xs font-medium text-muted-foreground">Service</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">CPU %</th>
-                                            <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Memory</th>
-                                            <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
-                                            <th className="py-2 pl-2 pr-4" />
+                                        <tr className="border-b bg-muted/30">
+                                            <th className="py-2.5 pl-4 pr-2 text-left text-xs font-medium text-muted-foreground">Service</th>
+                                            <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Processor Usage</th>
+                                            <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Memory Usage</th>
+                                            <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Status</th>
+                                            <th className="py-2.5 pl-2 pr-4" />
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filtered.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={5} className="text-muted-foreground px-4 py-4 text-sm">
-                                                    No services match your search.
-                                                </td>
-                                            </tr>
-                                        ) : (
-                                            filtered.map((service) => (
-                                                <ServiceRow key={service.id} service={service} />
-                                            ))
-                                        )}
+                                        {services.map((service) => (
+                                            <ServiceRow key={service.id} service={service} />
+                                        ))}
                                     </tbody>
                                 </table>
                                 <p className="text-muted-foreground border-t px-4 py-3 text-xs">
-                                    Showing {filtered.length} of {services.length} service{services.length !== 1 ? 's' : ''}
+                                    Showing {running} running of {services.length} service{services.length !== 1 ? 's' : ''}
                                 </p>
                             </>
                         )}
                     </CardContent>
-                </Card>
-
-                <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>Track a service</CardTitle>
-                        <CardDescription>Add a systemd unit by name, e.g. nginx or php8.3-fpm.service.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="name">Unit name</Label>
-                            <Input
-                                id="name"
-                                value={registerForm.data.name}
-                                onChange={(e) => registerForm.setData('name', e.target.value)}
-                                placeholder="nginx"
-                                className="max-w-60"
-                            />
-                            <InputError message={registerForm.errors.name} />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="label">Label (optional)</Label>
-                            <Input
-                                id="label"
-                                value={registerForm.data.label}
-                                onChange={(e) => registerForm.setData('label', e.target.value)}
-                                placeholder="Web server"
-                                className="max-w-60"
-                            />
-                            <InputError message={registerForm.errors.label} />
-                        </div>
-                    </CardContent>
-                    <CardFooter>
-                        <Button onClick={submitRegister} disabled={registerForm.processing || registerForm.data.name === ''}>
-                            Track service
-                        </Button>
-                    </CardFooter>
                 </Card>
             </div>
         </ServerLayout>

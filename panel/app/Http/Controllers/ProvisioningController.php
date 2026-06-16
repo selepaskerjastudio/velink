@@ -6,13 +6,14 @@ use App\Models\Server;
 use App\Provisioning\ProvisioningCatalog;
 use App\Services\AuditLogger;
 use App\Services\ProvisionService;
+use App\Services\ServiceManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class ProvisioningController extends Controller
 {
-    public function store(Request $request, Server $server, ProvisionService $provisionService): RedirectResponse
+    public function store(Request $request, Server $server, ProvisionService $provisionService, ServiceManager $serviceManager): RedirectResponse
     {
         $validated = $request->validate([
             'components' => ['required', 'array', 'min:1'],
@@ -24,12 +25,16 @@ class ProvisioningController extends Controller
             'php_versions.*' => ['string', 'in:'.implode(',', ProvisioningCatalog::PHP_VERSIONS)],
         ]);
 
+        $phpVersions = $validated['php_versions'] ?? [];
+
         $provisionService->provision(
             $server,
             $validated['components'],
-            ['php_versions' => $validated['php_versions'] ?? []],
+            ['php_versions' => $phpVersions],
             $request->user()->id,
         );
+
+        $serviceManager->seedForServer($server, $validated['components'], $phpVersions);
 
         AuditLogger::log(
             action: 'server.provisioned',
