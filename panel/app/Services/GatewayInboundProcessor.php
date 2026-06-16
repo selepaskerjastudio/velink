@@ -137,6 +137,9 @@ class GatewayInboundProcessor
         ServerMetric::where('server_id', $server->id)
             ->where('recorded_at', '<', now()->subHours(2))
             ->delete();
+
+        // Check metrics against alert thresholds
+        app(ThresholdChecker::class)->check($server, $body);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\GitHubRepoController;
+use App\Http\Controllers\ServerAlertController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -30,6 +31,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('github/repos', [GitHubRepoController::class, 'search'])->name('github.repos');
 
     Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
+
+    Route::get('alerts', [ServerAlertController::class, 'index'])->name('alerts.index');
 });
 
 require __DIR__.'/settings.php';
