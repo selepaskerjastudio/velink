@@ -69,9 +69,21 @@ class ServerController extends Controller
             properties: ['server_uuid' => $server->uuid],
         );
 
-        return redirect()->route('servers.show', $server)->with([
+        return redirect()->route('servers.connect', $server)->with([
             'plain_agent_token' => $token,
             'install_command' => $this->installCommand($server, $token),
+        ]);
+    }
+
+    public function connect(Server $server): Response
+    {
+        return Inertia::render('servers/connect', [
+            'server' => [
+                'id' => $server->uuid,
+                'name' => $server->name,
+                'public_ip' => $server->public_ip,
+                'status' => $server->status,
+            ],
         ]);
     }
 
@@ -201,7 +213,7 @@ class ServerController extends Controller
             serverId: $server->id,
         );
 
-        return redirect()->route('servers.show', $server)->with([
+        return redirect()->route('servers.connect', $server)->with([
             'plain_agent_token' => $token,
             'install_command' => $this->installCommand($server, $token),
         ]);
