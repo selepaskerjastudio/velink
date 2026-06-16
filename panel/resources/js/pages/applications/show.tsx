@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,8 +23,8 @@ import {
     type GitCredential,
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ChevronDownIcon, ExternalLinkIcon, ShieldCheckIcon, TriangleAlertIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ChevronDownIcon, ExternalLinkIcon, ShieldCheckIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 const PROVIDER_LABELS: Record<string, string> = {
     github: 'GitHub',
@@ -186,6 +187,23 @@ export default function ApplicationsShow({
         sslForm.post(route('applications.ssl', application.id), { preserveScroll: true });
     };
 
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const deleteForm = useForm<{ confirmation: string }>({ confirmation: '' });
+
+    const closeDeleteModal = () => {
+        setDeleteOpen(false);
+        deleteForm.reset();
+        deleteForm.clearErrors();
+    };
+
+    const submitDelete = (e: FormEvent) => {
+        e.preventDefault();
+        deleteForm.delete(route('applications.destroy', application.id), {
+            preserveScroll: true,
+            onError: () => deleteForm.reset(),
+        });
+    };
+
     const deployNowForm = useForm({});
 
     const submitDeployNow = () => {
@@ -200,6 +218,12 @@ export default function ApplicationsShow({
 
     const selectedCredential = gitCredentials.find((c) => c.id === deployForm.data.git_credential_id);
     const isGitHub = selectedCredential?.provider.type === 'github';
+
+    // Which webhook provider to show. Follow the selected credential's provider;
+    // with no credential (public repo) we can't tell, so show both.
+    const webhookProvider = selectedCredential?.provider.type;
+    const showGitHubWebhook = webhookProvider === undefined || webhookProvider === 'github';
+    const showGitLabWebhook = webhookProvider === undefined || webhookProvider === 'gitlab';
 
     useEffect(() => {
         setRepoOptions([]);
@@ -479,6 +503,66 @@ export default function ApplicationsShow({
                             </Card>
                         )}
 
+                        {section === 'settings' && (
+                            <Card className="border-destructive/40">
+                                <CardHeader>
+                                    <CardTitle className="text-destructive">Danger zone</CardTitle>
+                                    <CardDescription>
+                                        Permanently delete this application. The nginx vhost, PHP-FPM pool, and web directory ({application.root_path}
+                                        ) are removed from the server, along with its workers, cron jobs, and deployment history. This cannot be
+                                        undone.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardFooter>
+                                    <Dialog open={deleteOpen} onOpenChange={(open) => (open ? setDeleteOpen(true) : closeDeleteModal())}>
+                                        <DialogTrigger asChild>
+                                            <Button variant="destructive">
+                                                <Trash2Icon className="h-4 w-4" />
+                                                Delete application
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                            <DialogTitle>Delete {application.name}?</DialogTitle>
+                                            <DialogDescription>
+                                                This permanently removes the application and its server-side resources. To confirm, type{' '}
+                                                <span className="text-foreground font-mono font-semibold">DELETE</span> below.
+                                            </DialogDescription>
+                                            <form className="space-y-4" onSubmit={submitDelete}>
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor="confirmation" className="sr-only">
+                                                        Type DELETE to confirm
+                                                    </Label>
+                                                    <Input
+                                                        id="confirmation"
+                                                        value={deleteForm.data.confirmation}
+                                                        onChange={(e) => deleteForm.setData('confirmation', e.target.value)}
+                                                        placeholder="DELETE"
+                                                        autoComplete="off"
+                                                        autoFocus
+                                                    />
+                                                    <InputError message={deleteForm.errors.confirmation} />
+                                                </div>
+                                                <DialogFooter>
+                                                    <DialogClose asChild>
+                                                        <Button type="button" variant="secondary" onClick={closeDeleteModal}>
+                                                            Cancel
+                                                        </Button>
+                                                    </DialogClose>
+                                                    <Button
+                                                        type="submit"
+                                                        variant="destructive"
+                                                        disabled={deleteForm.processing || deleteForm.data.confirmation !== 'DELETE'}
+                                                    >
+                                                        Delete application
+                                                    </Button>
+                                                </DialogFooter>
+                                            </form>
+                                        </DialogContent>
+                                    </Dialog>
+                                </CardFooter>
+                            </Card>
+                        )}
+
                         {section === 'deploy' && (
                             <Card>
                                 <CardHeader>
@@ -616,95 +700,104 @@ export default function ApplicationsShow({
                                 <CardHeader>
                                     <CardTitle>Auto-deploy webhook</CardTitle>
                                     <CardDescription>
-                                        Triggers deployment on push to <code className="font-mono">{application.branch}</code>. Configure in GitHub or
-                                        GitLab.
+                                        Triggers deployment on push to <code className="font-mono">{application.branch}</code>. Configure in{' '}
+                                        {showGitHubWebhook && !showGitLabWebhook
+                                            ? 'GitHub'
+                                            : showGitLabWebhook && !showGitHubWebhook
+                                              ? 'GitLab'
+                                              : 'GitHub or GitLab'}
+                                        .
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="grid gap-6">
                                     {/* GitHub section */}
-                                    <div className="grid gap-4">
-                                        <p className="text-sm font-medium">GitHub</p>
-                                        <p className="text-muted-foreground text-xs">
-                                            Add in GitHub → Settings → Webhooks. Set Content type to <code>application/json</code>.
-                                        </p>
-                                        <div className="grid gap-2">
-                                            <Label>Payload URL</Label>
-                                            <div className="flex gap-2">
-                                                <Input readOnly value={application.webhook_url} className="font-mono text-xs" />
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => navigator.clipboard.writeText(application.webhook_url)}
-                                                >
-                                                    Copy
-                                                </Button>
+                                    {showGitHubWebhook && (
+                                        <div className="grid gap-4">
+                                            <p className="text-sm font-medium">GitHub</p>
+                                            <p className="text-muted-foreground text-xs">
+                                                Add in GitHub → Settings → Webhooks. Set Content type to <code>application/json</code>.
+                                            </p>
+                                            <div className="grid gap-2">
+                                                <Label>Payload URL</Label>
+                                                <div className="flex gap-2">
+                                                    <Input readOnly value={application.webhook_url} className="font-mono text-xs" />
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => navigator.clipboard.writeText(application.webhook_url)}
+                                                    >
+                                                        Copy
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label>Secret</Label>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        readOnly
+                                                        value={application.webhook_secret ?? ''}
+                                                        className="font-mono text-xs"
+                                                        type="password"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
+                                                    >
+                                                        Copy
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="grid gap-2">
-                                            <Label>Secret</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    readOnly
-                                                    value={application.webhook_secret ?? ''}
-                                                    className="font-mono text-xs"
-                                                    type="password"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
-                                                >
-                                                    Copy
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    )}
 
-                                    <Separator />
+                                    {showGitHubWebhook && showGitLabWebhook && <Separator />}
 
                                     {/* GitLab section */}
-                                    <div className="grid gap-4">
-                                        <p className="text-sm font-medium">GitLab</p>
-                                        <p className="text-muted-foreground text-xs">
-                                            Add in GitLab → Settings → Webhooks. Set Content type to <code>application/json</code>. Secret token = the
-                                            value below.
-                                        </p>
-                                        <div className="grid gap-2">
-                                            <Label>URL</Label>
-                                            <div className="flex gap-2">
-                                                <Input readOnly value={application.webhook_url_gitlab} className="font-mono text-xs" />
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => navigator.clipboard.writeText(application.webhook_url_gitlab)}
-                                                >
-                                                    Copy
-                                                </Button>
+                                    {showGitLabWebhook && (
+                                        <div className="grid gap-4">
+                                            <p className="text-sm font-medium">GitLab</p>
+                                            <p className="text-muted-foreground text-xs">
+                                                Add in GitLab → Settings → Webhooks. Set Content type to <code>application/json</code>. Secret token =
+                                                the value below.
+                                            </p>
+                                            <div className="grid gap-2">
+                                                <Label>URL</Label>
+                                                <div className="flex gap-2">
+                                                    <Input readOnly value={application.webhook_url_gitlab} className="font-mono text-xs" />
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => navigator.clipboard.writeText(application.webhook_url_gitlab)}
+                                                    >
+                                                        Copy
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label>Secret token</Label>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        readOnly
+                                                        value={application.webhook_secret ?? ''}
+                                                        className="font-mono text-xs"
+                                                        type="password"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
+                                                    >
+                                                        Copy
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="grid gap-2">
-                                            <Label>Secret token</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    readOnly
-                                                    value={application.webhook_secret ?? ''}
-                                                    className="font-mono text-xs"
-                                                    type="password"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
-                                                >
-                                                    Copy
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         )}

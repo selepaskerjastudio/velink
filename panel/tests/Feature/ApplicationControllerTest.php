@@ -460,3 +460,37 @@ test('show page includes deploy settings, git credentials and deployment history
         ->where('application.deploy_mode', 'inplace')
     );
 });
+
+test('an application can be deleted with the DELETE confirmation and tears down its records', function () {
+    mockGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $application = Application::factory()->for($server)->create();
+    PhpPool::create([
+        'application_id' => $application->id,
+        'php_version' => $application->php_version,
+        'pool_name' => $application->app_slug,
+        'socket_path' => "/run/php/{$application->app_slug}.sock",
+        'config' => [],
+    ]);
+
+    $response = $this->delete(route('applications.destroy', $application), [
+        'confirmation' => 'DELETE',
+    ]);
+
+    $response->assertRedirect(route('applications.server-index', $server));
+    expect(Application::find($application->id))->toBeNull();
+    expect(PhpPool::where('application_id', $application->id)->count())->toBe(0);
+});
+
+test('an application is not deleted without the DELETE confirmation', function () {
+    $this->actingAs(User::factory()->create());
+    $application = Application::factory()->create();
+
+    $this->from(route('applications.show', $application))
+        ->delete(route('applications.destroy', $application), ['confirmation' => 'delete'])
+        ->assertSessionHasErrors('confirmation');
+
+    expect(Application::find($application->id))->not->toBeNull();
+});

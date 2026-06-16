@@ -130,6 +130,51 @@ class AppProvisionService
     }
 
     /**
+     * Tear down everything provisionNew created on the server: the nginx vhost
+     * (+ enabled symlink), every php-fpm pool conf the app has owned, and the
+     * web app directory. Jobs are best-effort (`|| true` / `rm -f`) so a
+     * partially-provisioned or already-cleaned app still deletes cleanly. The
+     * shared OS user is left intact since it is reused by other apps.
+     *
+     * @return array<int, AgentJob>
+     */
+    public function deprovision(Application $app, ?int $userId = null): array
+    {
+        $slug = AppTemplates::slug($app);
+        $root = $app->root_path;
+        $jobs = [];
+
+        // 1. Remove the nginx vhost + enabled symlink, then reload (validating
+        //    first so a stray config elsewhere doesn't take nginx down).
+        $vhost = AppTemplates::vhostPath((string) $app->domain);
+        $vhostEnabled = AppTemplates::vhostEnabledPath((string) $app->domain);
+        $jobs[] = $this->shell($app, 'Remove nginx vhost', <<<SH
+            rm -f {$this->path($vhostEnabled)} {$this->path($vhost)}
+            nginx -t && systemctl reload nginx || true
+            SH, $userId);
+
+        // 2. Remove every php-fpm pool conf this app has owned (current version
+        //    plus any left from past version switches) and reload those pools.
+        $versions = $app->phpPools()->pluck('php_version')->push($app->php_version)->unique()->filter();
+        foreach ($versions as $version) {
+            $jobs[] = $this->shell($app, "Remove PHP-FPM pool (PHP {$version})", <<<SH
+                rm -f {$this->path(AppTemplates::poolConfigPath($version, $slug))}
+                systemctl reload php{$version}-fpm || true
+                SH, $userId);
+        }
+
+        // 3. Remove the web app directory and its logs.
+        $accessLog = AppTemplates::logPath($slug, 'access');
+        $errorLog = AppTemplates::logPath($slug, 'error');
+        $jobs[] = $this->shell($app, 'Remove web app directory', <<<SH
+            rm -rf {$this->path($root)}
+            rm -f {$this->path($accessLog)} {$this->path($errorLog)}
+            SH, $userId);
+
+        return $jobs;
+    }
+
+    /**
      * Move the php-fpm pool config from the old version's directory to the new
      * one and reload both daemons. The socket path (and therefore the nginx
      * vhost) is unchanged.

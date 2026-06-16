@@ -452,4 +452,37 @@ class ApplicationController extends Controller
 
         return redirect()->route('applications.show', $application);
     }
+
+    /**
+     * Delete an application: tear down its server-side resources (nginx vhost,
+     * php-fpm pools, web directory) then remove the record. The typed "DELETE"
+     * confirmation is enforced client-side; we re-validate it here so the
+     * destructive endpoint can't be hit without intent. Child records
+     * (php pools, deployments, services, cron jobs) cascade via FK.
+     */
+    public function destroy(Request $request, Application $application, AppProvisionService $provisionService): RedirectResponse
+    {
+        $request->validate([
+            'confirmation' => ['required', 'in:DELETE'],
+        ], [
+            'confirmation.in' => 'Type DELETE to confirm.',
+        ]);
+
+        $server = $application->server;
+        $name = $application->name;
+
+        $provisionService->deprovision($application, $request->user()->id);
+
+        $application->delete();
+
+        AuditLogger::log(
+            action: 'application.deleted',
+            description: "Application '{$name}' deleted from '{$server->name}'",
+            userId: $request->user()->id,
+            serverId: $server->id,
+        );
+
+        return redirect()->route('applications.server-index', $server)
+            ->with('success', "Application '{$name}' deleted.");
+    }
 }
