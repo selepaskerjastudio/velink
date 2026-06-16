@@ -10,6 +10,8 @@ BOLD='\033[1m'
 RESET='\033[0m'
 
 # ── ASCII banner ───────────────────────────────────────────────────────────────
+VELINK_VERSION="$(git -C "$(dirname "$0")" describe --tags --always 2>/dev/null || echo 'dev')"
+
 echo -e "${BOLD}${CYAN}"
 cat << 'EOF'
  __   __ _____  _      ___  _   _ _  __
@@ -18,7 +20,7 @@ cat << 'EOF'
    | |  | |___ | |___  | | | |\  || . \
    |_|  |_____||_____|___||_| \_||_|\_\
 EOF
-echo -e "${RESET}"
+echo -e "                              ${RESET}v${VELINK_VERSION}\n"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 STEP=0
@@ -70,6 +72,7 @@ for arg in "$@"; do
 done
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+START_TIME=$SECONDS
 
 # ── Steps ──────────────────────────────────────────────────────────────────────
 step "Pulling latest code"
@@ -103,4 +106,5 @@ if [ "$RESTART_GATEWAY" = true ]; then
     run "velink-gateway"       systemctl restart velink-gateway
 fi
 
-echo -e "\n${GREEN}${BOLD}Deploy complete.${RESET}\n"
+DURATION=$(( SECONDS - START_TIME ))
+echo -e "\n${GREEN}${BOLD}Deploy complete${RESET} ${GREEN}in ${DURATION}s.${RESET}\n"
