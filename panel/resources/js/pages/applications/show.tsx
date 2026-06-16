@@ -31,11 +31,11 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 const NO_CREDENTIAL = 'none';
 
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' {
     switch (status) {
         case 'succeeded':
         case 'success':
-            return 'default';
+            return 'success';
         case 'failed':
         case 'timeout':
             return 'destructive';
@@ -86,11 +86,11 @@ export default function ApplicationsShow({
 }) {
     const { errors: pageErrors } = usePage().props as { errors: Record<string, string> };
 
-    const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
-    const [liveDeployments, setLiveDeployments] = useState<Deployment[]>(deployments);
+    const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs ?? []);
+    const [liveDeployments, setLiveDeployments] = useState<Deployment[]>(deployments ?? []);
 
-    useEffect(() => setLiveJobs(jobs), [jobs]);
-    useEffect(() => setLiveDeployments(deployments), [deployments]);
+    useEffect(() => setLiveJobs(jobs ?? []), [jobs]);
+    useEffect(() => setLiveDeployments(deployments ?? []), [deployments]);
 
     useEffect(() => {
         const channel = echo.private(`server.${server.id}`);

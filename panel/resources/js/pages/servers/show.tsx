@@ -32,11 +32,11 @@ import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' {
     switch (status) {
         case 'online':
         case 'succeeded':
-            return 'default';
+            return 'success';
         case 'offline':
         case 'failed':
         case 'timeout':
@@ -89,9 +89,9 @@ export default function ServersShow({
 }) {
     const { flash } = usePage<SharedData>().props;
     const [liveStatus, setLiveStatus] = useState(server.status);
-    const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
+    const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs ?? []);
 
-    useEffect(() => setLiveJobs(jobs), [jobs]);
+    useEffect(() => setLiveJobs(jobs ?? []), [jobs]);
     useEffect(() => setLiveStatus(server.status), [server.status]);
 
     useEffect(() => {
