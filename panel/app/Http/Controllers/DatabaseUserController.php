@@ -31,10 +31,22 @@ class DatabaseUserController extends Controller
             ],
             'databaseUsers' => $server->databaseUsers()
                 ->orderBy('username')
-                ->get(['id', 'engine', 'username', 'host', 'grants']),
+                ->get(['uuid', 'engine', 'username', 'host', 'grants'])
+                ->map(fn ($u) => [
+                    'id'       => $u->uuid,
+                    'engine'   => $u->engine,
+                    'username' => $u->username,
+                    'host'     => $u->host,
+                    'grants'   => $u->grants,
+                ]),
             'databases' => $server->databases()
                 ->orderBy('name')
-                ->get(['id', 'engine', 'name']),
+                ->get(['uuid', 'engine', 'name'])
+                ->map(fn ($d) => [
+                    'id'     => $d->uuid,
+                    'engine' => $d->engine,
+                    'name'   => $d->name,
+                ]),
             'jobs' => $server->agentJobs()
                 ->where('type', 'shell')
                 ->latest('id')

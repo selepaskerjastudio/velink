@@ -186,7 +186,7 @@ export interface ServerMetricPoint {
 export type DatabaseGrants = Record<string, string[]>;
 
 export interface DatabaseUserSummary {
-    id: number;
+    id: string;
     engine: DatabaseEngine;
     username: string;
     host: string;
