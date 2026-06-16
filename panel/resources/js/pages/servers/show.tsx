@@ -214,42 +214,26 @@ export default function ServersShow({
                 )}
 
                 {!isPending && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Server details</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid gap-2 text-sm">
-                            {(
-                                [
-                                    ['Hostname', server.hostname],
-                                    ['Public IP', server.public_ip],
-                                    ['Private IP', server.private_ip],
-                                    ['OS', server.os],
-                                    ['Agent version', server.agent_version],
-                                    ['Last seen', server.last_seen_at ?? 'Never'],
-                                ] as [string, string | null | undefined][]
-                            ).map(([label, value]) => (
-                                <div key={label} className="flex justify-between gap-2">
-                                    <span className="text-muted-foreground shrink-0">{label}</span>
-                                    <span className="text-right">{value ?? '—'}</span>
-                                </div>
-                            ))}
-                        </CardContent>
-                        <CardFooter>
+                    <>
+                        {/* Compact server details — 1 row */}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                            {server.hostname && <span className="text-muted-foreground">{server.hostname}</span>}
+                            {server.public_ip && <span className="text-muted-foreground">{server.public_ip}</span>}
+                            {server.private_ip && <span className="text-muted-foreground">Private: {server.private_ip}</span>}
+                            {server.os && <span className="text-muted-foreground">{server.os}</span>}
+                            {server.agent_version && <span className="text-muted-foreground">Agent {server.agent_version}</span>}
+                            {server.last_seen_at && <span className="text-muted-foreground">Seen: {server.last_seen_at}</span>}
                             <Button
-                                variant="outline"
+                                variant="link"
                                 size="sm"
+                                className="text-muted-foreground h-auto p-0 text-sm font-normal"
                                 disabled={tokenForm.processing}
                                 onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
                             >
-                                Regenerate install command
+                                Regenerate token
                             </Button>
-                        </CardFooter>
-                    </Card>
-                )}
+                        </div>
 
-                {!isPending && (
-                    <>
                         {/* Metric cards */}
                         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                             {/* Load */}
