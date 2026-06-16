@@ -305,3 +305,73 @@ test('the databases index exposes databases and database users', function () {
         ->where('databaseUsers.0.host', '%')
     );
 });
+
+test('a user can be created with a custom password', function () {
+    mockDbUserGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    $this->post(route('database-users.store', $server), [
+        'engine' => 'mariadb',
+        'username' => 'appuser',
+        'host' => '%',
+        'password' => 'MyP@ss123',
+    ])->assertRedirect(route('databases.index', $server));
+
+    expect(DatabaseUser::where('server_id', $server->id)->first()->password)->toBe('MyP@ss123');
+});
+
+test('creating a user rejects an unsafe password', function () {
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    $this->post(route('database-users.store', $server), [
+        'engine' => 'mariadb',
+        'username' => 'appuser',
+        'host' => '%',
+        'password' => "bad'quote",
+    ])->assertSessionHasErrors('password');
+
+    expect(DatabaseUser::where('server_id', $server->id)->count())->toBe(0);
+});
+
+test('a password can be reset to a custom value and dispatches a job', function () {
+    mockDbUserGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $user = DatabaseUser::create([
+        'server_id' => $server->id,
+        'engine' => 'mariadb',
+        'username' => 'appuser',
+        'password' => 'old-secret',
+        'host' => '%',
+        'grants' => [],
+    ]);
+
+    $this->post(route('database-users.password', $user), ['password' => 'NewP@ss99'])
+        ->assertRedirect(route('databases.index', $server));
+
+    expect($user->refresh()->password)->toBe('NewP@ss99')
+        ->and($server->agentJobs()->where('label', 'Reset password: appuser')->exists())->toBeTrue();
+});
+
+test('resetting with a blank password generates one', function () {
+    mockDbUserGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $user = DatabaseUser::create([
+        'server_id' => $server->id,
+        'engine' => 'mariadb',
+        'username' => 'appuser',
+        'password' => 'old-secret',
+        'host' => '%',
+        'grants' => [],
+    ]);
+
+    $this->post(route('database-users.password', $user), [])->assertRedirect(route('databases.index', $server));
+
+    expect(strlen($user->refresh()->password))->toBe(24);
+});

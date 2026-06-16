@@ -20,6 +20,13 @@ class DatabaseUserController extends Controller
     private const DB_NAME_REGEX = '/^[A-Za-z][A-Za-z0-9_]{0,63}$/';
 
     /**
+     * Safe password charset — excludes quotes, backslash, $ and backtick so the
+     * value can be interpolated into the single-quoted SQL/double-quoted shell
+     * commands in DatabaseUserProvisionService without escaping.
+     */
+    private const PASSWORD_REGEX = '/^[A-Za-z0-9!@#%^*()_+=.\-]{8,64}$/';
+
+    /**
      * Database users now live as a sub-tab of the unified Databases page.
      * This route is kept for back-compat and simply redirects there.
      */
@@ -38,6 +45,7 @@ class DatabaseUserController extends Controller
                 'regex:'.self::USERNAME_REGEX,
             ],
             'host' => ['required', 'string', 'max:60', 'regex:'.self::HOST_REGEX],
+            'password' => ['nullable', 'string', 'regex:'.self::PASSWORD_REGEX],
             'grants' => ['nullable', 'array', $this->grantsRule($server, $request->input('engine'))],
         ]);
 
@@ -59,6 +67,7 @@ class DatabaseUserController extends Controller
             $validated['host'],
             $validated['grants'] ?? [],
             $request->user()->id,
+            $validated['password'] ?? null,
         );
 
         AuditLogger::log(
@@ -91,6 +100,27 @@ class DatabaseUserController extends Controller
         );
 
         return redirect()->route('databases.index', $databaseUser->server);
+    }
+
+    public function resetPassword(Request $request, DatabaseUser $databaseUser, DatabaseUserProvisionService $service): RedirectResponse
+    {
+        $validated = $request->validate([
+            'password' => ['nullable', 'string', 'regex:'.self::PASSWORD_REGEX],
+        ]);
+
+        $result = $service->updatePassword($databaseUser, $validated['password'] ?? null, $request->user()->id);
+
+        AuditLogger::log(
+            action: 'database_user.password_reset',
+            description: "DB user '{$databaseUser->username}' password reset",
+            userId: $request->user()->id,
+            serverId: $databaseUser->server_id,
+        );
+
+        return redirect()->route('databases.index', $databaseUser->server)->with([
+            'plain_db_user_password' => $result['plainPassword'],
+            'plain_db_user_username' => $databaseUser->username,
+        ]);
     }
 
     public function destroy(DatabaseUser $databaseUser, DatabaseUserProvisionService $service): RedirectResponse

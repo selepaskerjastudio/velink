@@ -36,17 +36,17 @@ class DatabaseUserProvisionService
         'mongodb' => ['ALL', 'readWrite', 'read', 'dbAdmin', 'dbOwner'],
     ];
 
-    public function __construct(private JobDispatcher $dispatcher)
-    {
-    }
+    public function __construct(private JobDispatcher $dispatcher) {}
 
     /**
      * @param  array<string, array<int, string>>  $grants
      * @return array{databaseUser: DatabaseUser, job: AgentJob, plainPassword: string}
      */
-    public function create(Server $server, string $engine, string $username, string $host, array $grants, ?int $userId): array
+    public function create(Server $server, string $engine, string $username, string $host, array $grants, ?int $userId, ?string $password = null): array
     {
-        $password = Str::password(24, symbols: false);
+        // A blank password means "generate one". User-supplied passwords are
+        // validated upstream against a safe charset (no quotes/backslash/$).
+        $password = ($password !== null && $password !== '') ? $password : Str::password(24, symbols: false);
 
         $databaseUser = DatabaseUser::create([
             'server_id' => $server->id,
@@ -86,6 +86,27 @@ class DatabaseUserProvisionService
         return $job;
     }
 
+    /**
+     * Set (or regenerate) a database user's password.
+     *
+     * @return array{job: AgentJob, plainPassword: string}
+     */
+    public function updatePassword(DatabaseUser $databaseUser, ?string $password, ?int $userId): array
+    {
+        $password = ($password !== null && $password !== '') ? $password : Str::password(24, symbols: false);
+
+        $job = $this->shell(
+            $databaseUser->server,
+            "Reset password: {$databaseUser->username}",
+            $this->passwordCommand($databaseUser->engine, $databaseUser->username, $databaseUser->host, $password),
+            $userId,
+        );
+
+        $databaseUser->forceFill(['password' => $password])->save();
+
+        return ['job' => $job, 'plainPassword' => $password];
+    }
+
     public function delete(DatabaseUser $databaseUser, ?int $userId): AgentJob
     {
         $job = $this->shell(
@@ -109,6 +130,22 @@ class DatabaseUserProvisionService
             'mysql', 'mariadb' => $this->mysqlCreateCommand($username, $host, $password, $grants),
             'postgres' => $this->postgresCreateCommand($username, $password, $grants),
             'mongodb' => $this->mongodbCreateCommand($username, $password, $grants),
+            default => throw new InvalidArgumentException("unsupported engine: {$engine}"),
+        };
+    }
+
+    private function passwordCommand(string $engine, string $username, string $host, string $password): string
+    {
+        return match ($engine) {
+            'mysql', 'mariadb' => <<<SH
+                mysql -e "ALTER USER '{$username}'@'{$host}' IDENTIFIED BY '{$password}'; FLUSH PRIVILEGES;"
+                SH,
+            'postgres' => <<<SH
+                sudo -u postgres psql -c "ALTER ROLE \\"{$username}\\" WITH PASSWORD '{$password}';"
+                SH,
+            'mongodb' => <<<SH
+                mongosh --quiet --eval "db.getSiblingDB('admin').changeUserPassword('{$username}', '{$password}')"
+                SH,
             default => throw new InvalidArgumentException("unsupported engine: {$engine}"),
         };
     }

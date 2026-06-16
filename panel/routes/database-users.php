@@ -7,5 +7,6 @@ Route::middleware('auth')->group(function () {
     Route::get('servers/{server}/database-users', [DatabaseUserController::class, 'index'])->name('database-users.index');
     Route::post('servers/{server}/database-users', [DatabaseUserController::class, 'store'])->name('database-users.store');
     Route::patch('database-users/{databaseUser}/grants', [DatabaseUserController::class, 'grants'])->name('database-users.grants');
+    Route::post('database-users/{databaseUser}/password', [DatabaseUserController::class, 'resetPassword'])->name('database-users.password');
     Route::delete('database-users/{databaseUser}', [DatabaseUserController::class, 'destroy'])->name('database-users.destroy');
 });

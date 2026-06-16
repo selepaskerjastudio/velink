@@ -287,7 +287,12 @@ function GrantsChecklist({
 
 function AddUserDialog({ serverId, engine, databases }: { serverId: string; engine: DatabaseEngine; databases: DatabaseInstanceSummary[] }) {
     const [open, setOpen] = useState(false);
-    const form = useForm<{ username: string; host: string; grants: DatabaseGrants }>({ username: '', host: '%', grants: {} });
+    const form = useForm<{ username: string; host: string; password: string; grants: DatabaseGrants }>({
+        username: '',
+        host: '%',
+        password: '',
+        grants: {},
+    });
 
     const toggle = (db: string, checked: boolean) => {
         const next = { ...form.data.grants };
@@ -344,6 +349,18 @@ function AddUserDialog({ serverId, engine, databases }: { serverId: string; engi
                             className="font-mono"
                         />
                         <InputError message={form.errors.host} />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="u-pass">Password</Label>
+                        <Input
+                            id="u-pass"
+                            value={form.data.password}
+                            onChange={(e) => form.setData('password', e.target.value)}
+                            placeholder="Leave blank to auto-generate"
+                            className="font-mono"
+                            autoComplete="new-password"
+                        />
+                        <InputError message={form.errors.password} />
                     </div>
                     <div className="grid gap-2">
                         <Label>Database access</Label>
@@ -417,8 +434,56 @@ function ManageAccessDialog({
     );
 }
 
+function ResetPasswordDialog({ user, open, onOpenChange }: { user: DatabaseUserSummary; open: boolean; onOpenChange: (v: boolean) => void }) {
+    const form = useForm<{ password: string }>({ password: '' });
+
+    const submit = () => {
+        form.post(route('database-users.password', user.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.reset();
+                onOpenChange(false);
+            },
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Reset password</DialogTitle>
+                    <DialogDescription>
+                        Set a new password for <span className="font-mono">{user.username}</span>. Leave blank to auto-generate one.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-2 py-2">
+                    <Label htmlFor="reset-pass">New password</Label>
+                    <Input
+                        id="reset-pass"
+                        value={form.data.password}
+                        onChange={(e) => form.setData('password', e.target.value)}
+                        placeholder="Leave blank to auto-generate"
+                        className="font-mono"
+                        autoComplete="new-password"
+                    />
+                    <InputError message={form.errors.password} />
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={form.processing}>
+                        Cancel
+                    </Button>
+                    <Button onClick={submit} disabled={form.processing}>
+                        {form.processing ? 'Saving…' : 'Reset password'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function UserRow({ user, databases }: { user: DatabaseUserSummary; databases: DatabaseInstanceSummary[] }) {
     const [managing, setManaging] = useState(false);
+    const [resetting, setResetting] = useState(false);
     const deleteForm = useForm({});
     const granted = Object.keys(user.grants ?? {});
 
@@ -447,6 +512,7 @@ function UserRow({ user, databases }: { user: DatabaseUserSummary; databases: Da
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => setManaging(true)}>Manage access</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setResetting(true)}>Reset password</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={remove} className="text-destructive focus:text-destructive">
                             Delete
@@ -454,6 +520,7 @@ function UserRow({ user, databases }: { user: DatabaseUserSummary; databases: Da
                     </DropdownMenuContent>
                 </DropdownMenu>
                 <ManageAccessDialog user={user} databases={databases} open={managing} onOpenChange={setManaging} />
+                <ResetPasswordDialog user={user} open={resetting} onOpenChange={setResetting} />
             </td>
         </tr>
     );
