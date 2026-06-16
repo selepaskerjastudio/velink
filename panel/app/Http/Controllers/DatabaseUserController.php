@@ -10,8 +10,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use Inertia\Inertia;
-use Inertia\Response;
 
 class DatabaseUserController extends Controller
 {
@@ -21,41 +19,13 @@ class DatabaseUserController extends Controller
 
     private const DB_NAME_REGEX = '/^[A-Za-z][A-Za-z0-9_]{0,63}$/';
 
-    public function index(Server $server): Response
+    /**
+     * Database users now live as a sub-tab of the unified Databases page.
+     * This route is kept for back-compat and simply redirects there.
+     */
+    public function index(Server $server): RedirectResponse
     {
-        return Inertia::render('servers/database-users', [
-            'server' => [
-                'id' => $server->uuid,
-                'name' => $server->name,
-                'public_ip' => $server->public_ip,
-                'status' => $server->status,
-            ],
-            'databaseUsers' => $server->databaseUsers()
-                ->orderBy('username')
-                ->get(['uuid', 'engine', 'username', 'host', 'grants'])
-                ->map(fn ($u) => [
-                    'id' => $u->uuid,
-                    'engine' => $u->engine,
-                    'username' => $u->username,
-                    'host' => $u->host,
-                    'grants' => $u->grants,
-                ]),
-            'databases' => $server->databases()
-                ->orderBy('name')
-                ->get(['uuid', 'engine', 'name'])
-                ->map(fn ($d) => [
-                    'id' => $d->uuid,
-                    'engine' => $d->engine,
-                    'name' => $d->name,
-                ]),
-            'jobs' => $server->agentJobs()
-                ->where('type', 'shell')
-                ->latest('id')
-                ->limit(20)
-                ->get(['uuid', 'type', 'label', 'status', 'exit_code', 'output', 'created_at'])
-                ->reverse()
-                ->values(),
-        ]);
+        return redirect()->route('databases.index', $server);
     }
 
     public function store(Request $request, Server $server, DatabaseUserProvisionService $service): RedirectResponse
@@ -99,7 +69,7 @@ class DatabaseUserController extends Controller
             properties: ['server_uuid' => $server->uuid],
         );
 
-        return redirect()->route('database-users.index', $server)->with([
+        return redirect()->route('databases.index', $server)->with([
             'plain_db_user_password' => $result['plainPassword'],
             'plain_db_user_username' => $validated['username'],
         ]);
@@ -120,7 +90,7 @@ class DatabaseUserController extends Controller
             serverId: $databaseUser->server_id,
         );
 
-        return redirect()->route('database-users.index', $databaseUser->server);
+        return redirect()->route('databases.index', $databaseUser->server);
     }
 
     public function destroy(DatabaseUser $databaseUser, DatabaseUserProvisionService $service): RedirectResponse
@@ -138,7 +108,7 @@ class DatabaseUserController extends Controller
             serverId: $serverId,
         );
 
-        return redirect()->route('database-users.index', $server);
+        return redirect()->route('databases.index', $server);
     }
 
     /**

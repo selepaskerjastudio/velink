@@ -35,8 +35,27 @@ class DatabaseInstanceController extends Controller
         'config',
     ];
 
+    /** Maps the DB systemd unit name to the engine key used across the UI. */
+    private const ENGINE_UNITS = [
+        'mariadb' => 'mariadb',
+        'postgresql' => 'postgres',
+        'mongod' => 'mongodb',
+    ];
+
     public function index(Server $server): Response
     {
+        // Only surface engine tabs for engines that are actually installed.
+        $unitStatuses = $server->services()
+            ->whereIn('name', array_keys(self::ENGINE_UNITS))
+            ->pluck('status', 'name');
+
+        $installedEngines = [];
+        foreach (self::ENGINE_UNITS as $unit => $engine) {
+            if (in_array($unitStatuses[$unit] ?? null, ['running', 'active'], true)) {
+                $installedEngines[] = $engine;
+            }
+        }
+
         return Inertia::render('servers/databases', [
             'server' => [
                 'id' => $server->uuid,
@@ -44,6 +63,7 @@ class DatabaseInstanceController extends Controller
                 'public_ip' => $server->public_ip,
                 'status' => $server->status,
             ],
+            'installedEngines' => $installedEngines,
             'databases' => $server->databases()
                 ->orderBy('name')
                 ->get(['uuid', 'engine', 'name', 'charset', 'collation', 'created_at'])

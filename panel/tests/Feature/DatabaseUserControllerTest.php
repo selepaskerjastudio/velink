@@ -51,7 +51,7 @@ test('a database user can be created', function () {
         'host' => '%',
     ]);
 
-    $response->assertRedirect(route('database-users.index', $server));
+    $response->assertRedirect(route('databases.index', $server));
 
     $databaseUser = DatabaseUser::where('server_id', $server->id)->first();
     expect($databaseUser)->not->toBeNull();
@@ -79,7 +79,7 @@ test('creating a user flashes the plain password and username', function () {
         'host' => '%',
     ]);
 
-    $this->get(route('database-users.index', $server))
+    $this->get(route('databases.index', $server))
         ->assertInertia(fn ($page) => $page
             ->where('flash.plainDbUserPassword', fn ($val) => is_string($val) && strlen($val) === 24)
             ->where('flash.plainDbUserUsername', 'appuser')
@@ -186,7 +186,7 @@ test('grants accept databases that exist on the server', function () {
         'grants' => ['myapp' => ['ALL']],
     ]);
 
-    $response->assertRedirect(route('database-users.index', $server));
+    $response->assertRedirect(route('databases.index', $server));
 
     $databaseUser = DatabaseUser::where('server_id', $server->id)->first();
     expect($databaseUser->grants)->toBe(['myapp' => ['ALL']]);
@@ -224,7 +224,7 @@ test('grants can be updated', function () {
         'grants' => ['myapp' => ['ALL']],
     ]);
 
-    $response->assertRedirect(route('database-users.index', $server));
+    $response->assertRedirect(route('databases.index', $server));
     expect($databaseUser->refresh()->grants)->toBe(['myapp' => ['ALL']]);
 
     expect($published)->toHaveCount(1);
@@ -257,7 +257,7 @@ test('a database user can be deleted', function () {
 
     $response = $this->delete(route('database-users.destroy', $databaseUser));
 
-    $response->assertRedirect(route('database-users.index', $server));
+    $response->assertRedirect(route('databases.index', $server));
     expect(DatabaseUser::find($databaseUser->id))->toBeNull();
 
     expect($published[0]['payload']['action'])->toBe('shell');
@@ -265,7 +265,14 @@ test('a database user can be deleted', function () {
     expect($published[0]['payload']['params']['command'])->toContain('appuser');
 });
 
-test('index renders with databaseUsers, databases, and jobs props', function () {
+test('the database-users route redirects to the unified databases page', function () {
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    $this->get(route('database-users.index', $server))->assertRedirect(route('databases.index', $server));
+});
+
+test('the databases index exposes databases and database users', function () {
     mockDbUserGatewayPublish();
 
     $this->actingAs(User::factory()->create());
@@ -286,13 +293,14 @@ test('index renders with databaseUsers, databases, and jobs props', function () 
         'grants' => ['myapp' => ['ALL']],
     ]);
 
-    $response = $this->get(route('database-users.index', $server));
+    $response = $this->get(route('databases.index', $server));
 
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page
+        ->component('servers/databases')
         ->has('databaseUsers', 1)
         ->has('databases', 1)
-        ->where('server.name', $server->name)
+        ->has('installedEngines')
         ->where('databaseUsers.0.username', 'appuser')
         ->where('databaseUsers.0.host', '%')
     );
