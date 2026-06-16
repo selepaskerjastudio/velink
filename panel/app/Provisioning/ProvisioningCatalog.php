@@ -76,6 +76,11 @@ class ProvisioningCatalog
             'node' => [$this->shell('Install Node.js', sprintf(<<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
                 curl -fsSL https://deb.nodesource.com/setup_%s.x | bash -
+                # The NodeSource setup script runs apt-get update without the dpkg
+                # lock; under concurrent provisioning that can lose to another job
+                # and leave Ubuntu's old nodejs as the install candidate. Refresh
+                # the package list under the lock so we get the NodeSource version.
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
                 flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y nodejs
                 SH, self::NODE_MAJOR))],
 
