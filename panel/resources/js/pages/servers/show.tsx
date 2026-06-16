@@ -419,49 +419,6 @@ export default function ServersShow({
                 )}
 
 
-                {/* Manage quick links */}
-                {!isPending && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Manage</CardTitle>
-                            <CardDescription>Services, cron jobs, and databases.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-wrap gap-2">
-                            {isOnline ? (
-                                <>
-                                    <Button asChild variant="outline" size="sm">
-                                        <Link href={route('services.index', server.id)}>Services</Link>
-                                    </Button>
-                                    <Button asChild variant="outline" size="sm">
-                                        <Link href={route('cron.index', server.id)}>Cron jobs</Link>
-                                    </Button>
-                                    <Button asChild variant="outline" size="sm">
-                                        <Link href={route('databases.index', server.id)}>Databases</Link>
-                                    </Button>
-                                    <Button asChild variant="outline" size="sm">
-                                        <Link href={route('database-users.index', server.id)}>Database users</Link>
-                                    </Button>
-                                </>
-                            ) : (
-                                <>
-                                    <Button variant="outline" size="sm" disabled>
-                                        Services
-                                    </Button>
-                                    <Button variant="outline" size="sm" disabled>
-                                        Cron jobs
-                                    </Button>
-                                    <Button variant="outline" size="sm" disabled>
-                                        Databases
-                                    </Button>
-                                    <Button variant="outline" size="sm" disabled>
-                                        Database users
-                                    </Button>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
-                )}
-
             </div>
         </ServerLayout>
     );
