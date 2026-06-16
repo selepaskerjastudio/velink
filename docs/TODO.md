@@ -111,6 +111,43 @@
 - [ ] 🔴 **Opus** — Web terminal: agent buka PTY (`creack/pty`) ↔ Gateway ↔ xterm.js (multiplex channel).
 - [ ] Audit khusus sesi terminal.
 
+## Fase 6 — Parity RunCloud (UI/UX + Monitoring) 🟢 Sonnet
+
+> Berdasarkan analisis screenshot RunCloud. Detail lihat [`RUNCLOUD_ANALYSIS.md`](./RUNCLOUD_ANALYSIS.md).
+
+### 🔴 Tinggi
+
+- [ ] **Uptime di dashboard** — Agent kirim `uptime_seconds` di metrics payload →
+      kolom baru di `server_metrics` → card dashboard ganti CPU → Uptime (format: "3d 12h 4m").
+      CPU tetap ditampilkan di chart monitoring.
+- [ ] **Halaman Monitoring dedicated** (`servers/monitoring.tsx`) — route baru
+      `GET servers/{server}/monitoring`, fix nav sidebar "Monitoring" yang saat ini
+      tidak punya route. Pindahkan chart CPU+RAM dari `show.tsx` ke sini, tambah
+      chart Load dan Disk terpisah, donut gauge Memory & Disk, time range selector
+      (1h / 6h / 24h).
+- [ ] **Settings page: edit server name** — form edit `name` → `PATCH /servers/{server}`.
+- [ ] **Settings page: restart server** — dispatch `AgentJob shell` dengan `sudo reboot`.
+
+### 🟡 Medium
+
+- [ ] **Web Applications list page per server** (`servers/applications.tsx`) —
+      route `GET servers/{server}/applications`, `ApplicationController@serverIndex`,
+      tabel dengan search + pagination + kolom Owner (linux_user).
+      Fix bug nav sidebar: "Web Applications" URL saat ini duplikat ke dashboard.
+- [ ] **Databases: gabungkan DB + DB Users satu halaman** — tabs "Databases" /
+      "Database Users" di `servers/databases.tsx`, hapus halaman `database-users.tsx`
+      terpisah dari nav (atau tetap pisah tapi navigasi lewat tab).
+- [ ] **Databases: tambah kolom** `created_at` ("Added On") dan `collation` di tabel.
+
+### 🟢 Rendah
+
+- [ ] Search/filter di halaman databases, cron jobs, workers.
+- [ ] Workers: tambah kolom "Directory" (root_path aplikasi).
+- [ ] App detail: tampilkan "Directory Size" (agent kirim via sysinfo atau shell job).
+- [ ] Services: per-service CPU% dan Memory usage (agent parse `/proc/{pid}`).
+- [ ] App detail: SSL/TLS UI (trigger certbot yang sudah ada di provisioning).
+- [ ] App detail: NGINX Config editor (baca/tulis file config via agent).
+
 ## Lintas-Fase (Keamanan & Kualitas)
 
 - [x] **Identifier eksternal → UUID (2026-06-15) — 🟢 Sonnet.** `servers`,

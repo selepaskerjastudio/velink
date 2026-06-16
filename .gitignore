@@ -3,6 +3,8 @@
 *.swp
 .idea/
 .vscode/
+.codegraph/
+.cursor/
 
 # Environment files (panel has its own .gitignore for panel/.env)
 .env
@@ -15,4 +17,6 @@ installer/.env
 /gateway/bin/
 /agent/agent
 /agent/bin/
+/agent/agent-linux-amd64-latest
 *.exe
+
