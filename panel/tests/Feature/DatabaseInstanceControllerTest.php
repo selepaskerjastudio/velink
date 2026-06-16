@@ -19,7 +19,7 @@ test('guests are redirected to the login page', function () {
     $server = Server::factory()->create();
     $database = DatabaseInstance::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
@@ -42,7 +42,7 @@ test('a MySQL database can be created', function () {
     $server = Server::factory()->online()->create();
 
     $response = $this->post(route('databases.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
         'charset' => 'utf8mb4',
         'collation' => 'utf8mb4_unicode_ci',
@@ -52,7 +52,7 @@ test('a MySQL database can be created', function () {
 
     $database = DatabaseInstance::where('server_id', $server->id)->first();
     expect($database)->not->toBeNull();
-    expect($database->engine)->toBe('mysql');
+    expect($database->engine)->toBe('mariadb');
     expect($database->name)->toBe('myapp');
     expect($database->charset)->toBe('utf8mb4');
 
@@ -116,7 +116,7 @@ test('creating a database rejects reserved database names', function () {
 
     foreach (['mysql', 'postgres', 'information_schema', 'template0', 'admin'] as $reserved) {
         $response = $this->post(route('databases.store', $server), [
-            'engine' => 'mysql',
+            'engine' => 'mariadb',
             'name' => $reserved,
         ]);
 
@@ -131,19 +131,19 @@ test('creating a database rejects invalid names', function () {
     $server = Server::factory()->online()->create();
 
     $response = $this->post(route('databases.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => '1startsWithDigit',
     ]);
     $response->assertSessionHasErrors('name');
 
     $response = $this->post(route('databases.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'has spaces',
     ]);
     $response->assertSessionHasErrors('name');
 
     $response = $this->post(route('databases.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'shell; injection',
     ]);
     $response->assertSessionHasErrors('name');
@@ -159,12 +159,12 @@ test('database names must be unique per server', function () {
 
     DatabaseInstance::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
     $response = $this->post(route('databases.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
@@ -181,12 +181,12 @@ test('the same database name can be used on different servers', function () {
 
     DatabaseInstance::create([
         'server_id' => $serverA->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
     $response = $this->post(route('databases.store', $serverB), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
@@ -208,7 +208,7 @@ test('a database can be deleted', function () {
     $server = Server::factory()->online()->create();
     $database = DatabaseInstance::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
@@ -230,7 +230,7 @@ test('index renders with databases and jobs props', function () {
 
     DatabaseInstance::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'alpha',
     ]);
 

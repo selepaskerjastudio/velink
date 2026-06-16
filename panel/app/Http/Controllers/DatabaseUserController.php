@@ -9,6 +9,7 @@ use App\Services\DatabaseUserProvisionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,19 +34,19 @@ class DatabaseUserController extends Controller
                 ->orderBy('username')
                 ->get(['uuid', 'engine', 'username', 'host', 'grants'])
                 ->map(fn ($u) => [
-                    'id'       => $u->uuid,
-                    'engine'   => $u->engine,
+                    'id' => $u->uuid,
+                    'engine' => $u->engine,
                     'username' => $u->username,
-                    'host'     => $u->host,
-                    'grants'   => $u->grants,
+                    'host' => $u->host,
+                    'grants' => $u->grants,
                 ]),
             'databases' => $server->databases()
                 ->orderBy('name')
                 ->get(['uuid', 'engine', 'name'])
                 ->map(fn ($d) => [
-                    'id'     => $d->uuid,
+                    'id' => $d->uuid,
                     'engine' => $d->engine,
-                    'name'   => $d->name,
+                    'name' => $d->name,
                 ]),
             'jobs' => $server->agentJobs()
                 ->where('type', 'shell')
@@ -60,7 +61,7 @@ class DatabaseUserController extends Controller
     public function store(Request $request, Server $server, DatabaseUserProvisionService $service): RedirectResponse
     {
         $validated = $request->validate([
-            'engine' => ['required', 'string', Rule::in(['mysql', 'mariadb', 'postgres', 'mongodb'])],
+            'engine' => ['required', 'string', Rule::in(['mariadb', 'postgres', 'mongodb'])],
             'username' => [
                 'required',
                 'string',
@@ -76,7 +77,7 @@ class DatabaseUserController extends Controller
             ->exists();
 
         if ($exists) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'username' => 'A database user with this username and host already exists on this server.',
             ]);
         }

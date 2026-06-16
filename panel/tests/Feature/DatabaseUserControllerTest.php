@@ -20,7 +20,7 @@ test('guests are redirected to the login page', function () {
     $server = Server::factory()->create();
     $databaseUser = DatabaseUser::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'alice',
         'password' => 'secret',
         'host' => '%',
@@ -46,7 +46,7 @@ test('a database user can be created', function () {
     $server = Server::factory()->online()->create();
 
     $response = $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'host' => '%',
     ]);
@@ -55,7 +55,7 @@ test('a database user can be created', function () {
 
     $databaseUser = DatabaseUser::where('server_id', $server->id)->first();
     expect($databaseUser)->not->toBeNull();
-    expect($databaseUser->engine)->toBe('mysql');
+    expect($databaseUser->engine)->toBe('mariadb');
     expect($databaseUser->username)->toBe('appuser');
     expect($databaseUser->host)->toBe('%');
     expect($databaseUser->grants)->toBe([]);
@@ -74,7 +74,7 @@ test('creating a user flashes the plain password and username', function () {
     $server = Server::factory()->online()->create();
 
     $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'host' => '%',
     ]);
@@ -91,21 +91,21 @@ test('creating a user rejects invalid usernames', function () {
     $server = Server::factory()->online()->create();
 
     $response = $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => '1startsWithDigit',
         'host' => '%',
     ]);
     $response->assertSessionHasErrors('username');
 
     $response = $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'user with spaces',
         'host' => '%',
     ]);
     $response->assertSessionHasErrors('username');
 
     $response = $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'user;injection',
         'host' => '%',
     ]);
@@ -119,7 +119,7 @@ test('creating a user rejects invalid hosts', function () {
     $server = Server::factory()->online()->create();
 
     $response = $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'host' => "'; DROP TABLE database_users;--",
     ]);
@@ -136,14 +136,14 @@ test('username and host must be unique per server', function () {
 
     DatabaseUser::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'password' => 'secret',
         'host' => '%',
     ]);
 
     $response = $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'host' => '%',
     ]);
@@ -157,7 +157,7 @@ test('grants must reference databases that exist on this server', function () {
     $server = Server::factory()->online()->create();
 
     $response = $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'host' => '%',
         'grants' => ['nonexistent_db' => ['ALL']],
@@ -175,12 +175,12 @@ test('grants accept databases that exist on the server', function () {
 
     DatabaseInstance::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
     $response = $this->post(route('database-users.store', $server), [
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'host' => '%',
         'grants' => ['myapp' => ['ALL']],
@@ -207,13 +207,13 @@ test('grants can be updated', function () {
 
     DatabaseInstance::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
     $databaseUser = DatabaseUser::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'password' => 'secret',
         'host' => '%',
@@ -248,7 +248,7 @@ test('a database user can be deleted', function () {
     $server = Server::factory()->online()->create();
     $databaseUser = DatabaseUser::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'password' => 'secret',
         'host' => '%',
@@ -273,13 +273,13 @@ test('index renders with databaseUsers, databases, and jobs props', function () 
 
     DatabaseInstance::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'name' => 'myapp',
     ]);
 
     DatabaseUser::create([
         'server_id' => $server->id,
-        'engine' => 'mysql',
+        'engine' => 'mariadb',
         'username' => 'appuser',
         'password' => 'secret',
         'host' => '%',

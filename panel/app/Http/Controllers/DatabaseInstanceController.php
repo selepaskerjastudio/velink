@@ -48,12 +48,22 @@ class DatabaseInstanceController extends Controller
                 ->orderBy('name')
                 ->get(['uuid', 'engine', 'name', 'charset', 'collation', 'created_at'])
                 ->map(fn ($d) => [
-                    'id'         => $d->uuid,
-                    'engine'     => $d->engine,
-                    'name'       => $d->name,
-                    'charset'    => $d->charset,
-                    'collation'  => $d->collation,
+                    'id' => $d->uuid,
+                    'engine' => $d->engine,
+                    'name' => $d->name,
+                    'charset' => $d->charset,
+                    'collation' => $d->collation,
                     'created_at' => $d->created_at?->format('d M Y'),
+                ]),
+            'databaseUsers' => $server->databaseUsers()
+                ->orderBy('username')
+                ->get(['uuid', 'engine', 'username', 'host', 'grants'])
+                ->map(fn ($u) => [
+                    'id' => $u->uuid,
+                    'engine' => $u->engine,
+                    'username' => $u->username,
+                    'host' => $u->host,
+                    'grants' => $u->grants,
                 ]),
             'jobs' => $server->agentJobs()
                 ->where('type', 'shell')
@@ -68,7 +78,7 @@ class DatabaseInstanceController extends Controller
     public function store(Request $request, Server $server, DatabaseProvisionService $service): RedirectResponse
     {
         $validated = $request->validate([
-            'engine' => ['required', 'string', Rule::in(['mysql', 'mariadb', 'postgres', 'mongodb'])],
+            'engine' => ['required', 'string', Rule::in(['mariadb', 'postgres', 'mongodb'])],
             'name' => [
                 'required',
                 'string',
