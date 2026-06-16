@@ -1,6 +1,6 @@
 [Unit]
 Description=Velink agent
-Documentation=https://github.com/velink
+Documentation=https://github.com/selepaskerjastudio/velink
 After=network-online.target
 Wants=network-online.target
 
