@@ -1,45 +1,39 @@
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, KeyRound, LayoutGrid, Server, ShieldCheck } from 'lucide-react';
+import { Globe, KeyRound, Server, Settings, ShieldCheck } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        url: '/dashboard',
-        icon: LayoutGrid,
-    },
     {
         title: 'Servers',
         url: '/servers',
         icon: Server,
     },
     {
-        title: 'Git credentials',
+        title: 'Web Applications',
+        url: '/servers',
+        icon: Globe,
+    },
+    {
+        title: 'Git Credentials',
         url: '/git-credentials',
         icon: KeyRound,
     },
     {
-        title: 'Audit log',
+        title: 'Audit Log',
         url: '/audit-logs',
         icon: ShieldCheck,
     },
 ];
 
-const footerNavItems: NavItem[] = [
+const bottomNavItems: NavItem[] = [
     {
-        title: 'Repository',
-        url: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        url: 'https://laravel.com/docs/starter-kits',
-        icon: BookOpen,
+        title: 'Settings',
+        url: '/settings',
+        icon: Settings,
     },
 ];
 
@@ -63,7 +57,7 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
+                <NavMain items={bottomNavItems} />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

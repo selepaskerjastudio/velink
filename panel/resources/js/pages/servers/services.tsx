@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import echo from '@/echo';
-import AppLayout from '@/layouts/app-layout';
+import ServerLayout from '@/layouts/server-layout';
 import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type SystemdService } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { ChevronDownIcon, EllipsisIcon, TriangleAlertIcon } from 'lucide-react';
@@ -105,7 +105,7 @@ export default function ServerServices({
     services,
     jobs,
 }: {
-    server: { id: string; name: string; status: string };
+    server: { id: string; name: string; status: string; public_ip: string | null };
     services: SystemdService[];
     jobs: AgentJob[];
 }) {
@@ -143,7 +143,7 @@ export default function ServerServices({
     ];
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <ServerLayout breadcrumbs={breadcrumbs} server={server}>
             <Head title={`${server.name} — Services`} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
@@ -261,6 +261,6 @@ export default function ServerServices({
                     </Card>
                 )}
             </div>
-        </AppLayout>
+        </ServerLayout>
     );
 }

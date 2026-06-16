@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import echo from '@/echo';
-import AppLayout from '@/layouts/app-layout';
+import ServerLayout from '@/layouts/server-layout';
 import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type CronApplicationOption, type CronJobSummary } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
@@ -175,7 +175,7 @@ export default function ServerCron({
     applications,
     jobs,
 }: {
-    server: { id: string; name: string; status: string };
+    server: { id: string; name: string; status: string; public_ip: string | null };
     cronJobs: CronJobSummary[];
     applications: CronApplicationOption[];
     jobs: AgentJob[];
@@ -242,7 +242,7 @@ export default function ServerCron({
     ];
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <ServerLayout breadcrumbs={breadcrumbs} server={server}>
             <Head title={`Cron jobs — ${server.name}`} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
@@ -382,6 +382,6 @@ export default function ServerCron({
                     </Card>
                 )}
             </div>
-        </AppLayout>
+        </ServerLayout>
     );
 }

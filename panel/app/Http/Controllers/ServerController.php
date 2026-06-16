@@ -109,6 +109,15 @@ class ServerController extends Controller
                     'load1' => round($m->load1, 2),
                     'ts'    => $m->recorded_at->format('H:i:s'),
                 ]),
+            'latestMetric' => $server->metrics()
+                ->latest('recorded_at')
+                ->first(['cpu_percent', 'mem_total', 'mem_used', 'disk_total', 'disk_used', 'load1', 'recorded_at']),
+            'counts' => [
+                'applications' => $server->applications()->count(),
+                'databases'    => $server->databases()->count(),
+                'cron_jobs'    => $server->cronJobs()->count(),
+                'workers'      => $server->services()->where('type', 'supervisor')->count(),
+            ],
         ]);
     }
 
