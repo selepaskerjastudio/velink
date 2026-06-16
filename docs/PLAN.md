@@ -98,12 +98,21 @@ Tiga komponen utama + Redis + DB:
 Rahasia (token Git, password DB, isi `.env`) disimpan pakai **encrypted cast** Laravel.
 
 > **Identifier eksternal (UUID):** `servers`, `applications`, `git_credentials`,
-> `deployments` (dan `agent_jobs` sejak Fase 1) punya kolom `uuid` terpisah sebagai
-> route-key (trait `HasUuidRouteKey`: generate `Str::uuid()` saat `creating`,
-> `getRouteKeyName() => 'uuid'`). Bigint `id` tetap dipakai untuk relasi/FK internal
-> (join, `where('application_id', ...)`, dll) — hanya representasi yang terekspos ke
-> URL/payload Inertia/channel broadcast dan protokol agent↔gateway (`server_id`,
-> `X-Server-Id`, `--server-id`) yang berubah ke uuid.
+> `deployments`, `databases`, `database_users` (dan `agent_jobs` sejak Fase 1) punya
+> kolom `uuid` terpisah sebagai route-key (trait `HasUuidRouteKey`: generate
+> `Str::uuid()` saat `creating`, `getRouteKeyName() => 'uuid'`). Bigint `id` tetap
+> dipakai untuk relasi/FK internal (join, `where('application_id', ...)`, dll) — hanya
+> representasi yang terekspos ke URL/payload Inertia/channel broadcast dan protokol
+> agent↔gateway (`server_id`, `X-Server-Id`, `--server-id`) yang berubah ke uuid.
+>
+> **Catatan deployment nginx:** Blok `location /app/` (dengan trailing slash) di nginx
+> panel meng-proxy Reverb WebSocket ke port 8080. Tanpa trailing slash (`location /app`),
+> nginx prefix-match juga menangkap `/apps/` dan `/applications/` dan mem-proxy-nya ke
+> Reverb alih-alih PHP-FPM — menyebabkan 404 untuk semua route aplikasi detail.
+>
+> **Route prefix `/apps/`:** Route detail aplikasi memakai prefix `/apps/{uuid}` (bukan
+> `/applications/{uuid}`) untuk menghindari pemblokiran Cloudflare WAF. Route name tetap
+> `applications.*`. Route listing di bawah `/servers/` tidak terpengaruh.
 
 ## 5. Roadmap Berfase
 

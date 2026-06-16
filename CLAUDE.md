@@ -108,7 +108,7 @@ A single static binary installed on each managed server via the one-liner instal
 ## Key patterns
 
 ### UUID route keys
-All models exposed in URLs or inter-service protocols (`Server`, `Application`, `GitCredential`, `Deployment`, `AgentJob`) use a `uuid` column as the route key via the `HasUuidRouteKey` trait (`app/Models/Concerns/HasUuidRouteKey.php`). Bigint `id` is used only for internal DB relations/FKs. **Never expose raw `id` in URLs, Inertia props, broadcast channels, or agent↔gateway headers.**
+All models exposed in URLs or inter-service protocols (`Server`, `Application`, `GitCredential`, `Deployment`, `AgentJob`, `DatabaseInstance`, `DatabaseUser`) use a `uuid` column as the route key via the `HasUuidRouteKey` trait (`app/Models/Concerns/HasUuidRouteKey.php`). Bigint `id` is used only for internal DB relations/FKs. **Never expose raw `id` in URLs, Inertia props, broadcast channels, or agent↔gateway headers.**
 
 ### Protocol constants
 `App\Support\GatewayProtocol` (PHP) and `gateway/internal/protocol/protocol.go` (Go) must stay in sync. Redis channel names, message type constants, and header names are defined there.
@@ -130,7 +130,13 @@ Per `docs/PLAN.md` §8 and `docs/TODO.md`:
 - 🟢 **Sonnet is sufficient** for most UI work, CRUD controllers, migrations, frontend pages, config templates (Phases 0, 2, 4).
 - 🔴 **Switch to Opus** for security-critical or architecturally complex tasks: Gateway Go internals, the agent transport layer, privileged execution logic, zero-downtime deploy engine, web terminal (PTY), and idempotent provisioning. **Remind the user to switch to Opus before starting any 🔴 task.**
 
-## Current status (as of 2026-06-15)
+### Route prefix for applications
+Application detail routes use `/apps/{uuid}` (not `/applications/{uuid}`) — the `/applications/` prefix is blocked by Cloudflare WAF on the production panel. Route *names* still use the `applications.*` convention (e.g. `applications.show`, `applications.env`). The server-scoped listing routes (`servers/{server}/applications`, `servers/{server}/applications/create`) are unaffected and keep the `/applications` segment since they're under `/servers/`.
+
+### Production nginx — critical note
+The nginx `location /app/` block (with trailing slash) proxies Reverb WebSocket connections to port 8080. **It must use `location /app/` with a trailing slash.** Without the slash, `location /app` is a prefix match that also catches `/apps/` and `/applications/` routes, routing them to Reverb instead of PHP-FPM.
+
+## Current status (as of 2026-06-16)
 
 Phases 0–4 are substantially complete. Remaining work:
 - Fase 2: SSL/Let's Encrypt (`certbot`), end-to-end verification

@@ -114,13 +114,18 @@
 ## Lintas-Fase (Keamanan & Kualitas)
 
 - [x] **Identifier eksternal → UUID (2026-06-15) — 🟢 Sonnet.** `servers`,
-      `applications`, `git_credentials`, `deployments` kini punya kolom `uuid`
-      terpisah sebagai route-key (trait `HasUuidRouteKey`, sama seperti
-      `agent_jobs` di Fase 1) — URL, payload Inertia (`id`, `server_id`→dihapus,
-      `git_credential_id`), channel broadcast (`server.{uuid}`), dan protokol
-      agent↔gateway (`server_id`/`X-Server-Id`/`--server-id`) memakai uuid; bigint
-      `id` tetap untuk relasi/FK internal. 97 Pest test + gateway/agent
-      `go build/vet/test` hijau, `npm run build`/eslint/tsc bersih.
+      `applications`, `git_credentials`, `deployments`, **`databases`**, **`database_users`**
+      kini punya kolom `uuid` terpisah sebagai route-key (trait `HasUuidRouteKey`,
+      sama seperti `agent_jobs` di Fase 1) — URL, payload Inertia (`id`,
+      `server_id`→dihapus, `git_credential_id`), channel broadcast (`server.{uuid}`),
+      dan protokol agent↔gateway (`server_id`/`X-Server-Id`/`--server-id`) memakai
+      uuid; bigint `id` tetap untuk relasi/FK internal. Migration
+      `2026_06_16_000003` menambah kolom uuid ke `databases` dan `database_users`.
+
+- [x] **Route `/apps/` prefix (2026-06-16).** Route detail aplikasi diganti dari
+      `/applications/{uuid}` ke `/apps/{uuid}` agar tidak diblokir Cloudflare WAF.
+      Route name (`applications.show`, dll) tidak berubah. Nginx `location /app/`
+      (trailing slash wajib) memisahkan path Reverb WebSocket dari route `/apps/`.
 
 - [ ] **Catatan rilis (bigint→UUID server identifier):** setelah perubahan ini
       dirilis, agent yang sudah terpasang punya `AGENT_SERVER_ID=<bigint>` lama

@@ -226,7 +226,7 @@ export default function ApplicationsShow({
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
         { title: server.name, href: `/servers/${server.id}` },
-        { title: application.name, href: `/applications/${application.id}` },
+        { title: application.name, href: `/apps/${application.id}` },
     ];
 
     return (

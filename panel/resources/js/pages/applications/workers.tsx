@@ -194,8 +194,8 @@ export default function ApplicationsWorkers({
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
         { title: server.name, href: `/servers/${server.id}` },
-        { title: application.name, href: `/applications/${application.id}` },
-        { title: 'Workers', href: `/applications/${application.id}/workers` },
+        { title: application.name, href: `/apps/${application.id}` },
+        { title: 'Workers', href: `/apps/${application.id}/workers` },
     ];
 
     return (
