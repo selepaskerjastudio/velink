@@ -357,6 +357,46 @@ Menu **Audit log** di sidebar menampilkan riwayat semua aksi (siapa, kapan, serv
 
 ---
 
+## Update panel (setelah ada perubahan)
+
+```bash
+cd /root/velink && git pull && \
+  cd panel && \
+  composer install --no-dev --optimize-autoloader --quiet && \
+  npm ci --silent && npm run build && \
+  php artisan migrate --force && \
+  php artisan config:cache && php artisan route:cache && php artisan view:cache && \
+  systemctl restart velink-queue velink-reverb velink-agent-listen && \
+  echo "Done."
+```
+
+Atau simpan sebagai script:
+
+```bash
+cat > /root/update-velink.sh << 'EOF'
+#!/bin/bash
+set -e
+cd /root/velink && git pull
+cd panel
+composer install --no-dev --optimize-autoloader --quiet
+npm ci --silent && npm run build
+php artisan migrate --force
+php artisan config:cache && php artisan route:cache && php artisan view:cache
+systemctl restart velink-queue velink-reverb velink-agent-listen
+echo "Panel updated."
+EOF
+chmod +x /root/update-velink.sh
+```
+
+Lalu jalankan `bash /root/update-velink.sh` setiap ada update.
+
+> Gateway (Go) tidak perlu di-restart kecuali ada perubahan di folder `/gateway`. Jika berubah:
+> ```bash
+> cd /root/velink/gateway && go build -o /usr/local/bin/velink-gateway ./cmd/gateway && systemctl restart velink-gateway
+> ```
+
+---
+
 ## Development lokal
 
 ```bash
