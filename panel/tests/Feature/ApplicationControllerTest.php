@@ -137,6 +137,15 @@ test('an application can be created with a database and user', function () {
 
     expect($server->databases()->where('name', 'app_db')->where('engine', 'mariadb')->exists())->toBeTrue();
     expect($server->databaseUsers()->where('username', 'app_user')->where('engine', 'mariadb')->exists())->toBeTrue();
+
+    // The app's .env is seeded with the real DB credentials (not the framework
+    // default) so the first deploy's migrate connects as app_user@localhost.
+    $env = $application->env_content;
+    expect($env)->toContain('DB_CONNECTION=mysql');
+    expect($env)->toContain('DB_HOST=localhost');
+    expect($env)->toContain('DB_DATABASE=app_db');
+    expect($env)->toContain('DB_USERNAME=app_user');
+    expect($env)->toMatch('/DB_PASSWORD=.+/');
 });
 
 test('a reserved database name is rejected', function () {

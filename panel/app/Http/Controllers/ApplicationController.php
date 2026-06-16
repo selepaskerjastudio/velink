@@ -65,7 +65,7 @@ class ApplicationController extends Controller
         ]);
     }
 
-    public function store(Request $request, Server $server, AppProvisionService $provisionService, DatabaseProvisionService $databaseService, DatabaseUserProvisionService $databaseUserService): RedirectResponse
+    public function store(Request $request, Server $server, AppProvisionService $provisionService, DatabaseProvisionService $databaseService, DatabaseUserProvisionService $databaseUserService, JobDispatcher $dispatcher): RedirectResponse
     {
         $appType = (string) $request->input('app_type');
         $installedEngines = $server->installedDatabaseEngines();
@@ -170,9 +170,32 @@ class ApplicationController extends Controller
                 'password' => $userResult['plainPassword'],
                 'host' => 'localhost',
             ];
+
+            // Seed the app's .env with the real DB credentials so the first
+            // deploy's `php artisan migrate` connects as the user we just
+            // created — not the framework default (e.g. Laravel's `forge`).
+            // WordPress wires its own wp-config.php (handled in provisionNew).
+            if ($application->app_type !== 'wordpress' && $application->usesPhp()) {
+                $application->forceFill([
+                    'env_content' => $this->databaseEnvSeed($validated['db_engine'], $dbCreds),
+                ])->save();
+            }
         }
 
         $provisionService->provisionNew($application, $request->user()->id, $dbCreds);
+
+        // Write the seeded .env onto the server (after the web root exists).
+        if ($application->env_content) {
+            $dispatcher->dispatch($server, 'write_file', [
+                'path' => "{$application->root_path}/.env",
+                'content' => $application->env_content,
+                'mode' => '0640',
+            ], [
+                'application_id' => $application->id,
+                'user_id' => $request->user()->id,
+                'label' => 'Write .env',
+            ]);
+        }
 
         AuditLogger::log(
             action: 'application.created',
@@ -183,6 +206,31 @@ class ApplicationController extends Controller
         );
 
         return redirect()->route('applications.show', $application);
+    }
+
+    /**
+     * Build a minimal .env DB block wired to a freshly-provisioned database
+     * and user. MariaDB grants are created for @'localhost', so DB_HOST must be
+     * `localhost` — PDO then connects over the unix socket and matches that
+     * grant; `127.0.0.1` would authenticate over TCP and be denied.
+     *
+     * @param  array{name: string, user: string, password: string, host?: string}  $creds
+     */
+    private function databaseEnvSeed(string $engine, array $creds): string
+    {
+        [$connection, $host, $port] = match ($engine) {
+            'postgres' => ['pgsql', '127.0.0.1', '5432'],
+            default => ['mysql', 'localhost', '3306'],
+        };
+
+        return implode("\n", [
+            "DB_CONNECTION={$connection}",
+            "DB_HOST={$host}",
+            "DB_PORT={$port}",
+            "DB_DATABASE={$creds['name']}",
+            "DB_USERNAME={$creds['user']}",
+            "DB_PASSWORD={$creds['password']}",
+        ])."\n";
     }
 
     /**
