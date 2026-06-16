@@ -96,8 +96,10 @@ class GatewayInboundProcessor
                             );
                         }
                     }
+                    $this->resolveSslStatus($job, true);
                 } else {
                     $job->markFailed($exit, $body['error'] ?? null);
+                    $this->resolveSslStatus($job, false);
                 }
                 break;
 
@@ -166,6 +168,59 @@ class GatewayInboundProcessor
 
         if ($changed) {
             $server->save();
+        }
+    }
+
+    /**
+     * Update application ssl_status based on an SSL-related job result.
+     *
+     * Enable SSL jobs: success → active, failure → failed.
+     * Check SSL jobs: parse certbot output for certificate presence.
+     */
+    private function resolveSslStatus(AgentJob $job, bool $succeeded): void
+    {
+        $label = $job->label ?? '';
+
+        if (! str_contains($label, 'Enable SSL')) {
+            if (str_contains($label, 'Check SSL')) {
+                $this->resolveSslCheck($job, $succeeded);
+            }
+
+            return;
+        }
+
+        $application = $job->application;
+        if (! $application) {
+            return;
+        }
+
+        $application->forceFill([
+            'ssl_status' => $succeeded ? 'active' : 'failed',
+        ])->save();
+    }
+
+    /**
+     * Resolve SSL status from a certbot certificates check job.
+     * If output contains certificate path markers → active, else → none.
+     */
+    private function resolveSslCheck(AgentJob $job, bool $succeeded): void
+    {
+        $application = $job->application;
+        if (! $application) {
+            return;
+        }
+
+        $output = $job->output ?? '';
+
+        if (! $succeeded || str_contains($output, 'NOT_FOUND')) {
+            $application->forceFill(['ssl_status' => 'none'])->save();
+
+            return;
+        }
+
+        // certbot certificates output contains "Certificate Path:" when a cert exists
+        if (str_contains($output, 'Certificate Path')) {
+            $application->forceFill(['ssl_status' => 'active'])->save();
         }
     }
 
