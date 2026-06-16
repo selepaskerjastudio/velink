@@ -15,8 +15,7 @@ class ProvisionService
     public function __construct(
         private JobDispatcher $dispatcher,
         private ProvisioningCatalog $catalog,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<int, string>  $components
@@ -25,22 +24,19 @@ class ProvisionService
      */
     public function provision(Server $server, array $components, array $opts = [], ?int $userId = null): array
     {
-        $jobs = [];
-
+        // Flatten every component's ordered steps into one list, then run them
+        // as a single sequential batch. The agent executes jobs concurrently,
+        // so dispatching steps one-at-a-time (next only after the previous
+        // succeeds) is what guarantees ordering — e.g. base before the PPA,
+        // php before composer.
+        $steps = [];
         foreach ($this->order($components) as $component) {
             foreach ($this->catalog->steps($component, $opts) as $step) {
-                // The job type must be the executor action ('shell'); the
-                // component/step name is surfaced in the step's output header.
-                $jobs[] = $this->dispatcher->dispatch(
-                    $server,
-                    $step['type'],
-                    $step['params'],
-                    ['user_id' => $userId, 'label' => $step['name']],
-                );
+                $steps[] = $step;
             }
         }
 
-        return $jobs;
+        return $this->dispatcher->queueSequential($server, $steps, $userId);
     }
 
     /**

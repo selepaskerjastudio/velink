@@ -40,7 +40,7 @@ test('postgresql and mongodb recipes exist and are sh-safe', function () {
     expect($mongo[0]['params']['command'])->toContain('repo.mongodb.org');
 });
 
-test('provision dispatches base first then selected components as shell jobs', function () {
+test('provision queues a sequential batch, dispatching only base first', function () {
     $server = Server::factory()->online()->create();
 
     // Capture every published envelope.
@@ -55,11 +55,17 @@ test('provision dispatches base first then selected components as shell jobs', f
 
     $jobs = app(ProvisionService::class)->provision($server, ['nginx'], ['php_versions' => ['8.3']]);
 
-    // base (1 step) + nginx (1 step) = 2 jobs, all shell.
+    // base (1 step) + nginx (1 step) = 2 jobs, all shell, one ordered batch.
     expect($jobs)->toHaveCount(2);
     expect(collect($jobs)->every(fn (AgentJob $j) => $j->type === 'shell'))->toBeTrue();
+    expect($jobs[0]->batch_id)->not->toBeNull()
+        ->and($jobs[1]->batch_id)->toBe($jobs[0]->batch_id)
+        ->and($jobs[0]->batch_sequence)->toBe(0)
+        ->and($jobs[1]->batch_sequence)->toBe(1);
 
-    // First dispatched job is the base package install.
+    // Only the first step (base) is dispatched; nginx waits until base succeeds.
+    expect($published)->toHaveCount(1);
     expect($published[0]['payload']['params']['command'])->toContain('software-properties-common');
-    expect($published[1]['payload']['params']['command'])->toContain('apt-get install -y nginx');
+    expect($jobs[0]->refresh()->status)->toBe(App\Models\AgentJob::STATUS_DISPATCHED)
+        ->and($jobs[1]->refresh()->status)->toBe(App\Models\AgentJob::STATUS_PENDING);
 });

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,14 +20,21 @@ class AgentJob extends Model
     use HasFactory;
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_DISPATCHED = 'dispatched';
+
     public const STATUS_RUNNING = 'running';
+
     public const STATUS_SUCCEEDED = 'succeeded';
+
     public const STATUS_FAILED = 'failed';
+
     public const STATUS_TIMEOUT = 'timeout';
 
     protected $fillable = [
         'uuid',
+        'batch_id',
+        'batch_sequence',
         'server_id',
         'application_id',
         'user_id',
@@ -47,10 +55,47 @@ class AgentJob extends Model
         return [
             'payload' => 'encrypted:array',
             'exit_code' => 'integer',
+            'batch_sequence' => 'integer',
             'dispatched_at' => 'datetime',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The next not-yet-run step in this job's batch (the one to dispatch after
+     * this one succeeds), or null if this is the last step or not in a batch.
+     */
+    public function nextInBatch(): ?self
+    {
+        if ($this->batch_id === null) {
+            return null;
+        }
+
+        return self::where('batch_id', $this->batch_id)
+            ->where('status', self::STATUS_PENDING)
+            ->where('batch_sequence', '>', $this->batch_sequence)
+            ->orderBy('batch_sequence')
+            ->first();
+    }
+
+    /**
+     * Remaining not-yet-run steps in this job's batch after this one — used to
+     * halt the batch when a step fails so they don't sit pending forever.
+     *
+     * @return Collection<int, self>
+     */
+    public function remainingInBatch(): Collection
+    {
+        if ($this->batch_id === null) {
+            return self::whereRaw('1 = 0')->get();
+        }
+
+        return self::where('batch_id', $this->batch_id)
+            ->where('status', self::STATUS_PENDING)
+            ->where('batch_sequence', '>', $this->batch_sequence)
+            ->orderBy('batch_sequence')
+            ->get();
     }
 
     protected static function booted(): void

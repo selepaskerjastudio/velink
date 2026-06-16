@@ -29,8 +29,7 @@ class GatewayInboundProcessor
         private JobDispatcher $dispatcher,
         private ServiceManager $serviceManager,
         private ProvisionService $provisionService,
-    ) {
-    }
+    ) {}
 
     /**
      * Handle one envelope from the inbound channel (job output / result / metrics).
@@ -96,8 +95,22 @@ class GatewayInboundProcessor
                             );
                         }
                     }
+
+                    // Sequential batch: now that this step succeeded, dispatch the
+                    // next one. This is what serializes provisioning so the agent
+                    // can't run a step before its prerequisite is installed.
+                    $next = $job->nextInBatch();
+                    if ($next !== null) {
+                        $this->dispatcher->dispatchPending($next);
+                    }
                 } else {
                     $job->markFailed($exit, $body['error'] ?? null);
+
+                    // Halt the rest of the batch: dependent steps must not run, and
+                    // they shouldn't sit pending forever.
+                    foreach ($job->remainingInBatch() as $skipped) {
+                        $skipped->markFailed(null, "Skipped — earlier step '{$job->label}' failed");
+                    }
                 }
                 break;
 
@@ -122,15 +135,15 @@ class GatewayInboundProcessor
         $body = is_array($env['payload'] ?? null) ? $env['payload'] : [];
 
         ServerMetric::create([
-            'server_id'   => $server->id,
+            'server_id' => $server->id,
             'cpu_percent' => (float) ($body['cpu_percent'] ?? 0),
-            'mem_total'   => (int) ($body['mem_total'] ?? 0),
-            'mem_used'    => (int) ($body['mem_used'] ?? 0),
-            'disk_total'  => (int) ($body['disk_total'] ?? 0),
-            'disk_used'   => (int) ($body['disk_used'] ?? 0),
-            'load1'          => (float) ($body['load1'] ?? 0),
+            'mem_total' => (int) ($body['mem_total'] ?? 0),
+            'mem_used' => (int) ($body['mem_used'] ?? 0),
+            'disk_total' => (int) ($body['disk_total'] ?? 0),
+            'disk_used' => (int) ($body['disk_used'] ?? 0),
+            'load1' => (float) ($body['load1'] ?? 0),
             'uptime_seconds' => (int) ($body['uptime_seconds'] ?? 0),
-            'recorded_at'    => now(),
+            'recorded_at' => now(),
         ]);
 
         // Keep only the last 7 days (~20 160 readings at 30 s intervals per server).
@@ -201,7 +214,7 @@ class GatewayInboundProcessor
 
         if ($online) {
             $hasServices = $server->services()->where('type', 'systemd')->exists();
-            $hasJobs     = $server->agentJobs()->exists();
+            $hasJobs = $server->agentJobs()->exists();
 
             if (! $hasServices && ! $hasJobs) {
                 // Brand-new server: auto-provision core stack + any databases chosen at registration.
@@ -225,6 +238,20 @@ class GatewayInboundProcessor
                     'command' => $this->serviceManager->probeCommand(),
                     'timeout' => 60,
                 ], ['label' => ServiceManager::PROBE_LABEL]);
+            }
+
+            // Re-deliver jobs that were dispatched but never picked up — e.g. lost
+            // to a transient gateway pub/sub gap. Only those stuck for a while, so
+            // we don't re-run jobs the agent is actively processing. This resumes a
+            // sequential batch whose current step's dispatch was dropped.
+            $stuck = $server->agentJobs()
+                ->where('status', AgentJob::STATUS_DISPATCHED)
+                ->whereNotNull('dispatched_at')
+                ->where('dispatched_at', '<', now()->subSeconds(60))
+                ->orderBy('id')
+                ->get();
+            foreach ($stuck as $stuckJob) {
+                $this->dispatcher->dispatchPending($stuckJob);
             }
         }
 

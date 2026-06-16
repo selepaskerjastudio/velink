@@ -13,13 +13,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/velink/gateway/internal/auth"
 	"github.com/velink/gateway/internal/bridge"
 	"github.com/velink/gateway/internal/config"
 	"github.com/velink/gateway/internal/hub"
 	"github.com/velink/gateway/internal/presence"
 	"github.com/velink/gateway/internal/server"
-	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -35,6 +35,15 @@ func main() {
 		Addr:     cfg.RedisAddr,
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
+		// Survive transient Redis blips (EOF, restart, brief refusals) without
+		// failing commands on the first attempt. The dispatch subscription also
+		// re-subscribes on its own; these retries cover inbound publish and
+		// presence ops so their goroutines log-and-continue instead of dropping.
+		MaxRetries:      5,
+		MinRetryBackoff: 100 * time.Millisecond,
+		MaxRetryBackoff: 2 * time.Second,
+		DialTimeout:     5 * time.Second,
+		PoolSize:        10,
 	})
 	defer rdb.Close()
 
