@@ -43,28 +43,31 @@ class JobDispatcher
     }
 
     /**
-     * Queue an ordered list of steps as a single sequential batch. All steps are
-     * created as `pending`; only the first is dispatched now. Each subsequent
-     * step is dispatched by GatewayInboundProcessor when the previous one
-     * succeeds, so the agent never runs batch steps concurrently (avoids races
-     * like composer-before-php or php-install-before-the-PPA).
+     * Queue a list of phased steps as a single batch. Each step carries a
+     * `phase` (stored as `batch_sequence`); all steps in a phase run
+     * concurrently, and the next phase is dispatched by GatewayInboundProcessor
+     * only once every job in the current phase has finished. This parallelises
+     * independent installs while still ordering dependencies (base → the rest;
+     * PPA → PHP installs → composer).
      *
-     * @param  array<int, array{name?: string, type: string, params: array<string, mixed>}>  $steps
+     * Only the lowest phase is dispatched now; the rest wait as `pending`.
+     *
+     * @param  array<int, array{name?: string, type: string, phase?: int, params: array<string, mixed>}>  $steps
      * @return array<int, AgentJob>
      */
-    public function queueSequential(Server $server, array $steps, ?int $userId = null): array
+    public function queueBatch(Server $server, array $steps, ?int $userId = null): array
     {
         $batchId = (string) Str::uuid();
         $jobs = [];
 
-        foreach (array_values($steps) as $i => $step) {
+        foreach (array_values($steps) as $step) {
             if (! in_array($step['type'], self::ALLOWED_ACTIONS, true)) {
                 throw new \InvalidArgumentException("Unknown agent job action: '{$step['type']}'. Allowed: ".implode(', ', self::ALLOWED_ACTIONS));
             }
 
             $jobs[] = AgentJob::create([
                 'batch_id' => $batchId,
-                'batch_sequence' => $i,
+                'batch_sequence' => $step['phase'] ?? 0,
                 'server_id' => $server->id,
                 'user_id' => $userId,
                 'type' => $step['type'],
@@ -75,16 +78,21 @@ class JobDispatcher
         }
 
         if ($jobs !== []) {
-            $this->dispatchPending($jobs[0]);
+            $minPhase = min(array_map(fn (AgentJob $j) => $j->batch_sequence, $jobs));
+            foreach ($jobs as $job) {
+                if ($job->batch_sequence === $minPhase) {
+                    $this->dispatchPending($job);
+                }
+            }
         }
 
         return $jobs;
     }
 
     /**
-     * Publish a job that was created as `pending` (e.g. the next step in a
-     * sequential batch, or a stuck job being re-dispatched) and mark it
-     * dispatched. Safe to call on an already-dispatched job to re-deliver it.
+     * Publish a job that was created as `pending` (e.g. the next phase of a
+     * batch, or a stuck job being re-dispatched) and mark it dispatched. Safe to
+     * call on an already-dispatched job to re-deliver it.
      */
     public function dispatchPending(AgentJob $job): void
     {

@@ -63,38 +63,81 @@ class AgentJob extends Model
     }
 
     /**
-     * The next not-yet-run step in this job's batch (the one to dispatch after
-     * this one succeeds), or null if this is the last step or not in a batch.
+     * Terminal (finished) states a batch step can settle into.
      */
-    public function nextInBatch(): ?self
+    public const TERMINAL_STATUSES = [self::STATUS_SUCCEEDED, self::STATUS_FAILED, self::STATUS_TIMEOUT];
+
+    /**
+     * Batches run in phases: `batch_sequence` is the phase number. All jobs in
+     * a phase run concurrently; the next phase is dispatched only once every job
+     * in the current phase has finished. Dependencies are encoded as phases
+     * (base → everything; the PHP PPA → PHP installs → composer).
+     *
+     * True when every job in this job's phase has reached a terminal state.
+     */
+    public function isPhaseComplete(): bool
     {
         if ($this->batch_id === null) {
-            return null;
+            return false;
         }
 
+        return ! self::where('batch_id', $this->batch_id)
+            ->where('batch_sequence', $this->batch_sequence)
+            ->whereNotIn('status', self::TERMINAL_STATUSES)
+            ->exists();
+    }
+
+    /** True when at least one job in this job's phase succeeded. */
+    public function phaseHadSuccess(): bool
+    {
         return self::where('batch_id', $this->batch_id)
-            ->where('status', self::STATUS_PENDING)
-            ->where('batch_sequence', '>', $this->batch_sequence)
-            ->orderBy('batch_sequence')
-            ->first();
+            ->where('batch_sequence', $this->batch_sequence)
+            ->where('status', self::STATUS_SUCCEEDED)
+            ->exists();
     }
 
     /**
-     * Remaining not-yet-run steps in this job's batch after this one — used to
-     * halt the batch when a step fails so they don't sit pending forever.
+     * The pending jobs that make up the next phase (lowest phase number greater
+     * than this job's), to be dispatched together.
      *
      * @return Collection<int, self>
      */
-    public function remainingInBatch(): Collection
+    public function nextPhaseJobs(): Collection
+    {
+        if ($this->batch_id === null) {
+            return self::whereRaw('1 = 0')->get();
+        }
+
+        $nextPhase = self::where('batch_id', $this->batch_id)
+            ->where('batch_sequence', '>', $this->batch_sequence)
+            ->where('status', self::STATUS_PENDING)
+            ->min('batch_sequence');
+
+        if ($nextPhase === null) {
+            return self::whereRaw('1 = 0')->get();
+        }
+
+        return self::where('batch_id', $this->batch_id)
+            ->where('batch_sequence', $nextPhase)
+            ->where('status', self::STATUS_PENDING)
+            ->get();
+    }
+
+    /**
+     * All still-pending jobs in later phases — marked failed when the batch is
+     * halted because a whole phase failed.
+     *
+     * @return Collection<int, self>
+     */
+    public function laterPhasePendingJobs(): Collection
     {
         if ($this->batch_id === null) {
             return self::whereRaw('1 = 0')->get();
         }
 
         return self::where('batch_id', $this->batch_id)
-            ->where('status', self::STATUS_PENDING)
             ->where('batch_sequence', '>', $this->batch_sequence)
-            ->orderBy('batch_sequence')
+            ->where('status', self::STATUS_PENDING)
             ->get();
     }
 

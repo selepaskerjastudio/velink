@@ -113,22 +113,7 @@ class GatewayInboundProcessor
                             $this->serviceManager->unitsForJobLabel((string) $job->label),
                             ServiceManager::STATUS_RUNNING,
                         );
-
-                        // Sequential batch: now that this step succeeded, dispatch
-                        // the next one. This serializes provisioning so the agent
-                        // can't run a step before its prerequisite is installed.
-                        $next = $job->nextInBatch();
-                        if ($next !== null) {
-                            $this->dispatcher->dispatchPending($next);
-                            // Mark its service installing the moment it's dispatched,
-                            // not only once output arrives, so the UI never shows a
-                            // dispatched step as "waiting".
-                            $this->serviceManager->setUnitsStatus(
-                                $next->server,
-                                $this->serviceManager->unitsForJobLabel((string) $next->label),
-                                ServiceManager::STATUS_INSTALLING,
-                            );
-                        }
+                        $this->advancePhase($job);
                     } else {
                         // A control job (e.g. "Restart nginx") finished — resolve
                         // the optimistic restarting/stopped state.
@@ -144,17 +129,7 @@ class GatewayInboundProcessor
                             $this->serviceManager->unitsForJobLabel((string) $job->label),
                             ServiceManager::STATUS_NOT_INSTALLED,
                         );
-
-                        // Halt the rest of the batch: dependent steps must not run,
-                        // and their services will never be installed.
-                        foreach ($job->remainingInBatch() as $skipped) {
-                            $skipped->markFailed(null, "Skipped — earlier step '{$job->label}' failed");
-                            $this->serviceManager->setUnitsStatus(
-                                $job->server,
-                                $this->serviceManager->unitsForJobLabel((string) $skipped->label),
-                                ServiceManager::STATUS_NOT_INSTALLED,
-                            );
-                        }
+                        $this->advancePhase($job);
                     } else {
                         $this->serviceManager->applyControlJobResult($job->server, (string) $job->label, succeeded: false);
                     }
@@ -166,6 +141,44 @@ class GatewayInboundProcessor
         }
 
         event(new AgentJobUpdated($job->refresh()));
+    }
+
+    /**
+     * Advance a phased provisioning batch. When every job in the just-finished
+     * job's phase has settled, dispatch the next phase's jobs together (marking
+     * their services installing). If the whole phase failed, halt the batch and
+     * mark the downstream steps not installed.
+     */
+    private function advancePhase(AgentJob $job): void
+    {
+        if (! $job->isPhaseComplete()) {
+            return;
+        }
+
+        if (! $job->phaseHadSuccess()) {
+            foreach ($job->laterPhasePendingJobs() as $skipped) {
+                $skipped->markFailed(null, 'Skipped — provisioning halted after a failed phase');
+                $this->serviceManager->setUnitsStatus(
+                    $skipped->server,
+                    $this->serviceManager->unitsForJobLabel((string) $skipped->label),
+                    ServiceManager::STATUS_NOT_INSTALLED,
+                );
+            }
+
+            return;
+        }
+
+        foreach ($job->nextPhaseJobs() as $next) {
+            $this->dispatcher->dispatchPending($next);
+            // Mark its service installing the moment it's dispatched, not only
+            // once output arrives, so the UI never shows a dispatched step as
+            // "waiting".
+            $this->serviceManager->setUnitsStatus(
+                $next->server,
+                $this->serviceManager->unitsForJobLabel((string) $next->label),
+                ServiceManager::STATUS_INSTALLING,
+            );
+        }
     }
 
     /**

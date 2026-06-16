@@ -24,19 +24,34 @@ class ProvisionService
      */
     public function provision(Server $server, array $components, array $opts = [], ?int $userId = null): array
     {
-        // Flatten every component's ordered steps into one list, then run them
-        // as a single sequential batch. The agent executes jobs concurrently,
-        // so dispatching steps one-at-a-time (next only after the previous
-        // succeeds) is what guarantees ordering — e.g. base before the PPA,
-        // php before composer.
+        // Flatten every component's steps into one phased batch. Steps in the
+        // same phase run concurrently (fast); phases enforce the dependencies:
+        //   0 base → 1 services + PHP PPA → 2 PHP installs → 3 composer.
         $steps = [];
         foreach ($this->order($components) as $component) {
             foreach ($this->catalog->steps($component, $opts) as $step) {
+                $step['phase'] = $this->phaseFor($component, $step);
                 $steps[] = $step;
             }
         }
 
-        return $this->dispatcher->queueSequential($server, $steps, $userId);
+        return $this->dispatcher->queueBatch($server, $steps, $userId);
+    }
+
+    /**
+     * Dependency phase for a provisioning step. Everything in a phase installs
+     * in parallel; later phases wait for earlier ones to finish.
+     *
+     * @param  array{name?: string, type: string, params: array<string, mixed>}  $step
+     */
+    private function phaseFor(string $component, array $step): int
+    {
+        return match ($component) {
+            'base' => 0,
+            'composer' => 3, // needs PHP
+            'php' => str_contains($step['name'] ?? '', 'PPA') ? 1 : 2, // PPA first, then installs
+            default => 1,     // nginx, certbot, redis, supervisor, node, databases
+        };
     }
 
     /**

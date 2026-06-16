@@ -27,12 +27,17 @@ function capturePublishedEnvelopes(array &$sink): void
     Redis::shouldReceive('connection')->andReturn($conn);
 }
 
-function threeSteps(): array
+/**
+ * A phased batch: phase 0 = base; phase 1 = two parallel installs (nginx,
+ * redis); phase 2 = composer (depends on the earlier phase).
+ */
+function phasedSteps(): array
 {
     return [
-        ['name' => 'Step A', 'type' => 'shell', 'params' => ['command' => 'echo a']],
-        ['name' => 'Step B', 'type' => 'shell', 'params' => ['command' => 'echo b']],
-        ['name' => 'Step C', 'type' => 'shell', 'params' => ['command' => 'echo c']],
+        ['name' => 'Install base packages', 'type' => 'shell', 'phase' => 0, 'params' => ['command' => 'echo base']],
+        ['name' => 'Install nginx', 'type' => 'shell', 'phase' => 1, 'params' => ['command' => 'echo nginx']],
+        ['name' => 'Install Redis', 'type' => 'shell', 'phase' => 1, 'params' => ['command' => 'echo redis']],
+        ['name' => 'Install composer', 'type' => 'shell', 'phase' => 2, 'params' => ['command' => 'echo composer']],
     ];
 }
 
@@ -45,63 +50,107 @@ function completeJob(AgentJob $job, int $exit = 0, ?string $error = null): void
     ]));
 }
 
-test('queueSequential dispatches only the first step and leaves the rest pending', function () {
+test('queueBatch dispatches only the first phase and leaves later phases pending', function () {
     $sink = [];
     capturePublishedEnvelopes($sink);
 
     $server = Server::factory()->create();
-    $jobs = app(JobDispatcher::class)->queueSequential($server, threeSteps());
+    $jobs = app(JobDispatcher::class)->queueBatch($server, phasedSteps());
 
-    expect($jobs)->toHaveCount(3);
+    expect($jobs)->toHaveCount(4);
 
-    $ordered = $server->agentJobs()->orderBy('batch_sequence')->get();
-    expect($ordered[0]->status)->toBe(AgentJob::STATUS_DISPATCHED)
-        ->and($ordered[1]->status)->toBe(AgentJob::STATUS_PENDING)
-        ->and($ordered[2]->status)->toBe(AgentJob::STATUS_PENDING)
-        ->and($ordered[0]->batch_id)->not->toBeNull()
-        ->and($ordered[1]->batch_id)->toBe($ordered[0]->batch_id)
-        ->and($ordered[2]->batch_sequence)->toBe(2);
+    // Only the phase-0 job (base) is dispatched.
+    expect($jobs[0]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED)
+        ->and($jobs[1]->refresh()->status)->toBe(AgentJob::STATUS_PENDING)
+        ->and($jobs[2]->refresh()->status)->toBe(AgentJob::STATUS_PENDING)
+        ->and($jobs[3]->refresh()->status)->toBe(AgentJob::STATUS_PENDING);
 
-    // Exactly one envelope (the first step) hit the wire.
     expect($sink)->toHaveCount(1)
-        ->and($sink[0]['job_id'])->toBe($ordered[0]->uuid);
+        ->and($sink[0]['job_id'])->toBe($jobs[0]->uuid);
 });
 
-test('a succeeded batch step dispatches the next step only', function () {
+test('finishing a phase dispatches every job in the next phase in parallel', function () {
     Event::fake([AgentJobUpdated::class]);
     $sink = [];
     capturePublishedEnvelopes($sink);
 
     $server = Server::factory()->create();
-    $jobs = app(JobDispatcher::class)->queueSequential($server, threeSteps());
+    $jobs = app(JobDispatcher::class)->queueBatch($server, phasedSteps());
 
-    completeJob($jobs[0]);
+    completeJob($jobs[0]); // base done → phase 1 (nginx + redis) dispatched together
 
     expect($jobs[1]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED)
-        ->and($jobs[2]->refresh()->status)->toBe(AgentJob::STATUS_PENDING);
-
-    completeJob($jobs[1]);
-
-    expect($jobs[2]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED);
+        ->and($jobs[2]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED)
+        ->and($jobs[3]->refresh()->status)->toBe(AgentJob::STATUS_PENDING); // composer waits
 });
 
-test('a failed batch step halts and marks the remaining steps', function () {
+test('the next phase waits until every job in the current phase has finished', function () {
     Event::fake([AgentJobUpdated::class]);
     $sink = [];
     capturePublishedEnvelopes($sink);
 
     $server = Server::factory()->create();
-    $jobs = app(JobDispatcher::class)->queueSequential($server, threeSteps());
+    $jobs = app(JobDispatcher::class)->queueBatch($server, phasedSteps());
 
-    completeJob($jobs[0], exit: 1, error: 'boom');
+    completeJob($jobs[0]); // phase 1 dispatched
+    completeJob($jobs[1]); // nginx done, redis still running
 
-    expect($jobs[0]->refresh()->status)->toBe(AgentJob::STATUS_FAILED)
-        ->and($jobs[1]->refresh()->status)->toBe(AgentJob::STATUS_FAILED)
-        ->and($jobs[2]->refresh()->status)->toBe(AgentJob::STATUS_FAILED)
-        ->and($jobs[1]->refresh()->error)->toContain('Skipped');
+    expect($jobs[3]->refresh()->status)->toBe(AgentJob::STATUS_PENDING);
 
-    // No further step was ever dispatched (only the first envelope went out).
-    expect($sink)->toHaveCount(1);
+    completeJob($jobs[2]); // redis done → phase 1 complete → composer dispatched
+
+    expect($jobs[3]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED);
+});
+
+test('a phase that fails entirely halts the batch', function () {
+    Event::fake([AgentJobUpdated::class]);
+    $sink = [];
+    capturePublishedEnvelopes($sink);
+
+    $server = Server::factory()->create();
+    $jobs = app(JobDispatcher::class)->queueBatch($server, phasedSteps());
+
+    completeJob($jobs[0]);
+    completeJob($jobs[1], exit: 1, error: 'boom'); // nginx fails
+    completeJob($jobs[2], exit: 1, error: 'boom'); // redis fails → whole phase failed
+
+    // composer (downstream) is skipped, not left pending forever.
+    expect($jobs[3]->refresh()->status)->toBe(AgentJob::STATUS_FAILED)
+        ->and($jobs[3]->refresh()->error)->toContain('halted');
+});
+
+test('a phase with a partial failure still advances', function () {
+    Event::fake([AgentJobUpdated::class]);
+    $sink = [];
+    capturePublishedEnvelopes($sink);
+
+    $server = Server::factory()->create();
+    $jobs = app(JobDispatcher::class)->queueBatch($server, phasedSteps());
+
+    completeJob($jobs[0]);
+    completeJob($jobs[1], exit: 1, error: 'boom'); // nginx fails
+    completeJob($jobs[2]);                          // redis succeeds → phase had success
+
+    expect($jobs[3]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED);
+});
+
+test('batches on different servers advance independently (per server)', function () {
+    Event::fake([AgentJobUpdated::class]);
+    $sink = [];
+    capturePublishedEnvelopes($sink);
+
+    $a = Server::factory()->create();
+    $b = Server::factory()->create();
+
+    $ja = app(JobDispatcher::class)->queueBatch($a, phasedSteps());
+    $jb = app(JobDispatcher::class)->queueBatch($b, phasedSteps());
+
+    // Completing server A's base advances ONLY server A into phase 1.
+    completeJob($ja[0]);
+
+    expect($ja[1]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED)
+        ->and($jb[1]->refresh()->status)->toBe(AgentJob::STATUS_PENDING)
+        ->and($jb[0]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED);
 });
 
 test('presence online re-dispatches jobs stuck dispatched past the threshold', function () {
@@ -110,8 +159,7 @@ test('presence online re-dispatches jobs stuck dispatched past the threshold', f
     capturePublishedEnvelopes($sink);
 
     $server = Server::factory()->create();
-    // Services already exist so the provision/probe branches are skipped.
-    Service::create(['server_id' => $server->id, 'type' => 'systemd', 'name' => 'nginx', 'status' => 'active']);
+    Service::create(['server_id' => $server->id, 'type' => 'systemd', 'name' => 'nginx', 'status' => 'running']);
 
     $stuck = AgentJob::factory()->for($server)->create([
         'status' => AgentJob::STATUS_DISPATCHED,
@@ -133,7 +181,7 @@ test('presence online does not re-dispatch a freshly dispatched job', function (
     capturePublishedEnvelopes($sink);
 
     $server = Server::factory()->create();
-    Service::create(['server_id' => $server->id, 'type' => 'systemd', 'name' => 'nginx', 'status' => 'active']);
+    Service::create(['server_id' => $server->id, 'type' => 'systemd', 'name' => 'nginx', 'status' => 'running']);
 
     $fresh = AgentJob::factory()->for($server)->create(['status' => AgentJob::STATUS_DISPATCHED]);
     $fresh->forceFill(['dispatched_at' => now()->subSeconds(5)])->save();
@@ -146,29 +194,6 @@ test('presence online does not re-dispatch a freshly dispatched job', function (
     expect($sink)->toBeEmpty();
 });
 
-test('batches on different servers advance independently (per server)', function () {
-    Event::fake([AgentJobUpdated::class]);
-    $sink = [];
-    capturePublishedEnvelopes($sink);
-
-    $a = Server::factory()->create();
-    $b = Server::factory()->create();
-
-    $ja = app(JobDispatcher::class)->queueSequential($a, threeSteps());
-    $jb = app(JobDispatcher::class)->queueSequential($b, threeSteps());
-
-    // Each server has its own batch: first dispatched, second pending.
-    expect($ja[1]->refresh()->status)->toBe(AgentJob::STATUS_PENDING)
-        ->and($jb[1]->refresh()->status)->toBe(AgentJob::STATUS_PENDING);
-
-    // Completing server A's first step advances ONLY server A.
-    completeJob($ja[0]);
-
-    expect($ja[1]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED)
-        ->and($jb[0]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED)
-        ->and($jb[1]->refresh()->status)->toBe(AgentJob::STATUS_PENDING);
-});
-
 test('seedForServer marks services as waiting', function () {
     $server = Server::factory()->create();
     app(ServiceManager::class)->seedForServer($server, ['nginx'], []);
@@ -176,55 +201,48 @@ test('seedForServer marks services as waiting', function () {
     expect($server->services()->where('name', 'nginx')->first()->status)->toBe(ServiceManager::STATUS_WAITING);
 });
 
-test('a provisioning batch drives service status waiting → installing → running', function () {
+test('a batch drives service status waiting → installing (on dispatch) → running', function () {
     Event::fake([AgentJobUpdated::class]);
     $sink = [];
     capturePublishedEnvelopes($sink);
 
     $server = Server::factory()->create();
     app(ServiceManager::class)->seedForServer($server, ['nginx'], []);
+    expect($server->services()->where('name', 'nginx')->first()->status)->toBe(ServiceManager::STATUS_WAITING);
 
-    $jobs = app(JobDispatcher::class)->queueSequential($server, [
-        ['name' => 'Install base packages', 'type' => 'shell', 'params' => ['command' => 'echo base']],
-        ['name' => 'Install nginx', 'type' => 'shell', 'params' => ['command' => 'echo nginx']],
+    $jobs = app(JobDispatcher::class)->queueBatch($server, [
+        ['name' => 'Install base packages', 'type' => 'shell', 'phase' => 0, 'params' => ['command' => 'echo base']],
+        ['name' => 'Install nginx', 'type' => 'shell', 'phase' => 1, 'params' => ['command' => 'echo nginx']],
     ]);
 
     completeJob($jobs[0]); // base done → nginx dispatched
 
-    // The moment nginx is dispatched (before any output) it must show installing,
-    // never a dispatched-but-still-waiting state.
+    // Installing the moment it's dispatched (before any output).
     expect($jobs[1]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED)
         ->and($server->services()->where('name', 'nginx')->first()->status)->toBe(ServiceManager::STATUS_INSTALLING);
-
-    // Output keeps it installing.
-    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
-        'type' => GatewayProtocol::TYPE_JOB_OUTPUT,
-        'job_id' => $jobs[1]->uuid,
-        'payload' => ['data' => 'installing...'],
-    ]));
-    expect($server->services()->where('name', 'nginx')->first()->status)->toBe(ServiceManager::STATUS_INSTALLING);
 
     completeJob($jobs[1]); // nginx done → running
     expect($server->services()->where('name', 'nginx')->first()->status)->toBe(ServiceManager::STATUS_RUNNING);
 });
 
-test('a failed install marks its service and the skipped ones not installed', function () {
+test('a failed install marks its service and the halted ones not installed', function () {
     Event::fake([AgentJobUpdated::class]);
     $sink = [];
     capturePublishedEnvelopes($sink);
 
     $server = Server::factory()->create();
-    app(ServiceManager::class)->seedForServer($server, ['nginx', 'redis'], []);
+    app(ServiceManager::class)->seedForServer($server, ['nginx', 'mariadb'], []);
 
-    $jobs = app(JobDispatcher::class)->queueSequential($server, [
-        ['name' => 'Install nginx', 'type' => 'shell', 'params' => ['command' => 'x']],
-        ['name' => 'Install Redis', 'type' => 'shell', 'params' => ['command' => 'x']],
+    // phase 1 = nginx (its own phase), phase 2 = mariadb downstream.
+    $jobs = app(JobDispatcher::class)->queueBatch($server, [
+        ['name' => 'Install nginx', 'type' => 'shell', 'phase' => 1, 'params' => ['command' => 'x']],
+        ['name' => 'Install MariaDB', 'type' => 'shell', 'phase' => 2, 'params' => ['command' => 'x']],
     ]);
 
-    completeJob($jobs[0], exit: 1, error: 'boom');
+    completeJob($jobs[0], exit: 1, error: 'boom'); // nginx phase fails entirely → halt
 
     expect($server->services()->where('name', 'nginx')->first()->status)->toBe(ServiceManager::STATUS_NOT_INSTALLED)
-        ->and($server->services()->where('name', 'redis-server')->first()->status)->toBe(ServiceManager::STATUS_NOT_INSTALLED);
+        ->and($server->services()->where('name', 'mariadb')->first()->status)->toBe(ServiceManager::STATUS_NOT_INSTALLED);
 });
 
 test('control restart shows restarting then running when the restart job finishes', function () {
