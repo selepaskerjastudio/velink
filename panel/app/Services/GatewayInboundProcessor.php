@@ -120,6 +120,14 @@ class GatewayInboundProcessor
                         $next = $job->nextInBatch();
                         if ($next !== null) {
                             $this->dispatcher->dispatchPending($next);
+                            // Mark its service installing the moment it's dispatched,
+                            // not only once output arrives, so the UI never shows a
+                            // dispatched step as "waiting".
+                            $this->serviceManager->setUnitsStatus(
+                                $next->server,
+                                $this->serviceManager->unitsForJobLabel((string) $next->label),
+                                ServiceManager::STATUS_INSTALLING,
+                            );
                         }
                     } else {
                         // A control job (e.g. "Restart nginx") finished — resolve

@@ -191,7 +191,12 @@ test('a provisioning batch drives service status waiting → installing → runn
 
     completeJob($jobs[0]); // base done → nginx dispatched
 
-    // nginx step starts producing output → installing
+    // The moment nginx is dispatched (before any output) it must show installing,
+    // never a dispatched-but-still-waiting state.
+    expect($jobs[1]->refresh()->status)->toBe(AgentJob::STATUS_DISPATCHED)
+        ->and($server->services()->where('name', 'nginx')->first()->status)->toBe(ServiceManager::STATUS_INSTALLING);
+
+    // Output keeps it installing.
     app(GatewayInboundProcessor::class)->handleInbound(json_encode([
         'type' => GatewayProtocol::TYPE_JOB_OUTPUT,
         'job_id' => $jobs[1]->uuid,
