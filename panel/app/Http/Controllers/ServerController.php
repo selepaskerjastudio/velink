@@ -121,6 +121,16 @@ class ServerController extends Controller
         ]);
     }
 
+    public function settings(Server $server): Response
+    {
+        return Inertia::render('servers/settings', [
+            'server' => [
+                ...$server->only(['name', 'hostname', 'public_ip', 'status']),
+                'id' => $server->uuid,
+            ],
+        ]);
+    }
+
     public function regenerateToken(Request $request, Server $server): RedirectResponse
     {
         $token = Str::random(48);

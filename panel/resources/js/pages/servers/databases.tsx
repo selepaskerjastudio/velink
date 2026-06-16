@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import echo from '@/echo';
-import AppLayout from '@/layouts/app-layout';
+import ServerLayout from '@/layouts/server-layout';
 import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type DatabaseEngine, type DatabaseInstanceSummary } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ChevronDownIcon } from 'lucide-react';
@@ -50,7 +50,7 @@ export default function ServersDatabases({
     databases,
     jobs,
 }: {
-    server: { id: string; name: string };
+    server: { id: string; name: string; public_ip: string | null; status: string };
     databases: DatabaseInstanceSummary[];
     jobs: AgentJob[];
 }) {
@@ -115,7 +115,7 @@ export default function ServersDatabases({
     ];
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <ServerLayout breadcrumbs={breadcrumbs} server={server}>
             <Head title={`Databases — ${server.name}`} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
@@ -278,6 +278,6 @@ export default function ServersDatabases({
                     </Card>
                 )}
             </div>
-        </AppLayout>
+        </ServerLayout>
     );
 }

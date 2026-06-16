@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Application;
+use App\Models\Server;
 use App\Models\Service;
 use App\Services\AuditLogger;
 use App\Services\WorkerService;
@@ -15,6 +16,38 @@ use Inertia\Response;
 class WorkerController extends Controller
 {
     private const NAME_REGEX = '/^[a-z][a-z0-9_]{0,30}$/';
+
+    public function serverIndex(Server $server): Response
+    {
+        $workers = $server->applications()
+            ->with(['services' => function ($query) {
+                $query->where('type', 'supervisor')->orderBy('name');
+            }])
+            ->orderBy('name')
+            ->get()
+            ->flatMap(fn ($app) => $app->services->map(fn ($w) => [
+                'id' => $w->id,
+                'name' => $w->name,
+                'command' => $w->command,
+                'status' => $w->status,
+                'config' => $w->config,
+                'application' => [
+                    'id' => $app->uuid,
+                    'name' => $app->name,
+                ],
+            ]))
+            ->values();
+
+        return Inertia::render('servers/workers', [
+            'server' => [
+                'id' => $server->uuid,
+                'name' => $server->name,
+                'public_ip' => $server->public_ip,
+                'status' => $server->status,
+            ],
+            'workers' => $workers,
+        ]);
+    }
 
     public function index(Application $application): Response
     {

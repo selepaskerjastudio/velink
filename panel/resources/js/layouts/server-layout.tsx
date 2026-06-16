@@ -46,8 +46,8 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
     ];
 
     const moreNavItems = [
-        { title: 'Activity Log', url: '/audit-logs', icon: ScrollText, exact: false },
-        { title: 'Settings', url: '/settings', icon: Settings, exact: false },
+        { title: 'Activity Log', url: `/servers/${server.id}/activity`, icon: ScrollText, exact: false },
+        { title: 'Settings', url: `/servers/${server.id}/settings`, icon: Settings, exact: false },
     ];
 
     return (

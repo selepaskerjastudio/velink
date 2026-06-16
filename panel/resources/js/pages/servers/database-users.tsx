@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import echo from '@/echo';
-import AppLayout from '@/layouts/app-layout';
+import ServerLayout from '@/layouts/server-layout';
 import {
     type AgentJob,
     type AgentJobStatus,
@@ -164,7 +164,7 @@ export default function ServerDatabaseUsers({
     databases,
     jobs,
 }: {
-    server: { id: string; name: string };
+    server: { id: string; name: string; public_ip: string | null; status: string };
     databaseUsers: DatabaseUserSummary[];
     databases: DatabaseInstanceSummary[];
     jobs: AgentJob[];
@@ -232,7 +232,7 @@ export default function ServerDatabaseUsers({
     ];
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <ServerLayout breadcrumbs={breadcrumbs} server={server}>
             <Head title={`Database users — ${server.name}`} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
@@ -378,6 +378,6 @@ export default function ServerDatabaseUsers({
                     </Card>
                 )}
             </div>
-        </AppLayout>
+        </ServerLayout>
     );
 }

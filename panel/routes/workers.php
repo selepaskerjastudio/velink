@@ -4,6 +4,7 @@ use App\Http\Controllers\WorkerController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function () {
+    Route::get('servers/{server}/workers', [WorkerController::class, 'serverIndex'])->name('servers.workers');
     Route::get('applications/{application}/workers', [WorkerController::class, 'index'])->name('workers.index');
     Route::post('applications/{application}/workers', [WorkerController::class, 'store'])->name('workers.store');
     Route::patch('workers/{worker}', [WorkerController::class, 'update'])->name('workers.update');

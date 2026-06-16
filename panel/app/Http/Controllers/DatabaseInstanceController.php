@@ -38,7 +38,12 @@ class DatabaseInstanceController extends Controller
     public function index(Server $server): Response
     {
         return Inertia::render('servers/databases', [
-            'server' => ['id' => $server->uuid, 'name' => $server->name],
+            'server' => [
+                'id' => $server->uuid,
+                'name' => $server->name,
+                'public_ip' => $server->public_ip,
+                'status' => $server->status,
+            ],
             'databases' => $server->databases()
                 ->orderBy('name')
                 ->get(['id', 'engine', 'name', 'charset', 'collation']),

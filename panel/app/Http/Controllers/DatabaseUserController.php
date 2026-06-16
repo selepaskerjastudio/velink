@@ -23,7 +23,12 @@ class DatabaseUserController extends Controller
     public function index(Server $server): Response
     {
         return Inertia::render('servers/database-users', [
-            'server' => ['id' => $server->uuid, 'name' => $server->name],
+            'server' => [
+                'id' => $server->uuid,
+                'name' => $server->name,
+                'public_ip' => $server->public_ip,
+                'status' => $server->status,
+            ],
             'databaseUsers' => $server->databaseUsers()
                 ->orderBy('username')
                 ->get(['id', 'engine', 'username', 'host', 'grants']),

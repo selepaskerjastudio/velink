@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use App\Models\Server;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -25,6 +26,33 @@ class AuditLogController extends Controller
             ]);
 
         return Inertia::render('audit-logs/index', [
+            'logs' => $logs,
+        ]);
+    }
+
+    public function serverIndex(Server $server): Response
+    {
+        $logs = AuditLog::with(['user:id,name'])
+            ->where('server_id', $server->id)
+            ->latest('id')
+            ->limit(200)
+            ->get()
+            ->map(fn (AuditLog $log) => [
+                'id' => $log->id,
+                'action' => $log->action,
+                'description' => $log->description,
+                'ip_address' => $log->ip_address,
+                'created_at' => $log->created_at,
+                'user' => $log->user ? ['name' => $log->user->name] : null,
+            ]);
+
+        return Inertia::render('servers/activity', [
+            'server' => [
+                'id' => $server->uuid,
+                'name' => $server->name,
+                'public_ip' => $server->public_ip,
+                'status' => $server->status,
+            ],
             'logs' => $logs,
         ]);
     }
