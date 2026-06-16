@@ -41,7 +41,10 @@ class ProvisioningCatalog
         return match ($component) {
             'base' => [$this->shell('Install base packages', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
+                # Stop auto-update daemons that hold the dpkg lock on fresh VMs.
+                systemctl stop unattended-upgrades apt-daily.service apt-daily-upgrade.service 2>/dev/null || true
+                systemctl mask unattended-upgrades 2>/dev/null || true
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get update -y
                 flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release software-properties-common apt-transport-https
                 SH)],
 

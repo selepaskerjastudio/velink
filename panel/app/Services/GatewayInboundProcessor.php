@@ -82,6 +82,19 @@ class GatewayInboundProcessor
                     $job->markSucceeded($exit);
                     if ($job->label === ServiceManager::PROBE_LABEL) {
                         $this->serviceManager->seedFromProbeOutput($job->server, $job->output ?? '');
+                        // Probe found nothing installed → escalate to full provisioning.
+                        if (! $job->server->services()->where('type', 'systemd')->exists()) {
+                            $this->provisionService->provision(
+                                $job->server,
+                                self::AUTO_COMPONENTS,
+                                ['php_versions' => self::AUTO_PHP_VERSIONS],
+                            );
+                            $this->serviceManager->seedForServer(
+                                $job->server,
+                                self::AUTO_COMPONENTS,
+                                self::AUTO_PHP_VERSIONS,
+                            );
+                        }
                     }
                 } else {
                     $job->markFailed($exit, $body['error'] ?? null);
