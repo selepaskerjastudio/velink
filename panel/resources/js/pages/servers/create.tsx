@@ -22,10 +22,6 @@ const breadcrumbs: BreadcrumbItem[] = [
 export default function ServersCreate() {
     const { data, setData, post, processing, errors } = useForm({
         name: '',
-        hostname: '',
-        public_ip: '',
-        private_ip: '',
-        os: '',
     });
 
     const submit: FormEventHandler = (e) => {
@@ -53,50 +49,9 @@ export default function ServersCreate() {
                                     placeholder="e.g. web-01"
                                 />
                                 <InputError message={errors.name} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="hostname">Hostname</Label>
-                                <Input
-                                    id="hostname"
-                                    value={data.hostname}
-                                    onChange={(e) => setData('hostname', e.target.value)}
-                                    placeholder="e.g. web-01.internal"
-                                />
-                                <InputError message={errors.hostname} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="public_ip">Public IP</Label>
-                                <Input
-                                    id="public_ip"
-                                    value={data.public_ip}
-                                    onChange={(e) => setData('public_ip', e.target.value)}
-                                    placeholder="e.g. 203.0.113.10"
-                                />
-                                <InputError message={errors.public_ip} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="private_ip">Private IP</Label>
-                                <Input
-                                    id="private_ip"
-                                    value={data.private_ip}
-                                    onChange={(e) => setData('private_ip', e.target.value)}
-                                    placeholder="e.g. 10.0.0.10"
-                                />
-                                <InputError message={errors.private_ip} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="os">Operating System</Label>
-                                <Input
-                                    id="os"
-                                    value={data.os}
-                                    onChange={(e) => setData('os', e.target.value)}
-                                    placeholder="e.g. Ubuntu 24.04"
-                                />
-                                <InputError message={errors.os} />
+                                <p className="text-sm text-muted-foreground">
+                                    Hostname, IP addresses, and OS will be detected automatically when the agent connects.
+                                </p>
                             </div>
 
                             <Button type="submit" disabled={processing}>

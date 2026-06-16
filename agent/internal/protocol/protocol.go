@@ -26,6 +26,7 @@ const (
 	TypeJobResult = "job_result"
 	TypeError     = "error"
 	TypeMetrics   = "metrics"
+	TypeSysinfo   = "sysinfo"
 )
 
 // Now returns the current time in unix milliseconds.

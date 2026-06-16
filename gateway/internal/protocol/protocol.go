@@ -38,6 +38,10 @@ const (
 	TypeJobResult = "job_result"
 	// TypeError reports a transport/protocol level error.
 	TypeError = "error"
+	// TypeSysinfo carries static system metadata (hostname, private IP, OS)
+	// sent by the agent once on connect. The gateway enriches it with the
+	// agent's public IP before forwarding to the panel.
+	TypeSysinfo = "sysinfo"
 )
 
 // Presence status values.

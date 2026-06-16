@@ -17,6 +17,7 @@ import (
 	"github.com/velink/agent/internal/executor"
 	"github.com/velink/agent/internal/metrics"
 	"github.com/velink/agent/internal/protocol"
+	"github.com/velink/agent/internal/sysinfo"
 )
 
 const (
@@ -96,6 +97,18 @@ func (c *Client) connectAndServe(ctx context.Context, onConnected func()) error 
 
 	send := make(chan protocol.Envelope, 64)
 	send <- protocol.Envelope{Type: protocol.TypeHello, ServerID: c.cfg.ServerID, Timestamp: protocol.Now()}
+
+	// Immediately follow hello with a sysinfo message so the panel can
+	// populate hostname, private IP, and OS without a separate RPC.
+	info := sysinfo.Collect()
+	if sysinfoPayload, err := json.Marshal(info); err == nil {
+		send <- protocol.Envelope{
+			Type:      protocol.TypeSysinfo,
+			ServerID:  c.cfg.ServerID,
+			Payload:   json.RawMessage(sysinfoPayload),
+			Timestamp: protocol.Now(),
+		}
+	}
 
 	go c.writePump(connCtx, ws, send)
 	go c.heartbeat(connCtx, send)

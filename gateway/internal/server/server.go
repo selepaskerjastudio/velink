@@ -3,8 +3,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -93,10 +95,17 @@ func (s *Server) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// Capture the agent's public IP from the TCP connection before the WS
+	// upgrade hijacks the ResponseWriter. Used to enrich sysinfo messages.
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = r.RemoteAddr
+	}
+
 	s.log.Info("agent connected", "server_id", info.ID, "name", info.Name, "version", agentVersion, "agents", s.hub.Count())
 
 	go s.writePump(ctx, ws, conn)
-	s.readPump(ctx, cancel, ws, conn)
+	s.readPump(ctx, cancel, ws, conn, remoteHost)
 
 	s.log.Info("agent disconnected", "server_id", info.ID, "agents", s.hub.Count()-1)
 }
@@ -123,8 +132,9 @@ func (s *Server) writePump(ctx context.Context, ws *websocket.Conn, conn *hub.Co
 }
 
 // readPump consumes inbound envelopes, refreshing presence on heartbeats and
-// forwarding everything else to the panel via the bridge.
-func (s *Server) readPump(ctx context.Context, cancel context.CancelFunc, ws *websocket.Conn, conn *hub.Conn) {
+// forwarding everything else to the panel via the bridge. remoteAddr is the
+// agent's public IP address, used to enrich sysinfo messages.
+func (s *Server) readPump(ctx context.Context, cancel context.CancelFunc, ws *websocket.Conn, conn *hub.Conn, remoteAddr string) {
 	defer cancel()
 	for {
 		var env protocol.Envelope
@@ -150,12 +160,43 @@ func (s *Server) readPump(ctx context.Context, cancel context.CancelFunc, ws *we
 		case protocol.TypeHello:
 			// Connection-level greeting; presence is already set. Nothing to do
 			// in the skeleton beyond acknowledging it exists.
+		case protocol.TypeSysinfo:
+			// Enrich the agent-supplied payload with the public IP observed by
+			// the gateway (the agent cannot know its own NAT-translated address).
+			env.Payload = injectPublicIP(env.Payload, remoteAddr)
+			if err := s.bridge.PublishInbound(ctx, env); err != nil {
+				s.log.Warn("publish inbound failed", "server_id", conn.ServerID, "error", err)
+			}
 		default:
 			if err := s.bridge.PublishInbound(ctx, env); err != nil {
 				s.log.Warn("publish inbound failed", "server_id", conn.ServerID, "error", err)
 			}
 		}
 	}
+}
+
+// injectPublicIP merges publicIP into the JSON payload under the key
+// "public_ip". Returns the original payload unchanged if publicIP is empty,
+// a loopback address, or if the payload cannot be parsed.
+func injectPublicIP(payload json.RawMessage, publicIP string) json.RawMessage {
+	if publicIP == "" || publicIP == "127.0.0.1" || publicIP == "::1" {
+		return payload
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(payload, &m); err != nil {
+		return payload
+	}
+	if m == nil {
+		m = make(map[string]any)
+	}
+	m["public_ip"] = publicIP
+
+	enriched, err := json.Marshal(m)
+	if err != nil {
+		return payload
+	}
+	return json.RawMessage(enriched)
 }
 
 func bearerToken(header string) string {

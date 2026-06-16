@@ -50,6 +50,8 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
         { title: 'Settings', url: `/servers/${server.id}/settings`, icon: Settings, exact: false },
     ];
 
+    const isPending = server.status === 'pending';
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -74,7 +76,7 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
             <SidebarContent>
                 <SidebarGroup className="px-2 py-0">
                     <SidebarMenu>
-                        {mainNavItems.map((item) => (
+                        {(isPending ? mainNavItems.slice(0, 1) : mainNavItems).map((item) => (
                             <SidebarMenuItem key={item.title}>
                                 <SidebarMenuButton asChild isActive={isActive(item.url, item.exact)}>
                                     <Link href={item.url} prefetch>
@@ -87,37 +89,41 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
                     </SidebarMenu>
                 </SidebarGroup>
 
-                <SidebarGroup className="px-2 py-0">
-                    <SidebarGroupLabel>Utility</SidebarGroupLabel>
-                    <SidebarMenu>
-                        {utilityNavItems.map((item) => (
-                            <SidebarMenuItem key={item.title}>
-                                <SidebarMenuButton asChild isActive={isActive(item.url, item.exact)}>
-                                    <Link href={item.url} prefetch>
-                                        <item.icon />
-                                        <span>{item.title}</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        ))}
-                    </SidebarMenu>
-                </SidebarGroup>
+                {!isPending && (
+                    <>
+                        <SidebarGroup className="px-2 py-0">
+                            <SidebarGroupLabel>Utility</SidebarGroupLabel>
+                            <SidebarMenu>
+                                {utilityNavItems.map((item) => (
+                                    <SidebarMenuItem key={item.title}>
+                                        <SidebarMenuButton asChild isActive={isActive(item.url, item.exact)}>
+                                            <Link href={item.url} prefetch>
+                                                <item.icon />
+                                                <span>{item.title}</span>
+                                            </Link>
+                                        </SidebarMenuButton>
+                                    </SidebarMenuItem>
+                                ))}
+                            </SidebarMenu>
+                        </SidebarGroup>
 
-                <SidebarGroup className="px-2 py-0">
-                    <SidebarGroupLabel>More</SidebarGroupLabel>
-                    <SidebarMenu>
-                        {moreNavItems.map((item) => (
-                            <SidebarMenuItem key={item.title}>
-                                <SidebarMenuButton asChild isActive={isActive(item.url, item.exact)}>
-                                    <Link href={item.url} prefetch>
-                                        <item.icon />
-                                        <span>{item.title}</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        ))}
-                    </SidebarMenu>
-                </SidebarGroup>
+                        <SidebarGroup className="px-2 py-0">
+                            <SidebarGroupLabel>More</SidebarGroupLabel>
+                            <SidebarMenu>
+                                {moreNavItems.map((item) => (
+                                    <SidebarMenuItem key={item.title}>
+                                        <SidebarMenuButton asChild isActive={isActive(item.url, item.exact)}>
+                                            <Link href={item.url} prefetch>
+                                                <item.icon />
+                                                <span>{item.title}</span>
+                                            </Link>
+                                        </SidebarMenuButton>
+                                    </SidebarMenuItem>
+                                ))}
+                            </SidebarMenu>
+                        </SidebarGroup>
+                    </>
+                )}
             </SidebarContent>
 
             <SidebarFooter>

@@ -22,6 +22,7 @@ final class GatewayProtocol
     public const TYPE_JOB_RESULT = 'job_result';
     public const TYPE_ERROR = 'error';
     public const TYPE_METRICS = 'metrics';
+    public const TYPE_SYSINFO = 'sysinfo';
 
     public const STATUS_ONLINE = 'online';
     public const STATUS_OFFLINE = 'offline';

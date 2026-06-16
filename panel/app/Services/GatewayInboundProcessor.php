@@ -27,9 +27,15 @@ class GatewayInboundProcessor
             return;
         }
 
-        // Metrics have no job_id — handle them before the job_id check.
+        // Metrics and sysinfo have no job_id — handle them before the job_id check.
         if (($env['type'] ?? '') === GatewayProtocol::TYPE_METRICS) {
             $this->handleMetrics($env);
+
+            return;
+        }
+
+        if (($env['type'] ?? '') === GatewayProtocol::TYPE_SYSINFO) {
+            $this->handleSysinfo($env);
 
             return;
         }
@@ -99,6 +105,36 @@ class GatewayInboundProcessor
         ServerMetric::where('server_id', $server->id)
             ->where('recorded_at', '<', now()->subHours(2))
             ->delete();
+    }
+
+    /**
+     * Handle a sysinfo envelope: auto-fill empty server fields from agent-reported data.
+     *
+     * Fields are only written if the current DB value is null/empty, so user-provided
+     * values are never overwritten.
+     */
+    private function handleSysinfo(array $env): void
+    {
+        $serverId = $env['server_id'] ?? null;
+        $server = $serverId ? Server::where('uuid', $serverId)->first() : null;
+        if (! $server) {
+            return;
+        }
+
+        $body = is_array($env['payload'] ?? null) ? $env['payload'] : [];
+        $changed = false;
+
+        foreach (['hostname', 'private_ip', 'public_ip', 'os'] as $field) {
+            $value = isset($body[$field]) ? (string) $body[$field] : null;
+            if ($value && empty($server->$field)) {
+                $server->$field = $value;
+                $changed = true;
+            }
+        }
+
+        if ($changed) {
+            $server->save();
+        }
     }
 
     /**

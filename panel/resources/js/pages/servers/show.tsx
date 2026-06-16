@@ -18,9 +18,29 @@ import {
     type SharedData,
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon, ClipboardIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+
+function CopyCommand({ command }: { command: string }) {
+    const [copied, setCopied] = useState(false);
+
+    const copy = () => {
+        navigator.clipboard.writeText(command).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    return (
+        <div className="mt-2 flex max-w-[640px] items-center gap-2">
+            <pre className="bg-muted flex-1 rounded-md p-3 text-xs whitespace-pre-wrap break-all">{command}</pre>
+            <Button variant="outline" size="icon" className="shrink-0" onClick={copy} aria-label="Copy command">
+                {copied ? <CheckIcon className="h-4 w-4" /> : <ClipboardIcon className="h-4 w-4" />}
+            </Button>
+        </div>
+    );
+}
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' {
     switch (status) {
@@ -190,22 +210,20 @@ export default function ServersShow({
             <Head title={server.name} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
-                {/* Flash alert */}
-                {flash.installCommand && (
-                    <Alert>
-                        <TriangleAlertIcon />
-                        <AlertTitle>Install the agent on this server</AlertTitle>
-                        <AlertDescription>
-                            <p>Run this command on the target server. The token is shown only once — copy it now.</p>
-                            <pre className="bg-muted mt-2 overflow-x-auto rounded-md p-3 text-xs">{flash.installCommand}</pre>
-                            {flash.plainAgentToken && (
-                                <p className="mt-2 text-sm">
-                                    Agent token: <span className="font-mono">{flash.plainAgentToken}</span>
-                                </p>
-                            )}
-                        </AlertDescription>
-                    </Alert>
-                )}
+                {/* Server header */}
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">{server.name}</h1>
+                        <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-3 text-sm">
+                            {server.os && <span>{server.os}</span>}
+                            <span>x86_64</span>
+                            {server.agent_version && <span>Agent: {server.agent_version}</span>}
+                        </div>
+                    </div>
+                    <Badge variant={statusVariant(liveStatus)} className="mt-1 shrink-0">
+                        {liveStatus}
+                    </Badge>
+                </div>
 
                 {/* Agent not connected card */}
                 {!isOnline && !flash.installCommand && isPending && (
@@ -230,20 +248,22 @@ export default function ServersShow({
                     </Card>
                 )}
 
-                {/* Server header */}
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold tracking-tight">{server.name}</h1>
-                        <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-3 text-sm">
-                            {server.os && <span>{server.os}</span>}
-                            <span>x86_64</span>
-                            {server.agent_version && <span>Agent: {server.agent_version}</span>}
-                        </div>
-                    </div>
-                    <Badge variant={statusVariant(liveStatus)} className="mt-1 shrink-0">
-                        {liveStatus}
-                    </Badge>
-                </div>
+                {/* Flash alert */}
+                {flash.installCommand && (
+                    <Alert>
+                        <TriangleAlertIcon />
+                        <AlertTitle>Install the agent on this server</AlertTitle>
+                        <AlertDescription>
+                            <p>Run this command on the target server. The token is shown only once — copy it now.</p>
+                            <CopyCommand command={flash.installCommand} />
+                            {flash.plainAgentToken && (
+                                <p className="mt-2 text-sm">
+                                    Agent token: <span className="font-mono">{flash.plainAgentToken}</span>
+                                </p>
+                            )}
+                        </AlertDescription>
+                    </Alert>
+                )}
 
                 {!isPending && (
                     <>
@@ -583,39 +603,41 @@ export default function ServersShow({
                     </>
                 )}
 
-                {/* Server details card */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Server details</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid gap-2 text-sm">
-                        {(
-                            [
-                                ['Hostname', server.hostname],
-                                ['Public IP', server.public_ip],
-                                ['Private IP', server.private_ip],
-                                ['OS', server.os],
-                                ['Agent version', server.agent_version],
-                                ['Last seen', server.last_seen_at ?? 'Never'],
-                            ] as [string, string | null | undefined][]
-                        ).map(([label, value]) => (
-                            <div key={label} className="flex justify-between gap-2">
-                                <span className="text-muted-foreground shrink-0">{label}</span>
-                                <span className="text-right">{value ?? '—'}</span>
-                            </div>
-                        ))}
-                    </CardContent>
-                    <CardFooter>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={tokenForm.processing}
-                            onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
-                        >
-                            Regenerate install command
-                        </Button>
-                    </CardFooter>
-                </Card>
+                {/* Server details card — hidden while agent hasn't connected yet */}
+                {!isPending && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Server details</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-2 text-sm">
+                            {(
+                                [
+                                    ['Hostname', server.hostname],
+                                    ['Public IP', server.public_ip],
+                                    ['Private IP', server.private_ip],
+                                    ['OS', server.os],
+                                    ['Agent version', server.agent_version],
+                                    ['Last seen', server.last_seen_at ?? 'Never'],
+                                ] as [string, string | null | undefined][]
+                            ).map(([label, value]) => (
+                                <div key={label} className="flex justify-between gap-2">
+                                    <span className="text-muted-foreground shrink-0">{label}</span>
+                                    <span className="text-right">{value ?? '—'}</span>
+                                </div>
+                            ))}
+                        </CardContent>
+                        <CardFooter>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={tokenForm.processing}
+                                onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
+                            >
+                                Regenerate install command
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                )}
 
                 {/* Manage quick links */}
                 {!isPending && (
