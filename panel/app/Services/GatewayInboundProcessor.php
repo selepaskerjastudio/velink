@@ -133,9 +133,9 @@ class GatewayInboundProcessor
             'recorded_at'    => now(),
         ]);
 
-        // Keep only the last 2 hours (~240 readings at 30 s intervals).
+        // Keep only the last 7 days (~20 160 readings at 30 s intervals per server).
         ServerMetric::where('server_id', $server->id)
-            ->where('recorded_at', '<', now()->subHours(2))
+            ->where('recorded_at', '<', now()->subDays(7))
             ->delete();
 
         // Check metrics against alert thresholds
