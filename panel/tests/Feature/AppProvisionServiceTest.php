@@ -61,7 +61,7 @@ test('app templates expose the expected vars and paths', function () {
 
 test('web_root and stack_mode vars follow the app type and mode', function () {
     $static = Application::factory()->create(['app_type' => 'static', 'root_path' => '/home/velink/webapps/s', 'app_slug' => 's']);
-    expect(AppTemplates::vars($static)['web_root'])->toBe('/home/velink/webapps/s');
+    expect(AppTemplates::vars($static)['web_root'])->toBe('/home/velink/webapps/s/public');
 
     $wp = Application::factory()->create(['app_type' => 'wordpress', 'root_path' => '/home/velink/webapps/w', 'app_slug' => 'w']);
     expect(AppTemplates::vars($wp)['web_root'])->toBe('/home/velink/webapps/w');

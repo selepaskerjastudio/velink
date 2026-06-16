@@ -190,8 +190,8 @@ class AppProvisionService
 
         return match ($app->app_type) {
             'static' => <<<SH
-                if [ ! -f {$root}/index.html ]; then
-                    printf '%s\\n' '<h1>It works!</h1>' > {$root}/index.html
+                if [ ! -f {$root}/public/index.html ]; then
+                    printf '%s\\n' '<h1>It works!</h1>' > {$root}/public/index.html
                 fi
                 SH,
             'wordpress' => ':',
