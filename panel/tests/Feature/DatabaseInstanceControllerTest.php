@@ -172,6 +172,21 @@ test('database names must be unique per server', function () {
     expect(DatabaseInstance::where('server_id', $server->id)->count())->toBe(1);
 });
 
+test('the same database name is allowed on a different engine', function () {
+    mockDbGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    DatabaseInstance::create(['server_id' => $server->id, 'engine' => 'mariadb', 'name' => 'app']);
+
+    // Same name, different engine → allowed.
+    $this->post(route('databases.store', $server), ['engine' => 'postgres', 'name' => 'app'])
+        ->assertRedirect(route('databases.index', $server));
+
+    expect(DatabaseInstance::where('server_id', $server->id)->where('name', 'app')->count())->toBe(2);
+});
+
 test('the same database name can be used on different servers', function () {
     mockDbGatewayPublish();
 

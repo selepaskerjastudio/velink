@@ -108,7 +108,9 @@ class DatabaseInstanceController extends Controller
                         $fail('The '.$attribute.' is a reserved name.');
                     }
                 },
-                Rule::unique('databases', 'name')->where('server_id', $server->id),
+                Rule::unique('databases', 'name')
+                    ->where('server_id', $server->id)
+                    ->where('engine', $request->input('engine')),
             ],
             'charset' => ['nullable', 'string', 'max:64', 'regex:'.self::CHARSET_REGEX],
             'collation' => ['nullable', 'string', 'max:64', 'regex:'.self::CHARSET_REGEX],

@@ -50,13 +50,14 @@ class DatabaseUserController extends Controller
         ]);
 
         $exists = $server->databaseUsers()
+            ->where('engine', $validated['engine'])
             ->where('username', $validated['username'])
             ->where('host', $validated['host'])
             ->exists();
 
         if ($exists) {
             throw ValidationException::withMessages([
-                'username' => 'A database user with this username and host already exists on this server.',
+                'username' => 'A database user with this username and host already exists for this engine.',
             ]);
         }
 
@@ -154,7 +155,7 @@ class DatabaseUserController extends Controller
             }
 
             $allowed = DatabaseUserProvisionService::PRIVILEGES[$engine] ?? [];
-            $databaseNames = $server->databases()->pluck('name')->all();
+            $databaseNames = $server->databases()->where('engine', $engine)->pluck('name')->all();
 
             foreach ($value as $database => $privileges) {
                 if (! is_string($database) || preg_match(self::DB_NAME_REGEX, $database) !== 1) {

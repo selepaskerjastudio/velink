@@ -375,3 +375,28 @@ test('resetting with a blank password generates one', function () {
 
     expect(strlen($user->refresh()->password))->toBe(24);
 });
+
+test('the same username is allowed on a different engine', function () {
+    mockDbUserGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    DatabaseUser::create([
+        'server_id' => $server->id,
+        'engine' => 'mariadb',
+        'username' => 'appuser',
+        'password' => 'secret',
+        'host' => '%',
+        'grants' => [],
+    ]);
+
+    // Same username + host, different engine → allowed.
+    $this->post(route('database-users.store', $server), [
+        'engine' => 'postgres',
+        'username' => 'appuser',
+        'host' => '%',
+    ])->assertRedirect(route('databases.index', $server));
+
+    expect(DatabaseUser::where('server_id', $server->id)->where('username', 'appuser')->count())->toBe(2);
+});
