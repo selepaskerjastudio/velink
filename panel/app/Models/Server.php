@@ -80,4 +80,9 @@ class Server extends Model
     {
         return $this->hasMany(ServerMetric::class);
     }
+
+    public function latestMetric()
+    {
+        return $this->hasOne(ServerMetric::class)->latestOfMany();
+    }
 }

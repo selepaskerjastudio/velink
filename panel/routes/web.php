@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GitHubRepoController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -23,9 +24,7 @@ Route::get('install/bin/{file}', function (string $file) {
 })->name('install.binary');
 
 Route::middleware(['auth'])->group(function () {
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', DashboardController::class)->name('dashboard');
 
     Route::get('github/repos', [GitHubRepoController::class, 'search'])->name('github.repos');
 
