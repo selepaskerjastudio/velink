@@ -9,11 +9,20 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
-export default function ApplicationsCreate({ server, phpVersions }: { server: { id: string; name: string }; phpVersions: string[] }) {
+function filterPhpVersions(versions: string[], os: string | null | undefined): string[] {
+    if (!os) return versions;
+    const m = os.match(/Ubuntu\s+(\d+)/i);
+    if (!m) return versions;
+    return parseInt(m[1], 10) >= 24 ? versions.filter((v) => v !== '7.4') : versions;
+}
+
+export default function ApplicationsCreate({ server, phpVersions }: { server: { id: string; name: string; os?: string | null }; phpVersions: string[] }) {
+    const available = filterPhpVersions(phpVersions, server.os);
+
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         domain: '',
-        php_version: phpVersions[phpVersions.length - 1] ?? '',
+        php_version: available[available.length - 1] ?? '',
     });
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -67,7 +76,7 @@ export default function ApplicationsCreate({ server, phpVersions }: { server: { 
                                         <SelectValue placeholder="Select a PHP version" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {phpVersions.map((version) => (
+                                        {available.map((version) => (
                                             <SelectItem key={version} value={version}>
                                                 PHP {version}
                                             </SelectItem>

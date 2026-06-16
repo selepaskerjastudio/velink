@@ -77,7 +77,7 @@ export default function ApplicationsShow({
     defaultDeployScript,
 }: {
     application: Application;
-    server: { id: string; name: string; status: string };
+    server: { id: string; name: string; status: string; os?: string | null };
     phpVersions: string[];
     jobs: AgentJob[];
     deployments: Deployment[];
@@ -85,6 +85,11 @@ export default function ApplicationsShow({
     defaultDeployScript: string;
 }) {
     const { errors: pageErrors } = usePage().props as { errors: Record<string, string> };
+
+    const availablePhpVersions = (() => {
+        const m = server.os?.match(/Ubuntu\s+(\d+)/i);
+        return m && parseInt(m[1], 10) >= 24 ? phpVersions.filter((v) => v !== '7.4') : phpVersions;
+    })();
 
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs ?? []);
     const [liveDeployments, setLiveDeployments] = useState<Deployment[]>(deployments ?? []);
@@ -289,7 +294,7 @@ export default function ApplicationsShow({
                                 <SelectValue placeholder="Select a PHP version" />
                             </SelectTrigger>
                             <SelectContent>
-                                {phpVersions.map((version) => (
+                                {availablePhpVersions.map((version) => (
                                     <SelectItem key={version} value={version}>
                                         PHP {version}
                                     </SelectItem>

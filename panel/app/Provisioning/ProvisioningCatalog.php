@@ -24,7 +24,7 @@ class ProvisioningCatalog
         'supervisor', 'redis', 'mariadb', 'postgresql', 'mongodb',
     ];
 
-    public const PHP_VERSIONS = ['8.1', '8.2', '8.3', '8.4'];
+    public const PHP_VERSIONS = ['7.4', '8.1', '8.2', '8.3', '8.4'];
 
     private const NODE_MAJOR = '20';
     private const PG_BASE = 'https://apt.postgresql.org/pub/repos/apt';

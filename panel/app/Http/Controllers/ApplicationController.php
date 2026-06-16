@@ -52,7 +52,7 @@ class ApplicationController extends Controller
     public function create(Server $server): Response
     {
         return Inertia::render('applications/create', [
-            'server' => ['id' => $server->uuid, 'name' => $server->name],
+            'server' => ['id' => $server->uuid, 'name' => $server->name, 'os' => $server->os],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
         ]);
     }
@@ -107,7 +107,7 @@ class ApplicationController extends Controller
                 'webhook_url_gitlab' => route('webhooks.gitlab', $application),
                 'ssl_provider' => null,
             ],
-            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'status' => $application->server->status],
+            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'status' => $application->server->status, 'os' => $application->server->os],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
             'defaultDeployScript' => DeployTemplates::DEFAULT_SCRIPT,
             'gitCredentials' => auth()->user()->gitCredentials()
