@@ -64,6 +64,10 @@ class ProvisioningCatalog
 
             'composer' => [$this->shell('Install composer', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
+                # The agent runs provisioning steps concurrently, so PHP may still
+                # be installing — composer needs the `php` binary, so wait for it.
+                for _ in $(seq 1 120); do command -v php >/dev/null 2>&1 && break; sleep 5; done
+                command -v php >/dev/null 2>&1 || { echo "php not available after waiting"; exit 1; }
                 php -r "copy('https://getcomposer.org/installer', '/tmp/composer-setup.php');"
                 php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
                 rm -f /tmp/composer-setup.php
@@ -125,6 +129,9 @@ class ProvisioningCatalog
         $versions = $opts['php_versions'] ?? ['8.3'];
         $steps = [$this->shell('Add ondrej/php PPA', <<<'SH'
             export DEBIAN_FRONTEND=noninteractive
+            # add-apt-repository ships in software-properties-common (base step),
+            # which runs concurrently — wait for it before adding the PPA.
+            for _ in $(seq 1 120); do command -v add-apt-repository >/dev/null 2>&1 && break; sleep 5; done
             flock -w 300 /var/lib/dpkg/lock-frontend add-apt-repository -y ppa:ondrej/php
             flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
             SH)];

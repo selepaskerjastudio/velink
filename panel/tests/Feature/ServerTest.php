@@ -46,3 +46,22 @@ test('a server can be created and shows the agent token once', function () {
         ->where('flash.installCommand', fn ($command) => str_contains($command, $server->uuid))
     );
 });
+
+test('the connect page redirects to the server dashboard when already online', function () {
+    $this->actingAs(User::factory()->create());
+
+    $server = Server::factory()->online()->create();
+
+    $this->get(route('servers.connect', $server))
+        ->assertRedirect(route('servers.show', $server));
+});
+
+test('the connect page renders for a server that is not yet online', function () {
+    $this->actingAs(User::factory()->create());
+
+    $server = Server::factory()->create(['status' => 'pending']);
+
+    $this->get(route('servers.connect', $server))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('servers/connect'));
+});

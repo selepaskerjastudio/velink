@@ -75,8 +75,14 @@ class ServerController extends Controller
         ]);
     }
 
-    public function connect(Server $server): Response
+    public function connect(Server $server): Response|RedirectResponse
     {
+        // Once the agent is connected there is nothing left to install — send
+        // the user straight to the server dashboard instead of the setup page.
+        if ($server->status === 'online') {
+            return redirect()->route('servers.show', $server);
+        }
+
         return Inertia::render('servers/connect', [
             'server' => [
                 'id' => $server->uuid,
