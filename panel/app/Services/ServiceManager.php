@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AgentJob;
 use App\Models\Server;
 use App\Models\Service;
+use App\Provisioning\ProvisioningCatalog;
 use InvalidArgumentException;
 
 /**
@@ -33,6 +34,9 @@ class ServiceManager
         'postgresql' => ['unit' => 'postgresql',   'label' => 'PostgreSQL'],
         'mongodb'    => ['unit' => 'mongod',       'label' => 'MongoDB'],
     ];
+
+    /** Job label used to identify auto-probe shell jobs so results can be parsed. */
+    public const PROBE_LABEL = 'velink:service-probe';
 
     public function __construct(private JobDispatcher $dispatcher)
     {
@@ -132,6 +136,61 @@ class ServiceManager
                 );
             }
         }
+    }
+
+    /**
+     * Build the shell command that probes which well-known systemd units are
+     * installed on the server. Each installed unit is printed as "name=status"
+     * (one per line). Units that do not exist are silently skipped.
+     */
+    public function probeCommand(): string
+    {
+        $staticUnits = array_column(self::WELL_KNOWN_SERVICES, 'unit');
+        $phpUnits    = array_map(fn ($v) => "php{$v}-fpm", ProvisioningCatalog::PHP_VERSIONS);
+        $all         = array_merge($staticUnits, $phpUnits);
+        $list        = implode(' ', array_map('escapeshellarg', $all));
+
+        return "for svc in {$list}; do\n"
+            ."  if systemctl cat \"\$svc\" >/dev/null 2>&1; then\n"
+            ."    echo \"\$svc=\$(systemctl is-active \"\$svc\" 2>/dev/null || true)\"\n"
+            ."  fi\n"
+            ."done";
+    }
+
+    /**
+     * Parse the output of a probe job and create Service rows for every unit
+     * that the agent reported. Uses firstOrCreate so repeated probes are safe.
+     */
+    public function seedFromProbeOutput(Server $server, string $output): void
+    {
+        foreach (explode("\n", trim($output)) as $line) {
+            $line = trim($line);
+            if (! preg_match('/^([a-zA-Z0-9._@:-]+)=(active|inactive|failed|activating|deactivating|unknown)$/', $line, $m)) {
+                continue;
+            }
+
+            [, $unit, $status] = $m;
+
+            Service::firstOrCreate(
+                ['server_id' => $server->id, 'name' => $unit, 'type' => 'systemd'],
+                ['status' => $status, 'config' => ['label' => $this->labelForUnit($unit)], 'application_id' => null],
+            );
+        }
+    }
+
+    private function labelForUnit(string $unit): string
+    {
+        foreach (self::WELL_KNOWN_SERVICES as $def) {
+            if ($def['unit'] === $unit) {
+                return $def['label'];
+            }
+        }
+
+        if (preg_match('/^php(\d+\.\d+)-fpm$/', $unit, $m)) {
+            return "PHP {$m[1]} FPM";
+        }
+
+        return $unit;
     }
 
     /**

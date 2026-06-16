@@ -17,6 +17,11 @@ use App\Support\GatewayProtocol;
  */
 class GatewayInboundProcessor
 {
+    public function __construct(
+        private JobDispatcher $dispatcher,
+        private ServiceManager $serviceManager,
+    ) {
+    }
     /**
      * Handle one envelope from the inbound channel (job output / result / metrics).
      */
@@ -65,6 +70,9 @@ class GatewayInboundProcessor
                 $exit = (int) ($body['exit_code'] ?? 0);
                 if ($exit === 0) {
                     $job->markSucceeded($exit);
+                    if ($job->label === ServiceManager::PROBE_LABEL) {
+                        $this->serviceManager->seedFromProbeOutput($job->server, $job->output ?? '');
+                    }
                 } else {
                     $job->markFailed($exit, $body['error'] ?? null);
                 }
@@ -161,6 +169,13 @@ class GatewayInboundProcessor
             'last_seen_at' => now(),
             'agent_version' => $ev['agent_version'] ?? $server->agent_version,
         ])->save();
+
+        if ($online && $server->services()->where('type', 'systemd')->doesntExist()) {
+            $this->dispatcher->dispatch($server, 'shell', [
+                'command' => $this->serviceManager->probeCommand(),
+                'timeout' => 60,
+            ], ['label' => ServiceManager::PROBE_LABEL]);
+        }
 
         event(new ServerPresenceUpdated($server->refresh()));
     }

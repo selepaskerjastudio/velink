@@ -5,13 +5,23 @@ use App\Events\ServerPresenceUpdated;
 use App\Models\AgentJob;
 use App\Models\Server;
 use App\Models\ServerMetric;
+use App\Models\Service;
 use App\Services\GatewayInboundProcessor;
+use App\Services\ServiceManager;
 use App\Support\GatewayProtocol;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+function mockGatewayRedis(): void
+{
+    $conn = Mockery::mock();
+    $conn->shouldReceive('publish')->andReturn(1);
+    Redis::shouldReceive('connection')->andReturn($conn);
+}
 
 test('job output marks running, appends output, broadcasts', function () {
     Event::fake([AgentJobUpdated::class]);
@@ -85,6 +95,7 @@ test('unknown job uuid is ignored', function () {
 });
 
 test('presence online updates server and broadcasts', function () {
+    mockGatewayRedis();
     Event::fake([ServerPresenceUpdated::class]);
     $s = Server::factory()->create();
 
@@ -100,6 +111,66 @@ test('presence online updates server and broadcasts', function () {
         ->and($s->last_seen_at)->not->toBeNull();
 
     Event::assertDispatched(ServerPresenceUpdated::class);
+});
+
+test('presence online dispatches service probe when server has no services', function () {
+    Event::fake([ServerPresenceUpdated::class]);
+    $published = [];
+    $conn = Mockery::mock();
+    $conn->shouldReceive('publish')->andReturnUsing(function ($ch, $json) use (&$published) {
+        $published[] = json_decode($json, true);
+        return 1;
+    });
+    Redis::shouldReceive('connection')->andReturn($conn);
+
+    $s = Server::factory()->create();
+
+    app(GatewayInboundProcessor::class)->handlePresence(json_encode([
+        'server_id' => $s->uuid,
+        'status'    => GatewayProtocol::STATUS_ONLINE,
+    ]));
+
+    $probeJob = $s->agentJobs()->where('label', ServiceManager::PROBE_LABEL)->first();
+    expect($probeJob)->not->toBeNull();
+    expect($probeJob->payload['command'])->toContain('systemctl cat');
+    expect(count($published))->toBe(1);
+});
+
+test('presence online skips probe when services already exist', function () {
+    Event::fake([ServerPresenceUpdated::class]);
+    mockGatewayRedis();
+    $s = Server::factory()->create();
+    Service::create(['server_id' => $s->id, 'type' => 'systemd', 'name' => 'nginx', 'status' => 'active']);
+
+    app(GatewayInboundProcessor::class)->handlePresence(json_encode([
+        'server_id' => $s->uuid,
+        'status'    => GatewayProtocol::STATUS_ONLINE,
+    ]));
+
+    expect($s->agentJobs()->where('label', ServiceManager::PROBE_LABEL)->count())->toBe(0);
+});
+
+test('probe job result seeds services from output', function () {
+    Event::fake([AgentJobUpdated::class]);
+    $s = Server::factory()->create();
+    $j = AgentJob::factory()->for($s)->running()->create(['label' => ServiceManager::PROBE_LABEL]);
+    $j->forceFill(['output' => "nginx=active\nredis-server=inactive\nphp8.3-fpm=active\n"])->save();
+
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type'    => GatewayProtocol::TYPE_JOB_RESULT,
+        'job_id'  => $j->uuid,
+        'payload' => ['exit_code' => 0],
+    ]));
+
+    $services = $s->services()->where('type', 'systemd')->orderBy('name')->pluck('name')->all();
+    expect($services)->toEqual(['nginx', 'php8.3-fpm', 'redis-server']);
+
+    $nginx = $s->services()->where('name', 'nginx')->first();
+    expect($nginx->status)->toBe('active');
+    expect($nginx->config['label'])->toBe('NGINX');
+
+    $php = $s->services()->where('name', 'php8.3-fpm')->first();
+    expect($php->config['label'])->toBe('PHP 8.3 FPM');
 });
 
 test('presence offline updates server status', function () {
