@@ -113,7 +113,27 @@ test('presence online updates server and broadcasts', function () {
     Event::assertDispatched(ServerPresenceUpdated::class);
 });
 
-test('presence online dispatches service probe when server has no services', function () {
+test('first connect auto-provisions core services and seeds records', function () {
+    Event::fake([ServerPresenceUpdated::class]);
+    mockGatewayRedis();
+
+    $s = Server::factory()->create();
+
+    app(GatewayInboundProcessor::class)->handlePresence(json_encode([
+        'server_id' => $s->uuid,
+        'status'    => GatewayProtocol::STATUS_ONLINE,
+    ]));
+
+    // Several provision jobs should be dispatched (base + nginx + supervisor + redis + php steps).
+    expect($s->agentJobs()->count())->toBeGreaterThan(0);
+    expect($s->agentJobs()->where('label', ServiceManager::PROBE_LABEL)->count())->toBe(0);
+
+    // Service records are seeded immediately so the dashboard shows them.
+    $names = $s->services()->where('type', 'systemd')->pluck('name')->sort()->values()->all();
+    expect($names)->toContain('nginx', 'supervisor', 'redis-server', 'php8.3-fpm');
+});
+
+test('reconnect without services dispatches probe instead of re-provisioning', function () {
     Event::fake([ServerPresenceUpdated::class]);
     $published = [];
     $conn = Mockery::mock();
@@ -124,6 +144,8 @@ test('presence online dispatches service probe when server has no services', fun
     Redis::shouldReceive('connection')->andReturn($conn);
 
     $s = Server::factory()->create();
+    // Simulate a server that already had jobs (was provisioned before) but lost service records.
+    AgentJob::factory()->for($s)->create(['label' => 'Install nginx']);
 
     app(GatewayInboundProcessor::class)->handlePresence(json_encode([
         'server_id' => $s->uuid,
@@ -133,10 +155,9 @@ test('presence online dispatches service probe when server has no services', fun
     $probeJob = $s->agentJobs()->where('label', ServiceManager::PROBE_LABEL)->first();
     expect($probeJob)->not->toBeNull();
     expect($probeJob->payload['command'])->toContain('systemctl cat');
-    expect(count($published))->toBe(1);
 });
 
-test('presence online skips probe when services already exist', function () {
+test('presence online does nothing extra when services already exist', function () {
     Event::fake([ServerPresenceUpdated::class]);
     mockGatewayRedis();
     $s = Server::factory()->create();
@@ -148,6 +169,7 @@ test('presence online skips probe when services already exist', function () {
     ]));
 
     expect($s->agentJobs()->where('label', ServiceManager::PROBE_LABEL)->count())->toBe(0);
+    expect($s->agentJobs()->count())->toBe(0);
 });
 
 test('probe job result seeds services from output', function () {

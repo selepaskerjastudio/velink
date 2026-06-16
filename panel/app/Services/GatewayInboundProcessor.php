@@ -17,11 +17,21 @@ use App\Support\GatewayProtocol;
  */
 class GatewayInboundProcessor
 {
+    /**
+     * Components and PHP version provisioned automatically on first agent connect.
+     * 'base' is implicitly prepended by ProvisionService::order().
+     */
+    private const AUTO_COMPONENTS = ['nginx', 'supervisor', 'redis', 'php'];
+
+    private const AUTO_PHP_VERSIONS = ['8.3'];
+
     public function __construct(
         private JobDispatcher $dispatcher,
         private ServiceManager $serviceManager,
+        private ProvisionService $provisionService,
     ) {
     }
+
     /**
      * Handle one envelope from the inbound channel (job output / result / metrics).
      */
@@ -148,6 +158,9 @@ class GatewayInboundProcessor
 
     /**
      * Handle one event from the presence channel (online/offline transition).
+     *
+     * First connect  (no prior jobs, no services) → auto-provision core stack + seed records.
+     * Reconnect      (has jobs, no services yet)  → probe to detect already-installed units.
      */
     public function handlePresence(string $payload): void
     {
@@ -170,11 +183,29 @@ class GatewayInboundProcessor
             'agent_version' => $ev['agent_version'] ?? $server->agent_version,
         ])->save();
 
-        if ($online && $server->services()->where('type', 'systemd')->doesntExist()) {
-            $this->dispatcher->dispatch($server, 'shell', [
-                'command' => $this->serviceManager->probeCommand(),
-                'timeout' => 60,
-            ], ['label' => ServiceManager::PROBE_LABEL]);
+        if ($online) {
+            $hasServices = $server->services()->where('type', 'systemd')->exists();
+            $hasJobs     = $server->agentJobs()->exists();
+
+            if (! $hasServices && ! $hasJobs) {
+                // Brand-new server: auto-provision core stack and register service records.
+                $this->provisionService->provision(
+                    $server,
+                    self::AUTO_COMPONENTS,
+                    ['php_versions' => self::AUTO_PHP_VERSIONS],
+                );
+                $this->serviceManager->seedForServer(
+                    $server,
+                    self::AUTO_COMPONENTS,
+                    self::AUTO_PHP_VERSIONS,
+                );
+            } elseif (! $hasServices) {
+                // Server reconnected but services were never seeded — probe what's installed.
+                $this->dispatcher->dispatch($server, 'shell', [
+                    'command' => $this->serviceManager->probeCommand(),
+                    'timeout' => 60,
+                ], ['label' => ServiceManager::PROBE_LABEL]);
+            }
         }
 
         event(new ServerPresenceUpdated($server->refresh()));
