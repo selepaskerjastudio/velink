@@ -30,7 +30,7 @@ else
 fi
 
 STEP=0
-TOTAL=6
+TOTAL=7
 
 _header() {
     echo ""
@@ -83,7 +83,8 @@ echo "  ${GREEN}2.${RESET} Detect OS & CPU architecture"
 echo "  ${GREEN}3.${RESET} Download the Velink agent binary to /usr/local/bin/"
 echo "  ${GREEN}4.${RESET} Write agent config (token, gateway URL) to /etc/velink/"
 echo "  ${GREEN}5.${RESET} Install a systemd service unit (velink-agent.service)"
-echo "  ${GREEN}6.${RESET} Enable & start the service via systemctl"
+echo "  ${GREEN}6.${RESET} Register with the panel & arm full-stack provisioning"
+echo "  ${GREEN}7.${RESET} Enable & start the service via systemctl"
 echo ""
 echo "  ${YELLOW}Files created / modified:${RESET}"
 echo "    /usr/local/bin/velink-agent      ← agent binary (executable)"
@@ -210,17 +211,41 @@ EOF
 
 ok "Service unit written to ${UNIT_FILE}"
 
-# ─── Step 6: Enable & start service ───────────────────────────────────────────
-step "Enabling & starting velink-agent service"
+# ─── Step 6: Register with panel & arm provisioning ───────────────────────────
+step "Registering with the panel"
 
 if command -v systemctl >/dev/null 2>&1; then
     info "Running: systemctl daemon-reload"
     systemctl daemon-reload
     ok "systemd daemon reloaded"
 
-    info "Running: systemctl enable --now velink-agent.service"
-    systemctl enable --now velink-agent.service
-    ok "Service enabled and started"
+    info "Running: systemctl enable velink-agent.service"
+    systemctl enable velink-agent.service >/dev/null 2>&1
+    ok "Service enabled to start on boot"
+fi
+
+# Tell the panel this server was (re)installed so it provisions the full stack
+# the moment the agent connects. Done before the agent starts so the panel sees
+# a clean slate; the actual install jobs are dispatched by the panel on connect.
+PROVISION_URL="${PANEL_URL%/}/install/provision"
+info "Arming provisioning: ${PROVISION_URL}"
+PROVISION_OPTS=(-fsS -X POST -H "Content-Type: application/json")
+[ "$INSECURE" = "1" ] && PROVISION_OPTS+=(-k)
+if curl "${PROVISION_OPTS[@]}" "$PROVISION_URL" \
+        -d "{\"server_id\":\"${SERVER_ID}\",\"token\":\"${TOKEN}\"}" >/dev/null 2>&1; then
+    ok "Panel armed — full stack will install when the agent connects"
+else
+    info "Could not reach panel to arm provisioning"
+    info "(a brand-new server still auto-provisions on first connect)"
+fi
+
+# ─── Step 7: Start the agent ──────────────────────────────────────────────────
+step "Starting velink-agent service"
+
+if command -v systemctl >/dev/null 2>&1; then
+    info "Running: systemctl restart velink-agent.service"
+    systemctl restart velink-agent.service
+    ok "Service started"
 
     # Brief pause so the service has time to connect before we show status
     sleep 2

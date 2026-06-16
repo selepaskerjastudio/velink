@@ -3,9 +3,9 @@
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GitHubRepoController;
+use App\Http\Controllers\InstallController;
 use App\Http\Controllers\ServerAlertController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::get('/', function () {
     return redirect()->route('dashboard');
@@ -14,6 +14,7 @@ Route::get('/', function () {
 Route::get('install/agent.sh', function () {
     $path = base_path('../installer/agent.sh');
     abort_unless(file_exists($path), 404);
+
     return response()->file($path, ['Content-Type' => 'text/plain; charset=utf-8']);
 })->name('install.agent');
 
@@ -21,8 +22,12 @@ Route::get('install/bin/{file}', function (string $file) {
     abort_unless(preg_match('/^agent-[a-z0-9]+-[a-z0-9]+-[a-z0-9.]+$/', $file), 404);
     $path = storage_path("app/agent-bins/{$file}");
     abort_unless(file_exists($path), 404);
+
     return response()->download($path, $file, ['Content-Type' => 'application/octet-stream']);
 })->name('install.binary');
+
+// Called by the installer (token-authenticated) to arm full-stack provisioning.
+Route::post('install/provision', [InstallController::class, 'provision'])->name('install.provision');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

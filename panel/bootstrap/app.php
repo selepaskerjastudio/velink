@@ -31,6 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
+            'install/provision',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
