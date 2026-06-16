@@ -105,7 +105,7 @@ class ApplicationController extends Controller
                 'env_content' => $application->env_content,
                 'webhook_url' => route('webhooks.github', $application),
                 'webhook_url_gitlab' => route('webhooks.gitlab', $application),
-                'ssl_provider' => null,
+                'ssl_status' => $application->ssl_status ?? 'none',
             ],
             'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'status' => $application->server->status, 'os' => $application->server->os],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
@@ -240,8 +240,14 @@ class ApplicationController extends Controller
             return redirect()->back()->withErrors(['domain' => 'Application is not yet provisioned.']);
         }
 
+        if (in_array($application->ssl_status, ['active', 'requesting'], true)) {
+            return redirect()->back()->withErrors(['domain' => 'SSL is already active or being requested.']);
+        }
+
         $domain = escapeshellarg($application->domain);
         $email = escapeshellarg($request->user()->email);
+
+        $application->forceFill(['ssl_status' => 'requesting'])->save();
 
         $dispatcher->dispatch($application->server, 'shell', [
             'command' => "certbot --nginx -d {$domain} --non-interactive --agree-tos --email {$email} --redirect",
@@ -255,6 +261,33 @@ class ApplicationController extends Controller
         AuditLogger::log(
             action: 'application.ssl_enabled',
             description: "SSL requested for '{$application->name}' ({$application->domain})",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+        );
+
+        return redirect()->route('applications.show', $application);
+    }
+
+    public function checkSsl(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse
+    {
+        if (! $application->domain) {
+            return redirect()->back()->withErrors(['domain' => 'Application has no domain configured.']);
+        }
+
+        $domain = escapeshellarg($application->domain);
+
+        $dispatcher->dispatch($application->server, 'shell', [
+            'command' => "certbot certificates --cert-name {$domain} 2>&1 || echo 'NOT_FOUND'",
+            'timeout' => 30,
+        ], [
+            'application_id' => $application->id,
+            'user_id' => $request->user()->id,
+            'label' => "Check SSL for {$application->domain}",
+        ]);
+
+        AuditLogger::log(
+            action: 'application.ssl_checked',
+            description: "SSL status check for '{$application->name}' ({$application->domain})",
             userId: $request->user()->id,
             serverId: $application->server_id,
         );

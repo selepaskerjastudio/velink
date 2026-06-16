@@ -23,6 +23,10 @@ class Application extends Model
         });
     }
 
+    protected $attributes = [
+        'ssl_status' => 'none',
+    ];
+
     protected $fillable = [
         'uuid',
         'server_id',
@@ -38,6 +42,7 @@ class Application extends Model
         'deploy_script',
         'env_content',
         'status',
+        'ssl_status',
         'webhook_secret',
     ];
 

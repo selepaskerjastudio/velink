@@ -13,5 +13,6 @@ Route::middleware('auth')->group(function () {
     Route::patch('apps/{application}/deploy-settings', [ApplicationController::class, 'updateDeploySettings'])->name('applications.deploy-settings');
     Route::post('apps/{application}/deployments', [ApplicationController::class, 'storeDeployment'])->name('applications.deployments.store');
     Route::post('apps/{application}/ssl', [ApplicationController::class, 'enableSsl'])->name('applications.ssl');
+    Route::post('apps/{application}/ssl/check', [ApplicationController::class, 'checkSsl'])->name('applications.ssl.check');
     Route::post('apps/{application}/nginx-config', [ApplicationController::class, 'nginxConfig'])->name('applications.nginx-config');
 });

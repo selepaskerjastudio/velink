@@ -171,6 +171,8 @@ export default function ApplicationsShow({
         sslForm.post(route('applications.ssl', application.id), { preserveScroll: true });
     };
 
+    const checkSslForm = useForm({});
+
     const deployNowForm = useForm({});
 
     const submitDeployNow = () => {
@@ -320,17 +322,39 @@ export default function ApplicationsShow({
                             to point to this server.
                         </CardDescription>
                     </CardHeader>
-                    <CardFooter>
-                        <div className="flex flex-col gap-1">
+                    <CardContent>
+                        {application.ssl_status === 'active' && (
+                            <Badge variant="success" className="mb-3">SSL Active</Badge>
+                        )}
+                        {application.ssl_status === 'requesting' && (
+                            <Badge variant="outline" className="mb-3">SSL Pending…</Badge>
+                        )}
+                    </CardContent>
+                    <CardFooter className="flex gap-2">
+                        {(application.ssl_status === 'none' || application.ssl_status === 'failed') && (
+                            <div className="flex flex-col gap-1">
+                                <Button
+                                    variant="secondary"
+                                    onClick={submitSsl}
+                                    disabled={sslForm.processing || !application.domain || application.status === 'pending'}
+                                >
+                                    Enable SSL
+                                </Button>
+                                {!application.domain && <p className="text-muted-foreground text-xs">No domain set</p>}
+                            </div>
+                        )}
+                        {application.domain && (
                             <Button
-                                variant="secondary"
-                                onClick={submitSsl}
-                                disabled={sslForm.processing || !application.domain || application.status === 'pending'}
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                    checkSslForm.post(route('applications.ssl.check', application.id), { preserveScroll: true });
+                                }}
+                                disabled={checkSslForm.processing}
                             >
-                                Enable SSL
+                                Check SSL
                             </Button>
-                            {!application.domain && <p className="text-muted-foreground text-xs">No domain set</p>}
-                        </div>
+                        )}
                     </CardFooter>
                 </Card>
 

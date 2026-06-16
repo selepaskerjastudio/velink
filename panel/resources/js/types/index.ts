@@ -87,6 +87,7 @@ export interface Application {
     webhook_url: string;
     webhook_url_gitlab: string;
     ssl_provider: string | null;
+    ssl_status: string;
 }
 
 export interface GitCredential {
