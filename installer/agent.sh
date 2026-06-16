@@ -130,9 +130,8 @@ esac
 ok "CPU architecture: ${ARCH}"
 
 if [ -f /etc/os-release ]; then
-    # shellcheck source=/dev/null
-    . /etc/os-release
-    ok "Distribution: ${PRETTY_NAME:-unknown}"
+    DISTRO_NAME="$(. /etc/os-release && echo "${PRETTY_NAME:-unknown}")"
+    ok "Distribution: ${DISTRO_NAME}"
 fi
 
 if [ -z "$BINARY_URL" ]; then
