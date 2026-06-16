@@ -24,6 +24,7 @@ class Server extends Model
         'agent_version',
         'last_seen_at',
         'resources',
+        'db_components',
     ];
 
     protected $hidden = [
@@ -36,6 +37,7 @@ class Server extends Model
             'agent_token' => 'hashed',
             'last_seen_at' => 'datetime',
             'resources' => 'array',
+            'db_components' => 'array',
         ];
     }
 

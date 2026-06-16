@@ -12,6 +12,7 @@ import {
     type ServerMetricPoint,
     type SharedData,
 } from '@/types';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { CheckIcon, ClipboardIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -135,6 +136,7 @@ export default function ServersShow({
     }, [server.id]);
 
     const tokenForm = useForm({});
+    const deleteForm = useForm({});
 
     const isOnline = liveStatus === 'online';
     const isPending = liveStatus === 'pending';
@@ -211,6 +213,36 @@ export default function ServersShow({
                             )}
                         </AlertDescription>
                     </Alert>
+                )}
+
+                {isPending && (
+                    <div className="mt-2 flex justify-start">
+                        <Dialog>
+                            <DialogTrigger asChild>
+                                <button className="text-muted-foreground hover:text-destructive text-xs underline-offset-2 hover:underline">
+                                    Delete this server
+                                </button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Delete server?</DialogTitle>
+                                    <DialogDescription>
+                                        Server <span className="font-medium text-foreground">{server.name}</span> will be permanently
+                                        deleted. This action cannot be undone.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter>
+                                    <Button
+                                        variant="destructive"
+                                        disabled={deleteForm.processing}
+                                        onClick={() => deleteForm.delete(route('servers.destroy', server.id))}
+                                    >
+                                        Delete server
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
                 )}
 
                 {!isPending && (

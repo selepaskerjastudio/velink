@@ -201,15 +201,19 @@ class GatewayInboundProcessor
             $hasJobs     = $server->agentJobs()->exists();
 
             if (! $hasServices && ! $hasJobs) {
-                // Brand-new server: auto-provision core stack and register service records.
+                // Brand-new server: auto-provision core stack + any databases chosen at registration.
+                $components = array_values(array_unique(array_merge(
+                    self::AUTO_COMPONENTS,
+                    $server->db_components ?? [],
+                )));
                 $this->provisionService->provision(
                     $server,
-                    self::AUTO_COMPONENTS,
+                    $components,
                     ['php_versions' => self::AUTO_PHP_VERSIONS],
                 );
                 $this->serviceManager->seedForServer(
                     $server,
-                    self::AUTO_COMPONENTS,
+                    $components,
                     self::AUTO_PHP_VERSIONS,
                 );
             } elseif (! $hasServices) {

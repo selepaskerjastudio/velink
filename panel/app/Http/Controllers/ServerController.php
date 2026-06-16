@@ -49,6 +49,8 @@ class ServerController extends Controller
             'public_ip' => ['nullable', 'ip'],
             'private_ip' => ['nullable', 'ip'],
             'os' => ['nullable', 'string', 'max:255'],
+            'db_components' => ['nullable', 'array'],
+            'db_components.*' => ['in:mariadb,postgresql,mongodb'],
         ]);
 
         $token = Str::random(48);
