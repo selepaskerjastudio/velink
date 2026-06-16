@@ -275,7 +275,7 @@ export default function ServersShow({
                                     <CardTitle className="text-muted-foreground text-sm font-medium">Load</CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-3xl font-bold">{latestMetric ? latestMetric.load1.toFixed(2) : '—'}</p>
+                                    <p className="text-3xl font-bold">{latestMetric?.load1 != null ? latestMetric.load1.toFixed(2) : '—'}</p>
                                     <p className="text-muted-foreground mt-1 text-xs">1-min average</p>
                                 </CardContent>
                             </Card>
@@ -331,7 +331,7 @@ export default function ServersShow({
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-3xl font-bold">
-                                        {latestMetric ? `${latestMetric.cpu_percent.toFixed(1)}%` : '—'}
+                                        {latestMetric?.cpu_percent != null ? `${latestMetric.cpu_percent.toFixed(1)}%` : '—'}
                                     </p>
                                     <p className="text-muted-foreground mt-1 text-xs">current usage</p>
                                 </CardContent>

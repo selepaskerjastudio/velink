@@ -25,6 +25,12 @@ class ServerMetric extends Model
     {
         return [
             'recorded_at' => 'datetime',
+            'cpu_percent' => 'float',
+            'mem_total'   => 'integer',
+            'mem_used'    => 'integer',
+            'disk_total'  => 'integer',
+            'disk_used'   => 'integer',
+            'load1'       => 'float',
         ];
     }
 
