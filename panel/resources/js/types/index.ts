@@ -134,7 +134,18 @@ export interface WorkerSummary {
     config: { numprocs?: number } | null;
 }
 
-export type SystemdServiceStatus = 'unknown' | 'active' | 'inactive' | 'failed';
+export type SystemdServiceStatus =
+    | 'waiting'
+    | 'installing'
+    | 'running'
+    | 'stopped'
+    | 'restarting'
+    | 'not_installed'
+    // legacy values still possible on older rows
+    | 'unknown'
+    | 'active'
+    | 'inactive'
+    | 'failed';
 
 export interface SystemdService {
     id: number;

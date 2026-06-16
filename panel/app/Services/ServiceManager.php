@@ -27,20 +27,35 @@ class ServiceManager
      * PHP FPM units are handled separately (one per version).
      */
     public const WELL_KNOWN_SERVICES = [
-        'nginx'      => ['unit' => 'nginx',        'label' => 'NGINX'],
+        'nginx' => ['unit' => 'nginx',        'label' => 'NGINX'],
         'supervisor' => ['unit' => 'supervisor',   'label' => 'Supervisord'],
-        'redis'      => ['unit' => 'redis-server', 'label' => 'Redis'],
-        'mariadb'    => ['unit' => 'mariadb',      'label' => 'MariaDB'],
+        'redis' => ['unit' => 'redis-server', 'label' => 'Redis'],
+        'mariadb' => ['unit' => 'mariadb',      'label' => 'MariaDB'],
         'postgresql' => ['unit' => 'postgresql',   'label' => 'PostgreSQL'],
-        'mongodb'    => ['unit' => 'mongod',       'label' => 'MongoDB'],
+        'mongodb' => ['unit' => 'mongod',       'label' => 'MongoDB'],
     ];
 
     /** Job label used to identify auto-probe shell jobs so results can be parsed. */
     public const PROBE_LABEL = 'velink:service-probe';
 
-    public function __construct(private JobDispatcher $dispatcher)
-    {
-    }
+    /**
+     * Service lifecycle statuses surfaced in the UI. Provisioned units move
+     * waiting → installing → running (or not_installed on failure); control
+     * actions move between running/stopped/restarting.
+     */
+    public const STATUS_WAITING = 'waiting';        // queued for install
+
+    public const STATUS_INSTALLING = 'installing';  // install job is running
+
+    public const STATUS_RUNNING = 'running';        // installed and active
+
+    public const STATUS_STOPPED = 'stopped';        // installed but inactive
+
+    public const STATUS_RESTARTING = 'restarting';  // restart in progress
+
+    public const STATUS_NOT_INSTALLED = 'not_installed'; // install failed / absent
+
+    public function __construct(private JobDispatcher $dispatcher) {}
 
     /**
      * Start tracking a systemd unit on this server. Does not install or
@@ -79,8 +94,9 @@ class ServiceManager
         ], ['user_id' => auth()->id(), 'label' => $label]);
 
         match ($action) {
-            'start', 'restart', 'reload' => $service->status = 'active',
-            'stop' => $service->status = 'inactive',
+            'start', 'reload' => $service->status = self::STATUS_RUNNING,
+            'restart' => $service->status = self::STATUS_RESTARTING,
+            'stop' => $service->status = self::STATUS_STOPPED,
             'enable' => $service->config = [...($service->config ?? []), 'enabled' => true],
             'disable' => $service->config = [...($service->config ?? []), 'enabled' => false],
             default => null,
@@ -114,7 +130,7 @@ class ServiceManager
      * multiple times (idempotent).
      *
      * @param  array<int, string>  $components  e.g. ['nginx', 'php', 'redis']
-     * @param  array<int, string>  $phpVersions e.g. ['8.3', '8.4']
+     * @param  array<int, string>  $phpVersions  e.g. ['8.3', '8.4']
      */
     public function seedForServer(Server $server, array $components, array $phpVersions = []): void
     {
@@ -123,7 +139,7 @@ class ServiceManager
                 $def = self::WELL_KNOWN_SERVICES[$component];
                 Service::firstOrCreate(
                     ['server_id' => $server->id, 'name' => $def['unit'], 'type' => 'systemd'],
-                    ['status' => 'unknown', 'config' => ['label' => $def['label']], 'application_id' => null],
+                    ['status' => self::STATUS_WAITING, 'config' => ['label' => $def['label']], 'application_id' => null],
                 );
             }
         }
@@ -132,7 +148,7 @@ class ServiceManager
             foreach ($phpVersions as $version) {
                 Service::firstOrCreate(
                     ['server_id' => $server->id, 'name' => "php{$version}-fpm", 'type' => 'systemd'],
-                    ['status' => 'unknown', 'config' => ['label' => "PHP {$version} FPM"], 'application_id' => null],
+                    ['status' => self::STATUS_WAITING, 'config' => ['label' => "PHP {$version} FPM"], 'application_id' => null],
                 );
             }
         }
@@ -146,15 +162,15 @@ class ServiceManager
     public function probeCommand(): string
     {
         $staticUnits = array_column(self::WELL_KNOWN_SERVICES, 'unit');
-        $phpUnits    = array_map(fn ($v) => "php{$v}-fpm", ProvisioningCatalog::PHP_VERSIONS);
-        $all         = array_merge($staticUnits, $phpUnits);
-        $list        = implode(' ', array_map('escapeshellarg', $all));
+        $phpUnits = array_map(fn ($v) => "php{$v}-fpm", ProvisioningCatalog::PHP_VERSIONS);
+        $all = array_merge($staticUnits, $phpUnits);
+        $list = implode(' ', array_map('escapeshellarg', $all));
 
         return "for svc in {$list}; do\n"
             ."  if systemctl cat \"\$svc\" >/dev/null 2>&1; then\n"
             ."    echo \"\$svc=\$(systemctl is-active \"\$svc\" 2>/dev/null || true)\"\n"
             ."  fi\n"
-            ."done";
+            .'done';
     }
 
     /**
@@ -169,13 +185,85 @@ class ServiceManager
                 continue;
             }
 
-            [, $unit, $status] = $m;
+            [, $unit, $rawStatus] = $m;
 
             Service::firstOrCreate(
                 ['server_id' => $server->id, 'name' => $unit, 'type' => 'systemd'],
-                ['status' => $status, 'config' => ['label' => $this->labelForUnit($unit)], 'application_id' => null],
+                ['status' => self::mapSystemctlStatus($rawStatus), 'config' => ['label' => $this->labelForUnit($unit)], 'application_id' => null],
             );
         }
+    }
+
+    /** Map a raw `systemctl is-active` value to a UI lifecycle status. */
+    public static function mapSystemctlStatus(string $raw): string
+    {
+        return match ($raw) {
+            'active' => self::STATUS_RUNNING,
+            'activating' => self::STATUS_RESTARTING,
+            'inactive', 'deactivating' => self::STATUS_STOPPED,
+            'failed' => self::STATUS_NOT_INSTALLED,
+            default => self::STATUS_STOPPED,
+        };
+    }
+
+    /**
+     * The systemd unit(s) a provisioning step installs, derived from its job
+     * label (e.g. "Install nginx" → nginx, "Install PHP 8.3" → php8.3-fpm).
+     * Steps that don't produce a tracked service (base, PPA, certbot, composer,
+     * node) return an empty array.
+     *
+     * @return array<int, string>
+     */
+    public function unitsForJobLabel(string $label): array
+    {
+        if (preg_match('/PHP (\d+\.\d+)/', $label, $m)) {
+            return ["php{$m[1]}-fpm"];
+        }
+
+        foreach (['nginx' => 'nginx', 'Redis' => 'redis-server', 'supervisor' => 'supervisor', 'MariaDB' => 'mariadb', 'PostgreSQL' => 'postgresql', 'MongoDB' => 'mongod'] as $needle => $unit) {
+            if (str_contains($label, $needle)) {
+                return [$unit];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Update the lifecycle status of the given systemd units on a server.
+     *
+     * @param  array<int, string>  $units
+     */
+    public function setUnitsStatus(Server $server, array $units, string $status): void
+    {
+        if ($units === []) {
+            return;
+        }
+
+        Service::where('server_id', $server->id)
+            ->where('type', 'systemd')
+            ->whereIn('name', $units)
+            ->update(['status' => $status]);
+    }
+
+    /**
+     * Reconcile a service's status from a completed control job whose label is
+     * "{Action} {unit}" (e.g. "Restart nginx"). Returns true if it handled the
+     * label. Used to resolve the optimistic `restarting` state once the restart
+     * actually finishes.
+     */
+    public function applyControlJobResult(Server $server, string $label, bool $succeeded): bool
+    {
+        if (! preg_match('/^(Start|Restart|Reload|Stop) (.+)$/', $label, $m)) {
+            return false;
+        }
+
+        if ($succeeded) {
+            $status = $m[1] === 'Stop' ? self::STATUS_STOPPED : self::STATUS_RUNNING;
+            $this->setUnitsStatus($server, [$m[2]], $status);
+        }
+
+        return true;
     }
 
     private function labelForUnit(string $unit): string

@@ -121,7 +121,7 @@ test('first connect auto-provisions core services and seeds records', function (
 
     app(GatewayInboundProcessor::class)->handlePresence(json_encode([
         'server_id' => $s->uuid,
-        'status'    => GatewayProtocol::STATUS_ONLINE,
+        'status' => GatewayProtocol::STATUS_ONLINE,
     ]));
 
     // Several provision jobs should be dispatched (base + nginx + supervisor + redis + php steps).
@@ -139,6 +139,7 @@ test('reconnect without services dispatches probe instead of re-provisioning', f
     $conn = Mockery::mock();
     $conn->shouldReceive('publish')->andReturnUsing(function ($ch, $json) use (&$published) {
         $published[] = json_decode($json, true);
+
         return 1;
     });
     Redis::shouldReceive('connection')->andReturn($conn);
@@ -149,7 +150,7 @@ test('reconnect without services dispatches probe instead of re-provisioning', f
 
     app(GatewayInboundProcessor::class)->handlePresence(json_encode([
         'server_id' => $s->uuid,
-        'status'    => GatewayProtocol::STATUS_ONLINE,
+        'status' => GatewayProtocol::STATUS_ONLINE,
     ]));
 
     $probeJob = $s->agentJobs()->where('label', ServiceManager::PROBE_LABEL)->first();
@@ -165,7 +166,7 @@ test('presence online does nothing extra when services already exist', function 
 
     app(GatewayInboundProcessor::class)->handlePresence(json_encode([
         'server_id' => $s->uuid,
-        'status'    => GatewayProtocol::STATUS_ONLINE,
+        'status' => GatewayProtocol::STATUS_ONLINE,
     ]));
 
     expect($s->agentJobs()->where('label', ServiceManager::PROBE_LABEL)->count())->toBe(0);
@@ -179,8 +180,8 @@ test('probe job result seeds services from output', function () {
     $j->forceFill(['output' => "nginx=active\nredis-server=inactive\nphp8.3-fpm=active\n"])->save();
 
     app(GatewayInboundProcessor::class)->handleInbound(json_encode([
-        'type'    => GatewayProtocol::TYPE_JOB_RESULT,
-        'job_id'  => $j->uuid,
+        'type' => GatewayProtocol::TYPE_JOB_RESULT,
+        'job_id' => $j->uuid,
         'payload' => ['exit_code' => 0],
     ]));
 
@@ -188,8 +189,11 @@ test('probe job result seeds services from output', function () {
     expect($services)->toEqual(['nginx', 'php8.3-fpm', 'redis-server']);
 
     $nginx = $s->services()->where('name', 'nginx')->first();
-    expect($nginx->status)->toBe('active');
+    expect($nginx->status)->toBe('running'); // active → running
     expect($nginx->config['label'])->toBe('NGINX');
+
+    $redis = $s->services()->where('name', 'redis-server')->first();
+    expect($redis->status)->toBe('stopped'); // inactive → stopped
 
     $php = $s->services()->where('name', 'php8.3-fpm')->first();
     expect($php->config['label'])->toBe('PHP 8.3 FPM');
@@ -224,15 +228,15 @@ test('metrics envelope inserts a ServerMetric record', function () {
     $s = Server::factory()->create();
 
     app(GatewayInboundProcessor::class)->handleInbound(json_encode([
-        'type'      => GatewayProtocol::TYPE_METRICS,
+        'type' => GatewayProtocol::TYPE_METRICS,
         'server_id' => $s->uuid,
-        'payload'   => [
+        'payload' => [
             'cpu_percent' => 12.34,
-            'mem_total'   => 8_000_000_000,
-            'mem_used'    => 4_000_000_000,
-            'disk_total'  => 100_000_000_000,
-            'disk_used'   => 50_000_000_000,
-            'load1'       => 0.75,
+            'mem_total' => 8_000_000_000,
+            'mem_used' => 4_000_000_000,
+            'disk_total' => 100_000_000_000,
+            'disk_used' => 50_000_000_000,
+            'load1' => 0.75,
         ],
     ]));
 
@@ -247,9 +251,9 @@ test('metrics envelope inserts a ServerMetric record', function () {
 
 test('metrics envelope with unknown server uuid is ignored', function () {
     app(GatewayInboundProcessor::class)->handleInbound(json_encode([
-        'type'      => GatewayProtocol::TYPE_METRICS,
+        'type' => GatewayProtocol::TYPE_METRICS,
         'server_id' => (string) Str::uuid(),
-        'payload'   => ['cpu_percent' => 5.0],
+        'payload' => ['cpu_percent' => 5.0],
     ]));
 
     expect(ServerMetric::count())->toBe(0);

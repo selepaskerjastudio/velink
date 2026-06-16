@@ -68,7 +68,17 @@ class GatewayInboundProcessor
 
         switch ($env['type'] ?? '') {
             case GatewayProtocol::TYPE_JOB_OUTPUT:
+                $wasRunning = $job->status === AgentJob::STATUS_RUNNING;
                 $job->markRunning();
+                // First sign of life on a provisioning step → its service(s) are
+                // now installing.
+                if (! $wasRunning && $job->batch_id !== null) {
+                    $this->serviceManager->setUnitsStatus(
+                        $job->server,
+                        $this->serviceManager->unitsForJobLabel((string) $job->label),
+                        ServiceManager::STATUS_INSTALLING,
+                    );
+                }
                 $chunk = (string) ($body['data'] ?? '');
                 if ($chunk !== '') {
                     $job->appendOutput($chunk);
@@ -96,20 +106,49 @@ class GatewayInboundProcessor
                         }
                     }
 
-                    // Sequential batch: now that this step succeeded, dispatch the
-                    // next one. This is what serializes provisioning so the agent
-                    // can't run a step before its prerequisite is installed.
-                    $next = $job->nextInBatch();
-                    if ($next !== null) {
-                        $this->dispatcher->dispatchPending($next);
+                    if ($job->batch_id !== null) {
+                        // Provisioning step done → its service(s) are running.
+                        $this->serviceManager->setUnitsStatus(
+                            $job->server,
+                            $this->serviceManager->unitsForJobLabel((string) $job->label),
+                            ServiceManager::STATUS_RUNNING,
+                        );
+
+                        // Sequential batch: now that this step succeeded, dispatch
+                        // the next one. This serializes provisioning so the agent
+                        // can't run a step before its prerequisite is installed.
+                        $next = $job->nextInBatch();
+                        if ($next !== null) {
+                            $this->dispatcher->dispatchPending($next);
+                        }
+                    } else {
+                        // A control job (e.g. "Restart nginx") finished — resolve
+                        // the optimistic restarting/stopped state.
+                        $this->serviceManager->applyControlJobResult($job->server, (string) $job->label, succeeded: true);
                     }
                 } else {
                     $job->markFailed($exit, $body['error'] ?? null);
 
-                    // Halt the rest of the batch: dependent steps must not run, and
-                    // they shouldn't sit pending forever.
-                    foreach ($job->remainingInBatch() as $skipped) {
-                        $skipped->markFailed(null, "Skipped — earlier step '{$job->label}' failed");
+                    if ($job->batch_id !== null) {
+                        // This step's service(s) failed to install.
+                        $this->serviceManager->setUnitsStatus(
+                            $job->server,
+                            $this->serviceManager->unitsForJobLabel((string) $job->label),
+                            ServiceManager::STATUS_NOT_INSTALLED,
+                        );
+
+                        // Halt the rest of the batch: dependent steps must not run,
+                        // and their services will never be installed.
+                        foreach ($job->remainingInBatch() as $skipped) {
+                            $skipped->markFailed(null, "Skipped — earlier step '{$job->label}' failed");
+                            $this->serviceManager->setUnitsStatus(
+                                $job->server,
+                                $this->serviceManager->unitsForJobLabel((string) $skipped->label),
+                                ServiceManager::STATUS_NOT_INSTALLED,
+                            );
+                        }
+                    } else {
+                        $this->serviceManager->applyControlJobResult($job->server, (string) $job->label, succeeded: false);
                     }
                 }
                 break;

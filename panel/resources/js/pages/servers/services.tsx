@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import echo from '@/echo';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +24,7 @@ import {
 import { Label } from '@/components/ui/label';
 import ServerLayout from '@/layouts/server-layout';
 import { type AgentJob, type BreadcrumbItem, type SystemdService } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import { CheckCircle2Icon, CircleDashedIcon, EllipsisIcon, LoaderIcon, PackagePlusIcon, TriangleAlertIcon, XCircleIcon } from 'lucide-react';
 
 type ServiceAction = 'start' | 'stop' | 'restart' | 'reload';
@@ -70,12 +70,33 @@ function serviceIcon(name: string): { bg: string; letter: string } {
 
 function statusBadge(status: string) {
     switch (status) {
-        case 'active':
+        case 'running':
+        case 'active': // legacy
             return <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">Running</Badge>;
-        case 'inactive':
+        case 'installing':
+            return (
+                <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
+                    <LoaderIcon className="mr-1 h-3 w-3 animate-spin" />
+                    Installing
+                </Badge>
+            );
+        case 'waiting':
+            return (
+                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400">Waiting</Badge>
+            );
+        case 'restarting':
+            return (
+                <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
+                    <LoaderIcon className="mr-1 h-3 w-3 animate-spin" />
+                    Restarting
+                </Badge>
+            );
+        case 'stopped':
+        case 'inactive': // legacy
             return <Badge variant="secondary">Stopped</Badge>;
-        case 'failed':
-            return <Badge variant="destructive">Failed</Badge>;
+        case 'not_installed':
+        case 'failed': // legacy
+            return <Badge variant="destructive">Not Installed</Badge>;
         default:
             return <Badge variant="outline">Unknown</Badge>;
     }
@@ -280,6 +301,7 @@ export default function ServerServices({
     jobs: AgentJob[];
 }) {
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
+    const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => setLiveJobs(jobs), [jobs]);
 
@@ -294,9 +316,17 @@ export default function ServerServices({
                 next[index] = { ...next[index], ...event };
                 return next;
             });
+
+            // Service statuses change as provisioning jobs progress; refresh the
+            // services prop (debounced so a burst of output events coalesces).
+            if (reloadTimer.current) clearTimeout(reloadTimer.current);
+            reloadTimer.current = setTimeout(() => {
+                router.reload({ only: ['services'] });
+            }, 800);
         });
 
         return () => {
+            if (reloadTimer.current) clearTimeout(reloadTimer.current);
             echo.leave(`server.${server.id}`);
         };
     }, [server.id]);
@@ -307,7 +337,7 @@ export default function ServerServices({
         { title: 'Services', href: `/servers/${server.id}/services` },
     ];
 
-    const running = services.filter((s) => s.status === 'active').length;
+    const running = services.filter((s) => s.status === 'running' || s.status === 'active').length;
 
     return (
         <ServerLayout breadcrumbs={breadcrumbs} server={server}>

@@ -3,6 +3,7 @@
 use App\Models\Server;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\ServiceManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
 
@@ -151,10 +152,10 @@ test('control dispatches a shell job and optimistically updates status for start
 
     expect($service->refresh()->status)->toBe($expectedStatus);
 })->with([
-    ['start', 'active'],
-    ['restart', 'active'],
-    ['reload', 'active'],
-    ['stop', 'inactive'],
+    ['start', 'running'],
+    ['restart', 'restarting'],
+    ['reload', 'running'],
+    ['stop', 'stopped'],
 ]);
 
 test('control enable/disable updates config.enabled without changing status', function ($action, $expectedEnabled) {
@@ -270,7 +271,7 @@ test('index renders with services and jobs props', function () {
         'status' => 'inactive',
     ]);
 
-    app(\App\Services\ServiceManager::class)->control($serviceA, 'restart');
+    app(ServiceManager::class)->control($serviceA, 'restart');
 
     $response = $this->get(route('services.index', $server));
 
