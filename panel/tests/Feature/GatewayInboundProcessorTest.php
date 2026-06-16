@@ -3,6 +3,7 @@
 use App\Events\AgentJobUpdated;
 use App\Events\ServerPresenceUpdated;
 use App\Models\AgentJob;
+use App\Models\Application;
 use App\Models\Server;
 use App\Models\ServerMetric;
 use App\Models\Service;
@@ -257,4 +258,65 @@ test('metrics envelope with unknown server uuid is ignored', function () {
     ]));
 
     expect(ServerMetric::count())->toBe(0);
+});
+
+test('an application becomes active once all its provisioning jobs succeed', function () {
+    mockGatewayRedis();
+    Event::fake([AgentJobUpdated::class]);
+    $server = Server::factory()->create();
+    $application = Application::factory()->for($server)->create(['status' => 'provisioning']);
+
+    $jobA = AgentJob::factory()->for($server)->running()->create(['application_id' => $application->id]);
+    $jobB = AgentJob::factory()->for($server)->running()->create(['application_id' => $application->id]);
+
+    $complete = fn (AgentJob $j) => app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type' => GatewayProtocol::TYPE_JOB_RESULT,
+        'job_id' => $j->uuid,
+        'server_id' => $server->id,
+        'payload' => ['exit_code' => 0],
+    ]));
+
+    // Still provisioning while one job is outstanding.
+    $complete($jobA);
+    expect($application->refresh()->status)->toBe('provisioning');
+
+    // Last job done → active.
+    $complete($jobB);
+    expect($application->refresh()->status)->toBe('active');
+});
+
+test('an application is marked failed when a provisioning job fails', function () {
+    mockGatewayRedis();
+    Event::fake([AgentJobUpdated::class]);
+    $server = Server::factory()->create();
+    $application = Application::factory()->for($server)->create(['status' => 'provisioning']);
+
+    $job = AgentJob::factory()->for($server)->running()->create(['application_id' => $application->id]);
+
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type' => GatewayProtocol::TYPE_JOB_RESULT,
+        'job_id' => $job->uuid,
+        'server_id' => $server->id,
+        'payload' => ['exit_code' => 1, 'error' => 'boom'],
+    ]));
+
+    expect($application->refresh()->status)->toBe('failed');
+});
+
+test('a later job on an active application does not reopen its lifecycle', function () {
+    mockGatewayRedis();
+    Event::fake([AgentJobUpdated::class]);
+    $server = Server::factory()->create();
+    $application = Application::factory()->for($server)->create(['status' => 'active']);
+
+    $job = AgentJob::factory()->for($server)->running()->create(['application_id' => $application->id]);
+
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type' => GatewayProtocol::TYPE_JOB_RESULT,
+        'job_id' => $job->uuid,
+        'server_id' => $server->id,
+        'payload' => ['exit_code' => 1],
+    ]));
+
+    expect($application->refresh()->status)->toBe('active');
 });

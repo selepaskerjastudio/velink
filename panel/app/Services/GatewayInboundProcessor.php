@@ -140,7 +140,49 @@ class GatewayInboundProcessor
                 return;
         }
 
+        // A per-application provisioning step settled — advance the app's own
+        // lifecycle (provisioning → active/failed) once its jobs are done.
+        if ($job->application_id !== null) {
+            $this->syncApplicationProvisioning($job);
+        }
+
         event(new AgentJobUpdated($job->refresh()));
+    }
+
+    /**
+     * Transition an application out of the `provisioning` state based on its
+     * agent jobs. App-provisioning steps are dispatched un-batched and run
+     * concurrently on the agent, so the app is "active" only once every one of
+     * its jobs has settled successfully; any failure marks it "failed".
+     *
+     * The `provisioning` guard means later jobs (deploys, env writes, PHP
+     * switches) on an already-active app never reopen its lifecycle.
+     */
+    private function syncApplicationProvisioning(AgentJob $job): void
+    {
+        $application = $job->application;
+        if ($application === null || $application->status !== 'provisioning') {
+            return;
+        }
+
+        if ($job->status === AgentJob::STATUS_FAILED || $job->status === AgentJob::STATUS_TIMEOUT) {
+            $application->forceFill(['status' => 'failed'])->save();
+
+            return;
+        }
+
+        $unfinished = $application->server->agentJobs()
+            ->where('application_id', $application->id)
+            ->whereIn('status', [
+                AgentJob::STATUS_PENDING,
+                AgentJob::STATUS_DISPATCHED,
+                AgentJob::STATUS_RUNNING,
+            ])
+            ->exists();
+
+        if (! $unfinished) {
+            $application->forceFill(['status' => 'active'])->save();
+        }
     }
 
     /**
