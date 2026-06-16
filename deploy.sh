@@ -87,4 +87,4 @@ if [ "$RESTART_GATEWAY" = true ]; then
     ok "Gateway restarted"
 fi
 
-echo -e "\n${GREEN}${BOLD}Deploy selesai.${RESET}\n"
+echo -e "\n${GREEN}${BOLD}Deploy complete.${RESET}\n"
