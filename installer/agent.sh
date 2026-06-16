@@ -17,6 +17,39 @@
 #
 set -euo pipefail
 
+# ─── Colour helpers ────────────────────────────────────────────────────────────
+if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    BOLD="$(tput bold)"
+    RED="$(tput setaf 1)"
+    GREEN="$(tput setaf 2)"
+    YELLOW="$(tput setaf 3)"
+    CYAN="$(tput setaf 6)"
+    RESET="$(tput sgr0)"
+else
+    BOLD="" RED="" GREEN="" YELLOW="" CYAN="" RESET=""
+fi
+
+STEP=0
+TOTAL=6
+
+_header() {
+    echo ""
+    echo "${BOLD}${CYAN}╔══════════════════════════════════════════════════╗${RESET}"
+    printf "${BOLD}${CYAN}║${RESET}  %-48s${BOLD}${CYAN}║${RESET}\n" "$1"
+    echo "${BOLD}${CYAN}╚══════════════════════════════════════════════════╝${RESET}"
+}
+
+step() {
+    STEP=$((STEP + 1))
+    echo ""
+    echo "${BOLD}[${STEP}/${TOTAL}]${RESET} ${CYAN}▶ ${*}${RESET}"
+}
+
+ok()   { echo "      ${GREEN}✓${RESET}  ${*}"; }
+info() { echo "      ${YELLOW}→${RESET}  ${*}"; }
+die()  { echo ""; echo "${RED}✗  ERROR: ${*}${RESET}" >&2; exit 1; }
+
+# ─── Parse flags ───────────────────────────────────────────────────────────────
 TOKEN=""
 SERVER_ID=""
 GATEWAY_URL="wss://panel.selepaskerja.id"
@@ -24,14 +57,6 @@ PANEL_URL="https://panel.selepaskerja.id"
 VERSION="latest"
 BINARY_URL=""
 INSECURE="0"
-
-BIN_PATH="/usr/local/bin/velink-agent"
-ENV_DIR="/etc/velink"
-ENV_FILE="${ENV_DIR}/agent.env"
-UNIT_FILE="/etc/systemd/system/velink-agent.service"
-
-log()  { echo "[velink] $*"; }
-die()  { echo "[velink] ERROR: $*" >&2; exit 1; }
 
 for arg in "$@"; do
     case "$arg" in
@@ -46,47 +71,122 @@ for arg in "$@"; do
     esac
 done
 
-[ "$(id -u)" -eq 0 ] || die "must run as root (use sudo)"
-[ -n "$TOKEN" ]     || die "--token is required"
-[ -n "$SERVER_ID" ] || die "--server-id is required"
+# ─── Banner ────────────────────────────────────────────────────────────────────
+clear 2>/dev/null || true
+echo ""
+echo "${BOLD}  Velink Agent Installer${RESET}"
+echo "  ──────────────────────────────────────────────────"
+echo "  This script will perform the following actions:"
+echo ""
+echo "  ${GREEN}1.${RESET} Verify system requirements (root, OS, architecture)"
+echo "  ${GREEN}2.${RESET} Detect OS & CPU architecture"
+echo "  ${GREEN}3.${RESET} Download the Velink agent binary to /usr/local/bin/"
+echo "  ${GREEN}4.${RESET} Write agent config (token, gateway URL) to /etc/velink/"
+echo "  ${GREEN}5.${RESET} Install a systemd service unit (velink-agent.service)"
+echo "  ${GREEN}6.${RESET} Enable & start the service via systemctl"
+echo ""
+echo "  ${YELLOW}Files created / modified:${RESET}"
+echo "    /usr/local/bin/velink-agent      ← agent binary (executable)"
+echo "    /etc/velink/agent.env            ← config (chmod 600, root-only)"
+echo "    /etc/systemd/system/velink-agent.service"
+echo ""
+echo "  ${YELLOW}Network connections made:${RESET}"
+echo "    ${PANEL_URL%/}/install/bin/...   ← binary download"
+echo "    ${GATEWAY_URL}                   ← WebSocket to panel (at runtime)"
+echo ""
+echo "  ──────────────────────────────────────────────────"
 
-# Detect platform.
+BIN_PATH="/usr/local/bin/velink-agent"
+ENV_DIR="/etc/velink"
+ENV_FILE="${ENV_DIR}/agent.env"
+UNIT_FILE="/etc/systemd/system/velink-agent.service"
+
+# ─── Step 1: Prerequisites ─────────────────────────────────────────────────────
+step "Checking prerequisites"
+
+[ "$(id -u)" -eq 0 ] || die "must run as root (use sudo)"
+ok "Running as root"
+
+[ -n "$TOKEN" ]     || die "--token is required"
+ok "Enrollment token present"
+
+[ -n "$SERVER_ID" ] || die "--server-id is required"
+ok "Server ID present (${SERVER_ID})"
+
+command -v curl >/dev/null 2>&1 || die "curl is required but not found"
+ok "curl is available"
+
+# ─── Step 2: Detect platform ───────────────────────────────────────────────────
+step "Detecting system platform"
+
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ok "Operating system: ${OS}"
+
 case "$(uname -m)" in
-    x86_64|amd64) ARCH="amd64" ;;
-    aarch64|arm64) ARCH="arm64" ;;
+    x86_64|amd64)    ARCH="amd64" ;;
+    aarch64|arm64)   ARCH="arm64" ;;
     *) die "unsupported architecture: $(uname -m)" ;;
 esac
+ok "CPU architecture: ${ARCH}"
+
+if [ -f /etc/os-release ]; then
+    # shellcheck source=/dev/null
+    . /etc/os-release
+    ok "Distribution: ${PRETTY_NAME:-unknown}"
+fi
 
 if [ -z "$BINARY_URL" ]; then
     BINARY_URL="${PANEL_URL%/}/install/bin/agent-${OS}-${ARCH}-${VERSION}"
 fi
+info "Binary URL: ${BINARY_URL}"
 
-CURL_OPTS=(-fsSL)
+# ─── Step 3: Download agent binary ────────────────────────────────────────────
+step "Downloading Velink agent binary"
+info "Source : ${BINARY_URL}"
+info "Destination : ${BIN_PATH}"
+
+CURL_OPTS=(-fL --progress-bar)
 [ "$INSECURE" = "1" ] && CURL_OPTS+=(-k)
 
-log "downloading agent binary: ${BINARY_URL}"
 TMP="$(mktemp)"
-curl "${CURL_OPTS[@]}" "$BINARY_URL" -o "$TMP" || die "download failed"
+# Show download progress on stderr so it's visible even when piped
+curl "${CURL_OPTS[@]}" "$BINARY_URL" -o "$TMP" 2>&1 || die "binary download failed — check your connection or panel URL"
 chmod 0755 "$TMP"
 install -m 0755 "$TMP" "$BIN_PATH"
 rm -f "$TMP"
-log "installed binary to ${BIN_PATH}"
 
-# Write config.
+AGENT_SIZE="$(du -sh "$BIN_PATH" 2>/dev/null | cut -f1)"
+ok "Binary installed to ${BIN_PATH} (${AGENT_SIZE})"
+
+# ─── Step 4: Write agent configuration ────────────────────────────────────────
+step "Writing agent configuration"
+info "Directory  : ${ENV_DIR}"
+info "Config file: ${ENV_FILE}  (mode 600, readable only by root)"
+info "Values being written:"
+info "  AGENT_GATEWAY_URL = ${GATEWAY_URL}"
+info "  AGENT_SERVER_ID   = ${SERVER_ID}"
+info "  AGENT_TOKEN       = [hidden]"
+info "  AGENT_HEARTBEAT   = 30"
+info "  AGENT_INSECURE    = ${INSECURE}"
+
 mkdir -p "$ENV_DIR"
-umask 077
-cat > "$ENV_FILE" <<EOF
+(umask 177; cat > "$ENV_FILE" <<EOF
 AGENT_GATEWAY_URL=${GATEWAY_URL}
 AGENT_TOKEN=${TOKEN}
 AGENT_SERVER_ID=${SERVER_ID}
 AGENT_HEARTBEAT=30
 AGENT_INSECURE=${INSECURE}
 EOF
-chmod 0600 "$ENV_FILE"
-log "wrote config to ${ENV_FILE}"
+)
+ok "Config written and locked to root (chmod 600)"
 
-# Install systemd unit.
+# ─── Step 5: Install systemd service ──────────────────────────────────────────
+step "Installing systemd service unit"
+info "Unit file: ${UNIT_FILE}"
+info "Service name: velink-agent.service"
+info "Run as: root (agent provisions packages & services on this VM)"
+info "Restart policy: always (restarts 5s after crash)"
+
 cat > "$UNIT_FILE" <<'EOF'
 [Unit]
 Description=Velink agent
@@ -108,15 +208,44 @@ NoNewPrivileges=no
 [Install]
 WantedBy=multi-user.target
 EOF
-log "installed systemd unit to ${UNIT_FILE}"
+
+ok "Service unit written to ${UNIT_FILE}"
+
+# ─── Step 6: Enable & start service ───────────────────────────────────────────
+step "Enabling & starting velink-agent service"
 
 if command -v systemctl >/dev/null 2>&1; then
+    info "Running: systemctl daemon-reload"
     systemctl daemon-reload
+    ok "systemd daemon reloaded"
+
+    info "Running: systemctl enable --now velink-agent.service"
     systemctl enable --now velink-agent.service
-    log "agent service started"
+    ok "Service enabled and started"
+
+    # Brief pause so the service has time to connect before we show status
+    sleep 2
+
+    echo ""
+    echo "  ${BOLD}Service status:${RESET}"
+    echo "  ──────────────────────────────────────────────────"
     systemctl --no-pager --full status velink-agent.service || true
 else
-    log "systemctl not found; start the agent manually: ${BIN_PATH}"
+    info "systemctl not found — start the agent manually:"
+    info "  ${BIN_PATH}"
 fi
 
-log "done. The server should appear online in the panel shortly."
+# ─── Done ──────────────────────────────────────────────────────────────────────
+echo ""
+echo "${BOLD}${GREEN}  ══════════════════════════════════════════════════${RESET}"
+echo "${BOLD}${GREEN}  ✓  Installation complete!${RESET}"
+echo "${BOLD}${GREEN}  ══════════════════════════════════════════════════${RESET}"
+echo ""
+echo "  The server should appear ${GREEN}online${RESET} in the panel within a few seconds."
+echo ""
+echo "  Useful commands:"
+echo "    systemctl status  velink-agent   ← check agent status"
+echo "    journalctl -u velink-agent -f    ← follow agent logs"
+echo "    systemctl restart velink-agent   ← restart agent"
+echo "    systemctl stop    velink-agent   ← stop agent"
+echo ""
