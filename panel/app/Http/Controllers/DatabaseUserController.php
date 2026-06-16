@@ -6,6 +6,7 @@ use App\Models\DatabaseUser;
 use App\Models\Server;
 use App\Services\AuditLogger;
 use App\Services\DatabaseUserProvisionService;
+use App\Support\DatabaseNaming;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -13,19 +14,6 @@ use Illuminate\Validation\ValidationException;
 
 class DatabaseUserController extends Controller
 {
-    private const USERNAME_REGEX = '/^[A-Za-z][A-Za-z0-9_]{0,31}$/';
-
-    private const HOST_REGEX = '/^(%|[A-Za-z0-9](?:[A-Za-z0-9.\-]{0,62})?)$/';
-
-    private const DB_NAME_REGEX = '/^[A-Za-z][A-Za-z0-9_]{0,63}$/';
-
-    /**
-     * Safe password charset — excludes quotes, backslash, $ and backtick so the
-     * value can be interpolated into the single-quoted SQL/double-quoted shell
-     * commands in DatabaseUserProvisionService without escaping.
-     */
-    private const PASSWORD_REGEX = '/^[A-Za-z0-9!@#%^*()_+=.\-]{8,64}$/';
-
     /**
      * Database users now live as a sub-tab of the unified Databases page.
      * This route is kept for back-compat and simply redirects there.
@@ -42,10 +30,10 @@ class DatabaseUserController extends Controller
             'username' => [
                 'required',
                 'string',
-                'regex:'.self::USERNAME_REGEX,
+                'regex:'.DatabaseNaming::USERNAME_REGEX,
             ],
-            'host' => ['required', 'string', 'max:60', 'regex:'.self::HOST_REGEX],
-            'password' => ['nullable', 'string', 'regex:'.self::PASSWORD_REGEX],
+            'host' => ['required', 'string', 'max:60', 'regex:'.DatabaseNaming::HOST_REGEX],
+            'password' => ['nullable', 'string', 'regex:'.DatabaseNaming::PASSWORD_REGEX],
             'grants' => ['nullable', 'array', $this->grantsRule($server, $request->input('engine'))],
         ]);
 
@@ -106,7 +94,7 @@ class DatabaseUserController extends Controller
     public function resetPassword(Request $request, DatabaseUser $databaseUser, DatabaseUserProvisionService $service): RedirectResponse
     {
         $validated = $request->validate([
-            'password' => ['nullable', 'string', 'regex:'.self::PASSWORD_REGEX],
+            'password' => ['nullable', 'string', 'regex:'.DatabaseNaming::PASSWORD_REGEX],
         ]);
 
         $result = $service->updatePassword($databaseUser, $validated['password'] ?? null, $request->user()->id);
@@ -158,7 +146,7 @@ class DatabaseUserController extends Controller
             $databaseNames = $server->databases()->where('engine', $engine)->pluck('name')->all();
 
             foreach ($value as $database => $privileges) {
-                if (! is_string($database) || preg_match(self::DB_NAME_REGEX, $database) !== 1) {
+                if (! is_string($database) || preg_match(DatabaseNaming::DB_NAME_REGEX, $database) !== 1) {
                     $fail("Invalid database name: {$database}");
 
                     continue;

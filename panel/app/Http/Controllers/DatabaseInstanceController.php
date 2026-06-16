@@ -6,6 +6,7 @@ use App\Models\DatabaseInstance;
 use App\Models\Server;
 use App\Services\AuditLogger;
 use App\Services\DatabaseProvisionService;
+use App\Support\DatabaseNaming;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,47 +15,10 @@ use Inertia\Response;
 
 class DatabaseInstanceController extends Controller
 {
-    private const NAME_REGEX = '/^[A-Za-z][A-Za-z0-9_]{0,63}$/';
-
-    private const CHARSET_REGEX = '/^[A-Za-z0-9_]+$/';
-
-    /**
-     * Reserved/system database names, checked case-insensitively, across all
-     * supported engines (MySQL/MariaDB, PostgreSQL, MongoDB).
-     */
-    private const RESERVED_NAMES = [
-        'information_schema',
-        'performance_schema',
-        'mysql',
-        'sys',
-        'postgres',
-        'template0',
-        'template1',
-        'admin',
-        'local',
-        'config',
-    ];
-
-    /** Maps the DB systemd unit name to the engine key used across the UI. */
-    private const ENGINE_UNITS = [
-        'mariadb' => 'mariadb',
-        'postgresql' => 'postgres',
-        'mongod' => 'mongodb',
-    ];
-
     public function index(Server $server): Response
     {
         // Only surface engine tabs for engines that are actually installed.
-        $unitStatuses = $server->services()
-            ->whereIn('name', array_keys(self::ENGINE_UNITS))
-            ->pluck('status', 'name');
-
-        $installedEngines = [];
-        foreach (self::ENGINE_UNITS as $unit => $engine) {
-            if (in_array($unitStatuses[$unit] ?? null, ['running', 'active'], true)) {
-                $installedEngines[] = $engine;
-            }
-        }
+        $installedEngines = $server->installedDatabaseEngines();
 
         return Inertia::render('servers/databases', [
             'server' => [
@@ -102,9 +66,9 @@ class DatabaseInstanceController extends Controller
             'name' => [
                 'required',
                 'string',
-                'regex:'.self::NAME_REGEX,
+                'regex:'.DatabaseNaming::DB_NAME_REGEX,
                 function ($attribute, $value, $fail) {
-                    if (in_array(strtolower((string) $value), self::RESERVED_NAMES, true)) {
+                    if (DatabaseNaming::isReserved((string) $value)) {
                         $fail('The '.$attribute.' is a reserved name.');
                     }
                 },
@@ -112,8 +76,8 @@ class DatabaseInstanceController extends Controller
                     ->where('server_id', $server->id)
                     ->where('engine', $request->input('engine')),
             ],
-            'charset' => ['nullable', 'string', 'max:64', 'regex:'.self::CHARSET_REGEX],
-            'collation' => ['nullable', 'string', 'max:64', 'regex:'.self::CHARSET_REGEX],
+            'charset' => ['nullable', 'string', 'max:64', 'regex:'.DatabaseNaming::CHARSET_REGEX],
+            'collation' => ['nullable', 'string', 'max:64', 'regex:'.DatabaseNaming::CHARSET_REGEX],
         ]);
 
         $service->create(

@@ -12,6 +12,13 @@ class Server extends Model
     use HasFactory;
     use HasUuidRouteKey;
 
+    /** Maps the DB systemd unit name to the engine key used across the UI. */
+    private const ENGINE_UNITS = [
+        'mariadb' => 'mariadb',
+        'postgresql' => 'postgres',
+        'mongod' => 'mongodb',
+    ];
+
     protected $fillable = [
         'uuid',
         'name',
@@ -84,5 +91,27 @@ class Server extends Model
     public function latestMetric()
     {
         return $this->hasOne(ServerMetric::class)->latestOfMany();
+    }
+
+    /**
+     * The database engine keys (mariadb|postgres|mongodb) whose systemd unit is
+     * currently running on this server. Used to gate DB-related UI.
+     *
+     * @return list<string>
+     */
+    public function installedDatabaseEngines(): array
+    {
+        $unitStatuses = $this->services()
+            ->whereIn('name', array_keys(self::ENGINE_UNITS))
+            ->pluck('status', 'name');
+
+        $installedEngines = [];
+        foreach (self::ENGINE_UNITS as $unit => $engine) {
+            if (in_array($unitStatuses[$unit] ?? null, ['running', 'active'], true)) {
+                $installedEngines[] = $engine;
+            }
+        }
+
+        return $installedEngines;
     }
 }

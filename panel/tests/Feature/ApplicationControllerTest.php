@@ -42,7 +42,10 @@ test('an application can be created and provisions a php pool plus jobs', functi
     $response = $this->post(route('applications.store', $server), [
         'name' => 'My App',
         'domain' => 'my-app.example.com',
+        'app_type' => 'custom',
+        'stack_mode' => 'production',
         'php_version' => '8.3',
+        'branch' => 'main',
     ]);
 
     $application = Application::firstWhere('domain', 'my-app.example.com');
@@ -51,13 +54,145 @@ test('an application can be created and provisions a php pool plus jobs', functi
     expect($application)->not->toBeNull();
     expect($application->server_id)->toBe($server->id);
     expect($application->name)->toBe('My App');
+    expect($application->app_type)->toBe('custom');
     expect($application->php_version)->toBe('8.3');
     expect($application->status)->toBe('provisioning');
-    expect($application->linux_user)->toMatch('/^[a-z][a-z0-9_]*$/');
-    expect($application->root_path)->toBe("/home/{$application->linux_user}");
+    expect($application->linux_user)->toBe('velink');
+    expect($application->app_slug)->toMatch('/^[a-z][a-z0-9_]*$/');
+    expect($application->root_path)->toBe("/home/velink/webapps/{$application->app_slug}");
 
-    expect($application->server->agentJobs()->where('application_id', $application->id)->count())->toBe(6);
+    expect($application->server->agentJobs()->where('application_id', $application->id)->count())->toBe(5);
     expect(PhpPool::where('application_id', $application->id)->where('php_version', '8.3')->exists())->toBeTrue();
+});
+
+test('a static application is created without a php pool', function () {
+    mockGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    $response = $this->post(route('applications.store', $server), [
+        'name' => 'Static Site',
+        'domain' => 'static.example.com',
+        'app_type' => 'static',
+        'stack_mode' => 'production',
+        'branch' => 'main',
+        // no php_version — not required for static
+    ]);
+
+    $application = Application::firstWhere('domain', 'static.example.com');
+
+    $response->assertRedirect(route('applications.show', $application));
+    expect($application->app_type)->toBe('static');
+    expect(PhpPool::where('application_id', $application->id)->exists())->toBeFalse();
+});
+
+test('a wordpress application requires a database engine', function () {
+    mockGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    // No DB engine installed on this server.
+    $server = Server::factory()->online()->create();
+
+    $response = $this->post(route('applications.store', $server), [
+        'name' => 'Blog',
+        'domain' => 'blog.example.com',
+        'app_type' => 'wordpress',
+        'stack_mode' => 'production',
+        'php_version' => '8.3',
+        'branch' => 'main',
+        'db_engine' => 'mariadb',
+        'db_name' => 'blog_db',
+        'db_username' => 'blog_user',
+    ]);
+
+    // mariadb is not installed → db_engine fails the in:installedEngines rule.
+    $response->assertSessionHasErrors('db_engine');
+    expect(Application::where('domain', 'blog.example.com')->exists())->toBeFalse();
+});
+
+test('an application can be created with a database and user', function () {
+    mockGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    // Mark mariadb as installed/running so it is an allowed engine.
+    $server->services()->create(['name' => 'mariadb', 'type' => 'database', 'status' => 'running']);
+
+    $response = $this->post(route('applications.store', $server), [
+        'name' => 'App With DB',
+        'domain' => 'withdb.example.com',
+        'app_type' => 'laravel',
+        'stack_mode' => 'production',
+        'php_version' => '8.3',
+        'branch' => 'main',
+        'create_database' => true,
+        'db_engine' => 'mariadb',
+        'db_name' => 'app_db',
+        'db_username' => 'app_user',
+    ]);
+
+    $application = Application::firstWhere('domain', 'withdb.example.com');
+    $response->assertRedirect(route('applications.show', $application));
+
+    expect($server->databases()->where('name', 'app_db')->where('engine', 'mariadb')->exists())->toBeTrue();
+    expect($server->databaseUsers()->where('username', 'app_user')->where('engine', 'mariadb')->exists())->toBeTrue();
+});
+
+test('a reserved database name is rejected', function () {
+    mockGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $server->services()->create(['name' => 'mariadb', 'type' => 'database', 'status' => 'running']);
+
+    $response = $this->post(route('applications.store', $server), [
+        'name' => 'Bad DB',
+        'domain' => 'baddb.example.com',
+        'app_type' => 'custom',
+        'stack_mode' => 'production',
+        'php_version' => '8.3',
+        'branch' => 'main',
+        'create_database' => true,
+        'db_engine' => 'mariadb',
+        'db_name' => 'mysql',
+        'db_username' => 'app_user',
+    ]);
+
+    $response->assertSessionHasErrors('db_name');
+    expect(Application::where('domain', 'baddb.example.com')->exists())->toBeFalse();
+});
+
+test('git settings can be configured at creation', function () {
+    mockGatewayPublish();
+
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    $server = Server::factory()->online()->create();
+
+    $provider = GitProvider::create(['type' => 'github', 'name' => 'GitHub']);
+    $credential = $user->gitCredentials()->create([
+        'git_provider_id' => $provider->id,
+        'account_username' => 'octocat',
+        'access_token' => 'ghp_test',
+    ]);
+
+    $response = $this->post(route('applications.store', $server), [
+        'name' => 'Git App',
+        'domain' => 'gitapp.example.com',
+        'app_type' => 'custom',
+        'stack_mode' => 'production',
+        'php_version' => '8.3',
+        'branch' => 'develop',
+        'repository' => 'acme/widgets',
+        'git_credential_id' => $credential->uuid,
+    ]);
+
+    $application = Application::firstWhere('domain', 'gitapp.example.com');
+    $response->assertRedirect(route('applications.show', $application));
+    expect($application->repository)->toBe('acme/widgets');
+    expect($application->branch)->toBe('develop');
+    expect($application->git_credential_id)->toBe($credential->id);
 });
 
 test('application domain must be unique', function () {
@@ -120,8 +255,8 @@ test('php version can be switched and dispatches the change job sequence', funct
     PhpPool::create([
         'application_id' => $application->id,
         'php_version' => '8.3',
-        'pool_name' => $application->linux_user,
-        'socket_path' => "/run/php/{$application->linux_user}.sock",
+        'pool_name' => $application->app_slug,
+        'socket_path' => "/run/php/{$application->app_slug}.sock",
         'config' => [],
     ]);
 

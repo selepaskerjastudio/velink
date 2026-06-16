@@ -9,12 +9,17 @@ use App\Provisioning\DeployTemplates;
 use App\Provisioning\ProvisioningCatalog;
 use App\Services\AppProvisionService;
 use App\Services\AuditLogger;
-use App\Services\DeployScriptValidator;
+use App\Services\DatabaseProvisionService;
+use App\Services\DatabaseUserProvisionService;
 use App\Services\DeploymentService;
+use App\Services\DeployScriptValidator;
 use App\Services\JobDispatcher;
+use App\Support\DatabaseNaming;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -30,64 +35,185 @@ class ApplicationController extends Controller
     {
         return Inertia::render('servers/applications', [
             'server' => [
-                'id'        => $server->uuid,
-                'name'      => $server->name,
+                'id' => $server->uuid,
+                'name' => $server->name,
                 'public_ip' => $server->public_ip,
-                'status'    => $server->status,
+                'status' => $server->status,
             ],
             'applications' => $server->applications()
                 ->orderBy('name')
                 ->get(['uuid', 'name', 'domain', 'php_version', 'linux_user', 'status'])
                 ->map(fn (Application $a) => [
-                    'id'          => $a->uuid,
-                    'name'        => $a->name,
-                    'domain'      => $a->domain,
+                    'id' => $a->uuid,
+                    'name' => $a->name,
+                    'domain' => $a->domain,
                     'php_version' => $a->php_version,
-                    'linux_user'  => $a->linux_user,
-                    'status'      => $a->status,
+                    'linux_user' => $a->linux_user,
+                    'status' => $a->status,
                 ]),
         ]);
     }
 
-    public function create(Server $server): Response
+    public function create(Request $request, Server $server): Response
     {
         return Inertia::render('applications/create', [
             'server' => ['id' => $server->uuid, 'name' => $server->name, 'os' => $server->os],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
+            'appTypes' => self::appTypes(),
+            'installedEngines' => $server->installedDatabaseEngines(),
+            'gitCredentials' => $this->gitCredentialsFor($request),
         ]);
     }
 
-    public function store(Request $request, Server $server, AppProvisionService $provisionService): RedirectResponse
+    public function store(Request $request, Server $server, AppProvisionService $provisionService, DatabaseProvisionService $databaseService, DatabaseUserProvisionService $databaseUserService): RedirectResponse
     {
+        $appType = (string) $request->input('app_type');
+        $installedEngines = $server->installedDatabaseEngines();
+        // WordPress always needs a (MySQL/MariaDB) database.
+        $wantsDb = $request->boolean('create_database') || $appType === 'wordpress';
+
         $validated = $request->validate([
+            'app_type' => ['required', 'string', Rule::in(Application::APP_TYPES)],
             'name' => ['required', 'string', 'max:255'],
             'domain' => ['required', 'string', 'max:255', 'regex:'.self::DOMAIN_REGEX, Rule::unique('applications', 'domain')],
-            'php_version' => ['required', 'string', 'in:'.implode(',', ProvisioningCatalog::PHP_VERSIONS)],
+            'stack_mode' => ['required', 'string', Rule::in(['production', 'development'])],
+            'php_version' => [Rule::requiredIf($appType !== 'static'), 'nullable', 'string', 'in:'.implode(',', ProvisioningCatalog::PHP_VERSIONS)],
+
+            // Git (optional)
+            'repository' => ['nullable', 'string', 'max:255', 'regex:'.self::REPOSITORY_REGEX],
+            'branch' => ['required', 'string', 'max:255', 'regex:'.self::BRANCH_REGEX],
+            'git_credential_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('git_credentials', 'uuid')->where('user_id', $request->user()->id),
+            ],
+
+            // Database (optional; required for WordPress)
+            'create_database' => ['boolean'],
+            'db_engine' => [
+                Rule::requiredIf($wantsDb),
+                'nullable',
+                'string',
+                Rule::in($installedEngines),
+                // WordPress only supports MySQL/MariaDB.
+                Rule::when($appType === 'wordpress', [Rule::in(['mariadb'])]),
+            ],
+            'db_name' => [
+                Rule::requiredIf($wantsDb),
+                'nullable',
+                'string',
+                'regex:'.DatabaseNaming::DB_NAME_REGEX,
+                function ($attribute, $value, $fail) {
+                    if ($value !== null && DatabaseNaming::isReserved((string) $value)) {
+                        $fail('The database name is reserved.');
+                    }
+                },
+                Rule::unique('databases', 'name')
+                    ->where('server_id', $server->id)
+                    ->where('engine', $request->input('db_engine')),
+            ],
+            'db_username' => [
+                Rule::requiredIf($wantsDb),
+                'nullable',
+                'string',
+                'regex:'.DatabaseNaming::USERNAME_REGEX,
+            ],
         ]);
 
-        $linuxUser = Application::generateLinuxUser($server->id, $validated['domain']);
+        $appSlug = Application::generateAppSlug($server->id, $validated['domain']);
+        $osUser = (string) config('velink.webapp_user', 'velink');
+
+        $credential = ! empty($validated['git_credential_id'])
+            ? GitCredential::where('uuid', $validated['git_credential_id'])->first()
+            : null;
 
         $application = Application::create([
             'server_id' => $server->id,
             'name' => $validated['name'],
             'domain' => $validated['domain'],
-            'root_path' => "/home/{$linuxUser}",
-            'linux_user' => $linuxUser,
-            'php_version' => $validated['php_version'],
+            'app_type' => $validated['app_type'],
+            'stack_mode' => $validated['stack_mode'],
+            'linux_user' => $osUser,
+            'app_slug' => $appSlug,
+            'root_path' => "/home/{$osUser}/webapps/{$appSlug}",
+            'php_version' => $validated['php_version'] ?? ProvisioningCatalog::PHP_VERSIONS[count(ProvisioningCatalog::PHP_VERSIONS) - 1],
+            'repository' => ($validated['repository'] ?? '') ?: null,
+            'branch' => $validated['branch'],
+            'git_credential_id' => $credential?->id,
             'status' => 'provisioning',
         ]);
 
-        $provisionService->provisionNew($application, $request->user()->id);
+        // Optionally provision a database + dedicated user in the same flow.
+        $dbCreds = null;
+        if ($wantsDb) {
+            $databaseService->create(
+                $server,
+                $validated['db_engine'],
+                $validated['db_name'],
+                null,
+                null,
+                $request->user()->id,
+            );
+
+            $userResult = $databaseUserService->create(
+                $server,
+                $validated['db_engine'],
+                $validated['db_username'],
+                'localhost',
+                [$validated['db_name'] => ['ALL']],
+                $request->user()->id,
+            );
+
+            $dbCreds = [
+                'name' => $validated['db_name'],
+                'user' => $validated['db_username'],
+                'password' => $userResult['plainPassword'],
+                'host' => 'localhost',
+            ];
+        }
+
+        $provisionService->provisionNew($application, $request->user()->id, $dbCreds);
 
         AuditLogger::log(
             action: 'application.created',
             description: "Application '{$application->name}' created on '{$server->name}'",
             userId: $request->user()->id,
             serverId: $server->id,
-            properties: ['app_uuid' => $application->uuid],
+            properties: ['app_uuid' => $application->uuid, 'app_type' => $application->app_type],
         );
 
         return redirect()->route('applications.show', $application);
+    }
+
+    /**
+     * The selectable application types shown as cards on the create form.
+     *
+     * @return array<int, array{value: string, label: string, description: string}>
+     */
+    private static function appTypes(): array
+    {
+        return [
+            ['value' => 'custom', 'label' => 'Custom Web App (PHP)', 'description' => 'Generic PHP app served from a /public front controller.'],
+            ['value' => 'laravel', 'label' => 'Laravel', 'description' => 'PHP app with a /public web root and Laravel-friendly defaults.'],
+            ['value' => 'wordpress', 'label' => 'WordPress', 'description' => 'Downloads WordPress core and wires wp-config to a new database.'],
+            ['value' => 'static', 'label' => 'Static HTML', 'description' => 'nginx serves files straight from disk — no PHP.'],
+        ];
+    }
+
+    /**
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function gitCredentialsFor(Request $request)
+    {
+        return $request->user()->gitCredentials()
+            ->with('provider:id,type,name')
+            ->get(['id', 'uuid', 'account_username', 'git_provider_id', 'created_at'])
+            ->map(fn ($c) => [
+                'id' => $c->uuid,
+                'account_username' => $c->account_username,
+                'created_at' => $c->created_at,
+                'provider' => ['type' => $c->provider->type, 'name' => $c->provider->name],
+            ]);
     }
 
     public function show(Application $application): Response
@@ -154,7 +280,7 @@ class ApplicationController extends Controller
         if (! empty($validated['deploy_script'])) {
             $warnings = DeployScriptValidator::check($validated['deploy_script']);
             if (! empty($warnings)) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
+                throw ValidationException::withMessages([
                     'deploy_script' => $warnings,
                 ]);
             }
@@ -271,20 +397,20 @@ class ApplicationController extends Controller
         $configPath = "/etc/nginx/sites-available/{$application->domain}.conf";
 
         $dispatcher->dispatch($application->server, 'write_file', [
-            'path'    => $configPath,
+            'path' => $configPath,
             'content' => $validated['config'],
         ], [
             'application_id' => $application->id,
-            'user_id'        => $request->user()->id,
-            'label'          => 'Update NGINX config',
+            'user_id' => $request->user()->id,
+            'label' => 'Update NGINX config',
         ]);
 
         $dispatcher->dispatch($application->server, 'shell', [
             'command' => 'sudo nginx -t && sudo systemctl reload nginx',
         ], [
             'application_id' => $application->id,
-            'user_id'        => $request->user()->id,
-            'label'          => 'Reload NGINX',
+            'user_id' => $request->user()->id,
+            'label' => 'Reload NGINX',
         ]);
 
         AuditLogger::log(

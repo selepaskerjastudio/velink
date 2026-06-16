@@ -16,14 +16,18 @@ class ApplicationFactory extends Factory
     public function definition(): array
     {
         $domain = fake()->unique()->domainName();
-        $linuxUser = 'app_'.fake()->unique()->numberBetween(1, 99999);
+        $slug = 'app_'.fake()->unique()->numberBetween(1, 99999);
+        $user = 'velink';
 
         return [
             'server_id' => Server::factory(),
             'name' => $domain,
             'domain' => $domain,
-            'root_path' => "/home/{$linuxUser}",
-            'linux_user' => $linuxUser,
+            'app_type' => 'custom',
+            'stack_mode' => 'production',
+            'linux_user' => $user,
+            'app_slug' => $slug,
+            'root_path' => "/home/{$user}/webapps/{$slug}",
             'php_version' => '8.3',
             'branch' => 'main',
             'deploy_mode' => 'inplace',

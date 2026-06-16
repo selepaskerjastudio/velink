@@ -8,57 +8,76 @@ use App\Models\PhpPool;
 use App\Provisioning\AppTemplates;
 
 /**
- * Provisions the per-application Linux user, php-fpm pool, and nginx vhost,
- * and handles switching an application's PHP version with minimal downtime.
+ * Provisions a web application's directory, php-fpm pool, and nginx vhost on a
+ * managed server, and handles switching its PHP version with minimal downtime.
  *
- * The php-fpm socket is keyed by linux_user only (see AppTemplates), so a
- * version switch never touches the nginx vhost.
+ * Every app shares one OS user (config `velink.webapp_user`) and lives in
+ * /home/{user}/webapps/{app_slug}. The php-fpm socket + pool conf are keyed by
+ * app_slug only (see AppTemplates), so a version switch never touches the
+ * nginx vhost. Static sites get no php-fpm pool at all.
+ *
+ * Path components interpolated into the shell heredocs below are safe:
+ *  - app_slug is generated from Str::slug (lowercase letters/digits/underscore,
+ *    starts with a letter, <=28 chars) — no shell metacharacters.
+ *  - the OS user comes from config, not user input.
+ *  - domain is validated by ApplicationController's DOMAIN_REGEX upstream.
  */
 class AppProvisionService
 {
-    public function __construct(private JobDispatcher $dispatcher)
-    {
-    }
+    public function __construct(private JobDispatcher $dispatcher) {}
 
     /**
+     * @param  array{name: string, user: string, password: string, host?: string}|null  $dbCreds
+     *                                                                                            WordPress DB credentials, used to render wp-config.php.
      * @return array<int, AgentJob>
      */
-    public function provisionNew(Application $app, ?int $userId = null): array
+    public function provisionNew(Application $app, ?int $userId = null, ?array $dbCreds = null): array
     {
+        $slug = AppTemplates::slug($app);
         $vars = AppTemplates::vars($app);
+        $osUser = AppTemplates::webappUser();
+        $home = AppTemplates::homeDir();
+        $webapps = AppTemplates::webappsDir();
+        $logsDir = AppTemplates::logsDir();
+        $root = $app->root_path;
         $jobs = [];
 
-        $jobs[] = $this->shell($app, 'Create Linux user', <<<SH
-            id -u {$app->linux_user} >/dev/null 2>&1 || useradd --create-home --shell /usr/sbin/nologin {$app->linux_user}
+        // 1. Ensure the shared OS user, the per-app directory, and the shared
+        //    logs directory exist, with permissions that let www-data (nginx)
+        //    traverse into the web root to serve static files.
+        $jobs[] = $this->shell($app, 'Create web app directory', <<<SH
+            id -u {$osUser} >/dev/null 2>&1 || useradd --create-home --shell /usr/sbin/nologin {$osUser}
+            mkdir -p {$root}/public {$root}/tmp {$logsDir}
+            chmod 711 {$home}
+            chmod 711 {$webapps}
+            chown {$osUser}:{$osUser} {$logsDir}
+            {$this->placeholder($app)}
+            chown -R {$osUser}:{$osUser} {$root}
+            chmod 755 {$root}
             SH, $userId);
 
-        $jobs[] = $this->shell($app, 'Create app directory', <<<SH
-            mkdir -p {$app->root_path}/public {$app->root_path}/tmp
-            if [ ! -f {$app->root_path}/public/index.php ]; then
-                printf '%s\\n' '<?php' 'phpinfo();' > {$app->root_path}/public/index.php
-            fi
-            chown -R {$app->linux_user}:{$app->linux_user} {$app->root_path}
-            chmod 750 {$app->root_path}
-            SH, $userId);
+        // 2. php-fpm pool (skipped for static sites).
+        if ($app->usesPhp()) {
+            $jobs[] = $this->renderConfig(
+                $app,
+                'Write PHP-FPM pool config',
+                AppTemplates::poolConfigPath($app->php_version, $slug),
+                AppTemplates::PHP_FPM_POOL,
+                $vars,
+                $userId,
+            );
 
-        $jobs[] = $this->renderConfig(
-            $app,
-            'Write PHP-FPM pool config',
-            AppTemplates::poolConfigPath($app->php_version, $app->linux_user),
-            AppTemplates::PHP_FPM_POOL,
-            $vars,
-            $userId,
-        );
+            $jobs[] = $this->shell($app, 'Reload PHP-FPM', <<<SH
+                systemctl reload php{$app->php_version}-fpm
+                SH, $userId);
+        }
 
-        $jobs[] = $this->shell($app, 'Reload PHP-FPM', <<<SH
-            systemctl reload php{$app->php_version}-fpm
-            SH, $userId);
-
+        // 3. nginx vhost (template depends on app type).
         $jobs[] = $this->renderConfig(
             $app,
             'Write nginx vhost',
             AppTemplates::vhostPath((string) $app->domain),
-            AppTemplates::NGINX_VHOST,
+            AppTemplates::vhostTemplate($app->app_type),
             $vars,
             $userId,
         );
@@ -69,39 +88,70 @@ class AppProvisionService
             systemctl reload nginx
             SH, $userId);
 
-        PhpPool::create([
-            'application_id' => $app->id,
-            'php_version' => $app->php_version,
-            'pool_name' => $app->linux_user,
-            'socket_path' => $vars['socket_path'],
-            'config' => $vars,
-        ]);
+        // 4. WordPress: download core + render wp-config.php wired to the DB
+        //    created in the same flow.
+        if ($app->app_type === 'wordpress' && $dbCreds !== null) {
+            $jobs[] = $this->shell($app, 'Download WordPress core', <<<SH
+                if [ ! -f {$root}/wp-settings.php ]; then
+                    curl -fsSL https://wordpress.org/latest.tar.gz -o /tmp/{$slug}-wp.tar.gz
+                    tar xzf /tmp/{$slug}-wp.tar.gz -C {$root} --strip-components=1
+                    rm -f /tmp/{$slug}-wp.tar.gz
+                    chown -R {$osUser}:{$osUser} {$root}
+                fi
+                SH, $userId);
+
+            $jobs[] = $this->renderConfig(
+                $app,
+                'Write wp-config.php',
+                "{$root}/wp-config.php",
+                AppTemplates::WORDPRESS_WP_CONFIG,
+                AppTemplates::wordpressVars($app, $dbCreds),
+                $userId,
+                '0640',
+            );
+
+            $jobs[] = $this->shell($app, 'Secure wp-config.php', <<<SH
+                chown {$osUser}:{$osUser} {$root}/wp-config.php
+                chmod 640 {$root}/wp-config.php
+                SH, $userId);
+        }
+
+        if ($app->usesPhp()) {
+            PhpPool::create([
+                'application_id' => $app->id,
+                'php_version' => $app->php_version,
+                'pool_name' => $slug,
+                'socket_path' => $vars['socket_path'],
+                'config' => $vars,
+            ]);
+        }
 
         return $jobs;
     }
 
     /**
-     * Move the php-fpm pool config from the old version's directory to the
-     * new one and reload both daemons. The socket path (and therefore the
-     * nginx vhost) is unchanged.
+     * Move the php-fpm pool config from the old version's directory to the new
+     * one and reload both daemons. The socket path (and therefore the nginx
+     * vhost) is unchanged.
      *
      * @return array<int, AgentJob>
      */
     public function changePhpVersion(Application $app, string $newVersion, ?int $userId = null): array
     {
+        $slug = AppTemplates::slug($app);
         $oldVersion = $app->php_version;
         $vars = AppTemplates::vars($app);
         $jobs = [];
 
         $jobs[] = $this->shell($app, 'Remove old PHP-FPM pool', <<<SH
-            rm -f {$this->path(AppTemplates::poolConfigPath($oldVersion, $app->linux_user))}
+            rm -f {$this->path(AppTemplates::poolConfigPath($oldVersion, $slug))}
             systemctl reload php{$oldVersion}-fpm || true
             SH, $userId);
 
         $jobs[] = $this->renderConfig(
             $app,
             "Write PHP-FPM pool config (PHP {$newVersion})",
-            AppTemplates::poolConfigPath($newVersion, $app->linux_user),
+            AppTemplates::poolConfigPath($newVersion, $slug),
             AppTemplates::PHP_FPM_POOL,
             $vars,
             $userId,
@@ -113,20 +163,44 @@ class AppProvisionService
 
         $app->forceFill(['php_version' => $newVersion])->save();
 
-        $pool = $app->phpPools()->where('pool_name', $app->linux_user)->first();
+        $pool = $app->phpPools()->where('pool_name', $slug)->first();
         if ($pool !== null) {
             $pool->forceFill(['php_version' => $newVersion, 'config' => $vars])->save();
         } else {
             PhpPool::create([
                 'application_id' => $app->id,
                 'php_version' => $newVersion,
-                'pool_name' => $app->linux_user,
+                'pool_name' => $slug,
                 'socket_path' => $vars['socket_path'],
                 'config' => $vars,
             ]);
         }
 
         return $jobs;
+    }
+
+    /**
+     * Type-specific placeholder document so a freshly created app serves
+     * something before the first deploy. WordPress gets none (its core
+     * download provides index.php).
+     */
+    private function placeholder(Application $app): string
+    {
+        $root = $app->root_path;
+
+        return match ($app->app_type) {
+            'static' => <<<SH
+                if [ ! -f {$root}/index.html ]; then
+                    printf '%s\\n' '<h1>It works!</h1>' > {$root}/index.html
+                fi
+                SH,
+            'wordpress' => ':',
+            default => <<<SH
+                if [ ! -f {$root}/public/index.php ]; then
+                    printf '%s\\n' '<?php' 'phpinfo();' > {$root}/public/index.php
+                fi
+                SH,
+        };
     }
 
     private function shell(Application $app, string $label, string $command, ?int $userId): AgentJob
@@ -142,13 +216,13 @@ class AppProvisionService
     /**
      * @param  array<string, string>  $vars
      */
-    private function renderConfig(Application $app, string $label, string $path, string $template, array $vars, ?int $userId): AgentJob
+    private function renderConfig(Application $app, string $label, string $path, string $template, array $vars, ?int $userId, string $mode = '0644'): AgentJob
     {
         return $this->dispatcher->dispatch($app->server, 'render_config', [
             'path' => $path,
             'template' => $template,
             'vars' => $vars,
-            'mode' => '0644',
+            'mode' => $mode,
         ], ['application_id' => $app->id, 'user_id' => $userId, 'label' => $label]);
     }
 
