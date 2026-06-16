@@ -86,6 +86,8 @@ export interface Application {
     webhook_secret: string | null;
     webhook_url: string;
     webhook_url_gitlab: string;
+    ssl_enabled: boolean;
+    ssl_enabled_at?: string | null;
     ssl_provider: string | null;
 }
 

@@ -3,11 +3,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import echo from '@/echo';
 import AppLayout from '@/layouts/app-layout';
@@ -21,7 +21,7 @@ import {
     type GitCredential,
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
+import { ChevronDownIcon, ShieldCheckIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -254,413 +254,438 @@ export default function ApplicationsShow({
                         <TriangleAlertIcon className="h-4 w-4" />
                         <AlertTitle>Server offline</AlertTitle>
                         <AlertDescription>
-                            The agent on this server is not connected. Actions that require the agent (deploy, PHP switch, .env write, SSL) will be queued but won't run until the server reconnects.
+                            The agent on this server is not connected. Actions that require the agent (deploy, PHP switch, .env write, SSL) will be
+                            queued but won't run until the server reconnects.
                         </AlertDescription>
                     </Alert>
                 )}
 
-                <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>Application details</CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid gap-2 text-sm">
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Domain</span>
-                            <span>{application.domain ?? '—'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Root path</span>
-                            <span className="font-mono">{application.root_path}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">Linux user</span>
-                            <span className="font-mono">{application.linux_user}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-muted-foreground">PHP version</span>
-                            <span>{application.php_version}</span>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>PHP version</CardTitle>
-                        <CardDescription>Switch the PHP-FPM pool used by this application. Nginx is not reloaded.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Select value={phpForm.data.php_version} onValueChange={(value) => phpForm.setData('php_version', value)}>
-                            <SelectTrigger className="max-w-40">
-                                <SelectValue placeholder="Select a PHP version" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availablePhpVersions.map((version) => (
-                                    <SelectItem key={version} value={version}>
-                                        PHP {version}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </CardContent>
-                    <CardFooter>
-                        <Button
-                            onClick={submitPhpVersion}
-                            disabled={phpForm.processing || phpForm.data.php_version === application.php_version}
-                        >
-                            Switch PHP version
-                        </Button>
-                    </CardFooter>
-                </Card>
-
-                <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>SSL / HTTPS</CardTitle>
-                        <CardDescription>
-                            Issue a free Let's Encrypt certificate via certbot. Requires certbot to be installed on the server and the domain
-                            to point to this server.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardFooter>
-                        <div className="flex flex-col gap-1">
-                            <Button
-                                variant="secondary"
-                                onClick={submitSsl}
-                                disabled={sslForm.processing || !application.domain || application.status === 'pending'}
-                            >
-                                Enable SSL
-                            </Button>
-                            {!application.domain && <p className="text-muted-foreground text-xs">No domain set</p>}
-                        </div>
-                    </CardFooter>
-                </Card>
-
-                <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>Environment (.env)</CardTitle>
-                        <CardDescription>Written to {application.root_path}/.env on the server.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Textarea
-                            value={envForm.data.env_content}
-                            onChange={(e) => envForm.setData('env_content', e.target.value)}
-                            rows={10}
-                            className="font-mono text-sm"
-                            spellCheck={false}
-                        />
-                    </CardContent>
-                    <CardFooter>
-                        <Button onClick={submitEnv} disabled={envForm.processing}>
-                            Save .env
-                        </Button>
-                    </CardFooter>
-                </Card>
-
-                <Card className="max-w-xl">
-                    <CardHeader>
-                        <CardTitle>Deploy</CardTitle>
-                        <CardDescription>Configure the repository and script used to deploy this application.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="repository">Repository</Label>
-                            {isGitHub ? (
-                                <div className="relative">
-                                    <Input
-                                        id="repository"
-                                        value={deployForm.data.repository}
-                                        onChange={(e) => handleRepoInput(e.target.value)}
-                                        onFocus={handleRepoFocus}
-                                        onBlur={() => setTimeout(() => setRepoOpen(false), 150)}
-                                        placeholder="Search repositories…"
-                                        autoComplete="off"
-                                    />
-                                    {repoOpen && (repoLoading || repoOptions.length > 0) && (
-                                        <div className="bg-popover absolute z-10 mt-1 w-full rounded-md border shadow-md">
-                                            {repoLoading && (
-                                                <div className="text-muted-foreground px-3 py-2 text-sm">Searching…</div>
-                                            )}
-                                            {repoOptions.map((repo) => (
-                                                <button
-                                                    key={repo.full_name}
-                                                    type="button"
-                                                    className="hover:bg-accent flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-                                                    onMouseDown={() => selectRepo(repo)}
-                                                >
-                                                    <span className="flex-1">{repo.full_name}</span>
-                                                    {repo.private && (
-                                                        <Badge variant="secondary" className="text-xs">
-                                                            private
-                                                        </Badge>
-                                                    )}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
+                <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+                    <div className="flex flex-col gap-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Application details</CardTitle>
+                            </CardHeader>
+                            <CardContent className="grid gap-2 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Domain</span>
+                                    <span>{application.domain ?? '—'}</span>
                                 </div>
-                            ) : (
-                                <Input
-                                    id="repository"
-                                    value={deployForm.data.repository}
-                                    onChange={(e) => deployForm.setData('repository', e.target.value)}
-                                    placeholder="owner/repo"
-                                />
-                            )}
-                            <InputError message={deployForm.errors.repository ?? pageErrors.repository} />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="branch">Branch</Label>
-                            <Input
-                                id="branch"
-                                value={deployForm.data.branch}
-                                onChange={(e) => deployForm.setData('branch', e.target.value)}
-                                className="max-w-40"
-                            />
-                            <InputError message={deployForm.errors.branch} />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="git_credential_id">Git credential</Label>
-                            <Select
-                                value={deployForm.data.git_credential_id}
-                                onValueChange={(value) => deployForm.setData('git_credential_id', value)}
-                            >
-                                <SelectTrigger id="git_credential_id" className="max-w-72">
-                                    <SelectValue placeholder="None (public repository)" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value={NO_CREDENTIAL}>None (public repository)</SelectItem>
-                                    {gitCredentials.map((credential) => (
-                                        <SelectItem key={credential.id} value={String(credential.id)}>
-                                            {PROVIDER_LABELS[credential.provider.type] ?? credential.provider.type}
-                                            {credential.account_username ? ` — ${credential.account_username}` : ''}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError message={deployForm.errors.git_credential_id} />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="deploy_mode">Deploy mode</Label>
-                            <Select value={deployForm.data.deploy_mode} onValueChange={(value) => deployForm.setData('deploy_mode', value)}>
-                                <SelectTrigger id="deploy_mode" className="max-w-60">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="inplace">In-place</SelectItem>
-                                    <SelectItem value="zero_downtime" disabled>
-                                        Zero-downtime (coming soon)
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <InputError message={deployForm.errors.deploy_mode} />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <Label htmlFor="deploy_script">Deploy script</Label>
-                            <Textarea
-                                id="deploy_script"
-                                value={deployForm.data.deploy_script}
-                                onChange={(e) => deployForm.setData('deploy_script', e.target.value)}
-                                rows={12}
-                                className="font-mono text-sm"
-                                spellCheck={false}
-                            />
-                            <InputError message={deployForm.errors.deploy_script} />
-                        </div>
-                    </CardContent>
-                    <CardFooter className="gap-2">
-                        <Button onClick={submitDeploySettings} disabled={deployForm.processing}>
-                            Save deploy settings
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={submitDeployNow}
-                            disabled={deployNowForm.processing || !application.repository}
-                        >
-                            Deploy now
-                        </Button>
-                    </CardFooter>
-                </Card>
-
-                {application.repository && (
-                    <Card className="max-w-xl">
-                        <CardHeader>
-                            <CardTitle>Auto-deploy webhook</CardTitle>
-                            <CardDescription>
-                                Triggers deployment on push to <code className="font-mono">{application.branch}</code>. Configure in GitHub or
-                                GitLab.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid gap-6">
-                            {/* GitHub section */}
-                            <div className="grid gap-4">
-                                <p className="text-sm font-medium">GitHub</p>
-                                <p className="text-muted-foreground text-xs">
-                                    Add in GitHub → Settings → Webhooks. Set Content type to <code>application/json</code>.
-                                </p>
-                                <div className="grid gap-2">
-                                    <Label>Payload URL</Label>
-                                    <div className="flex gap-2">
-                                        <Input readOnly value={application.webhook_url} className="font-mono text-xs" />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => navigator.clipboard.writeText(application.webhook_url)}
-                                        >
-                                            Copy
-                                        </Button>
-                                    </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Root path</span>
+                                    <span className="font-mono">{application.root_path}</span>
                                 </div>
-                                <div className="grid gap-2">
-                                    <Label>Secret</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            readOnly
-                                            value={application.webhook_secret ?? ''}
-                                            className="font-mono text-xs"
-                                            type="password"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
-                                        >
-                                            Copy
-                                        </Button>
-                                    </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Linux user</span>
+                                    <span className="font-mono">{application.linux_user}</span>
                                 </div>
-                            </div>
-
-                            <Separator />
-
-                            {/* GitLab section */}
-                            <div className="grid gap-4">
-                                <p className="text-sm font-medium">GitLab</p>
-                                <p className="text-muted-foreground text-xs">
-                                    Add in GitLab → Settings → Webhooks. Set Content type to <code>application/json</code>. Secret token = the
-                                    value below.
-                                </p>
-                                <div className="grid gap-2">
-                                    <Label>URL</Label>
-                                    <div className="flex gap-2">
-                                        <Input readOnly value={application.webhook_url_gitlab} className="font-mono text-xs" />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => navigator.clipboard.writeText(application.webhook_url_gitlab)}
-                                        >
-                                            Copy
-                                        </Button>
-                                    </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">PHP version</span>
+                                    <span>{application.php_version}</span>
                                 </div>
-                                <div className="grid gap-2">
-                                    <Label>Secret token</Label>
-                                    <div className="flex gap-2">
-                                        <Input
-                                            readOnly
-                                            value={application.webhook_secret ?? ''}
-                                            className="font-mono text-xs"
-                                            type="password"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
-                                        >
-                                            Copy
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
+                            </CardContent>
+                        </Card>
 
-                {liveDeployments.length > 0 && (
-                    <Card className="max-w-xl">
-                        <CardHeader>
-                            <CardTitle>Deployment history</CardTitle>
-                            <CardDescription>Live status of deployments triggered for this application.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid gap-2">
-                            {liveDeployments.map((deployment) => (
-                                <Collapsible key={deployment.id}>
-                                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium">{deployment.branch ?? '—'}</span>
-                                            <span className="text-muted-foreground text-xs">
-                                                {deployment.mode} · {deployment.triggered_by}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>PHP version</CardTitle>
+                                <CardDescription>Switch the PHP-FPM pool used by this application. Nginx is not reloaded.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Select value={phpForm.data.php_version} onValueChange={(value) => phpForm.setData('php_version', value)}>
+                                    <SelectTrigger className="max-w-40">
+                                        <SelectValue placeholder="Select a PHP version" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availablePhpVersions.map((version) => (
+                                            <SelectItem key={version} value={version}>
+                                                PHP {version}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </CardContent>
+                            <CardFooter>
+                                <Button
+                                    onClick={submitPhpVersion}
+                                    disabled={phpForm.processing || phpForm.data.php_version === application.php_version}
+                                >
+                                    Switch PHP version
+                                </Button>
+                            </CardFooter>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>SSL / HTTPS</CardTitle>
+                                <CardDescription>
+                                    Issue a free Let's Encrypt certificate via certbot. Requires certbot to be installed on the server and the domain
+                                    to point to this server.
+                                </CardDescription>
+                            </CardHeader>
+                            {application.ssl_enabled ? (
+                                <>
+                                    <CardContent>
+                                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                                            <Badge variant="success" className="gap-1">
+                                                <ShieldCheckIcon className="h-3.5 w-3.5" />
+                                                HTTPS active
+                                            </Badge>
+                                            <span className="text-muted-foreground">
+                                                Let's Encrypt
+                                                {application.ssl_enabled_at
+                                                    ? ` · since ${new Date(application.ssl_enabled_at).toLocaleDateString()}`
+                                                    : ''}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant={statusVariant(deployment.status)}>{deployment.status}</Badge>
-                                            {deployment.log && (
-                                                <CollapsibleTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                                                        <ChevronDownIcon />
-                                                    </Button>
-                                                </CollapsibleTrigger>
-                                            )}
-                                        </div>
+                                    </CardContent>
+                                    <CardFooter>
+                                        <Button variant="outline" onClick={submitSsl} disabled={sslForm.processing || !application.domain}>
+                                            Re-issue certificate
+                                        </Button>
+                                    </CardFooter>
+                                </>
+                            ) : (
+                                <CardFooter>
+                                    <div className="flex flex-col gap-1">
+                                        <Button
+                                            variant="secondary"
+                                            onClick={submitSsl}
+                                            disabled={sslForm.processing || !application.domain || application.status === 'pending'}
+                                        >
+                                            Enable SSL
+                                        </Button>
+                                        {!application.domain && <p className="text-muted-foreground text-xs">No domain set</p>}
                                     </div>
-                                    {deployment.log && (
-                                        <CollapsibleContent>
-                                            <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
-                                                {deployment.log}
-                                            </pre>
-                                        </CollapsibleContent>
-                                    )}
-                                </Collapsible>
-                            ))}
-                        </CardContent>
-                    </Card>
-                )}
+                                </CardFooter>
+                            )}
+                        </Card>
 
-                {liveJobs.length > 0 && (
-                    <Card className="max-w-xl">
-                        <CardHeader>
-                            <CardTitle>Provisioning progress</CardTitle>
-                            <CardDescription>Live status of jobs dispatched for this application.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid gap-2">
-                            {liveJobs.map((job) => (
-                                <Collapsible key={job.uuid}>
-                                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium">{job.label ?? job.type}</span>
-                                            {job.exit_code !== null && (
-                                                <span className="text-muted-foreground text-xs">exit {job.exit_code}</span>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Environment (.env)</CardTitle>
+                                <CardDescription>Written to {application.root_path}/.env on the server.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Textarea
+                                    value={envForm.data.env_content}
+                                    onChange={(e) => envForm.setData('env_content', e.target.value)}
+                                    rows={10}
+                                    className="font-mono text-sm"
+                                    spellCheck={false}
+                                />
+                            </CardContent>
+                            <CardFooter>
+                                <Button onClick={submitEnv} disabled={envForm.processing}>
+                                    Save .env
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Deploy</CardTitle>
+                                <CardDescription>Configure the repository and script used to deploy this application.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="grid gap-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="repository">Repository</Label>
+                                    {isGitHub ? (
+                                        <div className="relative">
+                                            <Input
+                                                id="repository"
+                                                value={deployForm.data.repository}
+                                                onChange={(e) => handleRepoInput(e.target.value)}
+                                                onFocus={handleRepoFocus}
+                                                onBlur={() => setTimeout(() => setRepoOpen(false), 150)}
+                                                placeholder="Search repositories…"
+                                                autoComplete="off"
+                                            />
+                                            {repoOpen && (repoLoading || repoOptions.length > 0) && (
+                                                <div className="bg-popover absolute z-10 mt-1 w-full rounded-md border shadow-md">
+                                                    {repoLoading && <div className="text-muted-foreground px-3 py-2 text-sm">Searching…</div>}
+                                                    {repoOptions.map((repo) => (
+                                                        <button
+                                                            key={repo.full_name}
+                                                            type="button"
+                                                            className="hover:bg-accent flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+                                                            onMouseDown={() => selectRepo(repo)}
+                                                        >
+                                                            <span className="flex-1">{repo.full_name}</span>
+                                                            {repo.private && (
+                                                                <Badge variant="secondary" className="text-xs">
+                                                                    private
+                                                                </Badge>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
-                                            {job.output && (
-                                                <CollapsibleTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                                                        <ChevronDownIcon />
-                                                    </Button>
-                                                </CollapsibleTrigger>
-                                            )}
+                                    ) : (
+                                        <Input
+                                            id="repository"
+                                            value={deployForm.data.repository}
+                                            onChange={(e) => deployForm.setData('repository', e.target.value)}
+                                            placeholder="owner/repo"
+                                        />
+                                    )}
+                                    <InputError message={deployForm.errors.repository ?? pageErrors.repository} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="branch">Branch</Label>
+                                    <Input
+                                        id="branch"
+                                        value={deployForm.data.branch}
+                                        onChange={(e) => deployForm.setData('branch', e.target.value)}
+                                        className="max-w-40"
+                                    />
+                                    <InputError message={deployForm.errors.branch} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="git_credential_id">Git credential</Label>
+                                    <Select
+                                        value={deployForm.data.git_credential_id}
+                                        onValueChange={(value) => deployForm.setData('git_credential_id', value)}
+                                    >
+                                        <SelectTrigger id="git_credential_id" className="max-w-72">
+                                            <SelectValue placeholder="None (public repository)" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value={NO_CREDENTIAL}>None (public repository)</SelectItem>
+                                            {gitCredentials.map((credential) => (
+                                                <SelectItem key={credential.id} value={String(credential.id)}>
+                                                    {PROVIDER_LABELS[credential.provider.type] ?? credential.provider.type}
+                                                    {credential.account_username ? ` — ${credential.account_username}` : ''}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError message={deployForm.errors.git_credential_id} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="deploy_mode">Deploy mode</Label>
+                                    <Select value={deployForm.data.deploy_mode} onValueChange={(value) => deployForm.setData('deploy_mode', value)}>
+                                        <SelectTrigger id="deploy_mode" className="max-w-60">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="inplace">In-place</SelectItem>
+                                            <SelectItem value="zero_downtime" disabled>
+                                                Zero-downtime (coming soon)
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <InputError message={deployForm.errors.deploy_mode} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="deploy_script">Deploy script</Label>
+                                    <Textarea
+                                        id="deploy_script"
+                                        value={deployForm.data.deploy_script}
+                                        onChange={(e) => deployForm.setData('deploy_script', e.target.value)}
+                                        rows={12}
+                                        className="font-mono text-sm"
+                                        spellCheck={false}
+                                    />
+                                    <InputError message={deployForm.errors.deploy_script} />
+                                </div>
+                            </CardContent>
+                            <CardFooter className="gap-2">
+                                <Button onClick={submitDeploySettings} disabled={deployForm.processing}>
+                                    Save deploy settings
+                                </Button>
+                                <Button variant="secondary" onClick={submitDeployNow} disabled={deployNowForm.processing || !application.repository}>
+                                    Deploy now
+                                </Button>
+                            </CardFooter>
+                        </Card>
+
+                        {application.repository && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Auto-deploy webhook</CardTitle>
+                                    <CardDescription>
+                                        Triggers deployment on push to <code className="font-mono">{application.branch}</code>. Configure in GitHub or
+                                        GitLab.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="grid gap-6">
+                                    {/* GitHub section */}
+                                    <div className="grid gap-4">
+                                        <p className="text-sm font-medium">GitHub</p>
+                                        <p className="text-muted-foreground text-xs">
+                                            Add in GitHub → Settings → Webhooks. Set Content type to <code>application/json</code>.
+                                        </p>
+                                        <div className="grid gap-2">
+                                            <Label>Payload URL</Label>
+                                            <div className="flex gap-2">
+                                                <Input readOnly value={application.webhook_url} className="font-mono text-xs" />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => navigator.clipboard.writeText(application.webhook_url)}
+                                                >
+                                                    Copy
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label>Secret</Label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    readOnly
+                                                    value={application.webhook_secret ?? ''}
+                                                    className="font-mono text-xs"
+                                                    type="password"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
+                                                >
+                                                    Copy
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
-                                    {job.output && (
-                                        <CollapsibleContent>
-                                            <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
-                                                {job.output}
-                                            </pre>
-                                        </CollapsibleContent>
-                                    )}
-                                </Collapsible>
-                            ))}
-                        </CardContent>
-                    </Card>
-                )}
+
+                                    <Separator />
+
+                                    {/* GitLab section */}
+                                    <div className="grid gap-4">
+                                        <p className="text-sm font-medium">GitLab</p>
+                                        <p className="text-muted-foreground text-xs">
+                                            Add in GitLab → Settings → Webhooks. Set Content type to <code>application/json</code>. Secret token = the
+                                            value below.
+                                        </p>
+                                        <div className="grid gap-2">
+                                            <Label>URL</Label>
+                                            <div className="flex gap-2">
+                                                <Input readOnly value={application.webhook_url_gitlab} className="font-mono text-xs" />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => navigator.clipboard.writeText(application.webhook_url_gitlab)}
+                                                >
+                                                    Copy
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label>Secret token</Label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    readOnly
+                                                    value={application.webhook_secret ?? ''}
+                                                    className="font-mono text-xs"
+                                                    type="password"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => navigator.clipboard.writeText(application.webhook_secret ?? '')}
+                                                >
+                                                    Copy
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {liveDeployments.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Deployment history</CardTitle>
+                                    <CardDescription>Live status of deployments triggered for this application.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="grid gap-2">
+                                    {liveDeployments.map((deployment) => (
+                                        <Collapsible key={deployment.id}>
+                                            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium">{deployment.branch ?? '—'}</span>
+                                                    <span className="text-muted-foreground text-xs">
+                                                        {deployment.mode} · {deployment.triggered_by}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant={statusVariant(deployment.status)}>{deployment.status}</Badge>
+                                                    {deployment.log && (
+                                                        <CollapsibleTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                                                                <ChevronDownIcon />
+                                                            </Button>
+                                                        </CollapsibleTrigger>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {deployment.log && (
+                                                <CollapsibleContent>
+                                                    <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
+                                                        {deployment.log}
+                                                    </pre>
+                                                </CollapsibleContent>
+                                            )}
+                                        </Collapsible>
+                                    ))}
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {liveJobs.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Provisioning progress</CardTitle>
+                                    <CardDescription>Live status of jobs dispatched for this application.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="grid gap-2">
+                                    {liveJobs.map((job) => (
+                                        <Collapsible key={job.uuid}>
+                                            <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium">{job.label ?? job.type}</span>
+                                                    {job.exit_code !== null && (
+                                                        <span className="text-muted-foreground text-xs">exit {job.exit_code}</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+                                                    {job.output && (
+                                                        <CollapsibleTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                                                                <ChevronDownIcon />
+                                                            </Button>
+                                                        </CollapsibleTrigger>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {job.output && (
+                                                <CollapsibleContent>
+                                                    <pre className="bg-muted mt-1 max-h-64 overflow-auto rounded-md p-3 text-xs whitespace-pre-wrap">
+                                                        {job.output}
+                                                    </pre>
+                                                </CollapsibleContent>
+                                            )}
+                                        </Collapsible>
+                                    ))}
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
+                </div>
             </div>
         </AppLayout>
     );

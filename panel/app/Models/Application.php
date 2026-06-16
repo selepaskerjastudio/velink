@@ -49,6 +49,7 @@ class Application extends Model
         'env_content',
         'status',
         'webhook_secret',
+        'ssl_enabled_at',
     ];
 
     protected $hidden = [
@@ -59,6 +60,7 @@ class Application extends Model
     {
         return [
             'env_content' => 'encrypted',
+            'ssl_enabled_at' => 'datetime',
         ];
     }
 

@@ -144,6 +144,14 @@ class GatewayInboundProcessor
         // lifecycle (provisioning → active/failed) once its jobs are done.
         if ($job->application_id !== null) {
             $this->syncApplicationProvisioning($job);
+
+            // A successful "Enable SSL for {domain}" certbot job means the app
+            // now serves HTTPS — record it so the UI reflects the real state.
+            if ($job->status === AgentJob::STATUS_SUCCEEDED
+                && $job->label !== null
+                && str_starts_with($job->label, 'Enable SSL for')) {
+                $job->application?->forceFill(['ssl_enabled_at' => now()])->save();
+            }
         }
 
         event(new AgentJobUpdated($job->refresh()));

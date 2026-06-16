@@ -320,3 +320,45 @@ test('a later job on an active application does not reopen its lifecycle', funct
 
     expect($application->refresh()->status)->toBe('active');
 });
+
+test('a successful Enable SSL job marks the application ssl_enabled_at', function () {
+    mockGatewayRedis();
+    Event::fake([AgentJobUpdated::class]);
+    $server = Server::factory()->create();
+    $application = Application::factory()->for($server)->create(['status' => 'active', 'domain' => 'site.example.com']);
+
+    $job = AgentJob::factory()->for($server)->running()->create([
+        'application_id' => $application->id,
+        'label' => 'Enable SSL for site.example.com',
+    ]);
+
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type' => GatewayProtocol::TYPE_JOB_RESULT,
+        'job_id' => $job->uuid,
+        'server_id' => $server->id,
+        'payload' => ['exit_code' => 0],
+    ]));
+
+    expect($application->refresh()->ssl_enabled_at)->not->toBeNull();
+});
+
+test('a failed Enable SSL job does not mark ssl_enabled_at', function () {
+    mockGatewayRedis();
+    Event::fake([AgentJobUpdated::class]);
+    $server = Server::factory()->create();
+    $application = Application::factory()->for($server)->create(['status' => 'active', 'domain' => 'site.example.com']);
+
+    $job = AgentJob::factory()->for($server)->running()->create([
+        'application_id' => $application->id,
+        'label' => 'Enable SSL for site.example.com',
+    ]);
+
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type' => GatewayProtocol::TYPE_JOB_RESULT,
+        'job_id' => $job->uuid,
+        'server_id' => $server->id,
+        'payload' => ['exit_code' => 1, 'error' => 'challenge failed'],
+    ]));
+
+    expect($application->refresh()->ssl_enabled_at)->toBeNull();
+});
