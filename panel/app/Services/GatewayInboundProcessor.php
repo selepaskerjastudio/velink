@@ -75,7 +75,7 @@ class GatewayInboundProcessor
                 if (! $wasRunning && $job->batch_id !== null) {
                     $this->serviceManager->setUnitsStatus(
                         $job->server,
-                        $this->serviceManager->unitsForJobLabel((string) $job->label),
+                        $this->serviceManager->serviceNamesForJobLabel((string) $job->label),
                         ServiceManager::STATUS_INSTALLING,
                     );
                 }
@@ -110,7 +110,7 @@ class GatewayInboundProcessor
                         // Provisioning step done → its service(s) are running.
                         $this->serviceManager->setUnitsStatus(
                             $job->server,
-                            $this->serviceManager->unitsForJobLabel((string) $job->label),
+                            $this->serviceManager->serviceNamesForJobLabel((string) $job->label),
                             ServiceManager::STATUS_RUNNING,
                         );
                         $this->advancePhase($job);
@@ -126,7 +126,7 @@ class GatewayInboundProcessor
                         // This step's service(s) failed to install.
                         $this->serviceManager->setUnitsStatus(
                             $job->server,
-                            $this->serviceManager->unitsForJobLabel((string) $job->label),
+                            $this->serviceManager->serviceNamesForJobLabel((string) $job->label),
                             ServiceManager::STATUS_NOT_INSTALLED,
                         );
                         $this->advancePhase($job);
@@ -160,7 +160,7 @@ class GatewayInboundProcessor
                 $skipped->markFailed(null, 'Skipped — provisioning halted after a failed phase');
                 $this->serviceManager->setUnitsStatus(
                     $skipped->server,
-                    $this->serviceManager->unitsForJobLabel((string) $skipped->label),
+                    $this->serviceManager->serviceNamesForJobLabel((string) $skipped->label),
                     ServiceManager::STATUS_NOT_INSTALLED,
                 );
             }
@@ -175,7 +175,7 @@ class GatewayInboundProcessor
             // "waiting".
             $this->serviceManager->setUnitsStatus(
                 $next->server,
-                $this->serviceManager->unitsForJobLabel((string) $next->label),
+                $this->serviceManager->serviceNamesForJobLabel((string) $next->label),
                 ServiceManager::STATUS_INSTALLING,
             );
         }

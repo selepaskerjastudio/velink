@@ -35,6 +35,17 @@ class ServiceManager
         'mongodb' => ['unit' => 'mongod',       'label' => 'MongoDB'],
     ];
 
+    /**
+     * Installable tools that are not long-running systemd services. They are
+     * listed alongside services so they can be (re)installed on demand, but only
+     * support install/reinstall — not start/stop/restart.
+     */
+    public const TOOL_SERVICES = [
+        'certbot' => ['name' => 'certbot', 'label' => 'Certbot'],
+        'composer' => ['name' => 'composer', 'label' => 'Composer'],
+        'node' => ['name' => 'node', 'label' => 'Node.js'],
+    ];
+
     /** Job label used to identify auto-probe shell jobs so results can be parsed. */
     public const PROBE_LABEL = 'velink:service-probe';
 
@@ -134,24 +145,62 @@ class ServiceManager
      */
     public function seedForServer(Server $server, array $components, array $phpVersions = []): void
     {
-        foreach ($components as $component) {
-            if (isset(self::WELL_KNOWN_SERVICES[$component])) {
-                $def = self::WELL_KNOWN_SERVICES[$component];
-                Service::firstOrCreate(
-                    ['server_id' => $server->id, 'name' => $def['unit'], 'type' => 'systemd'],
-                    ['status' => self::STATUS_WAITING, 'config' => ['label' => $def['label']], 'application_id' => null],
-                );
-            }
+        // Every known component is seeded so the list is always complete; the
+        // ones being installed now are `waiting`, the rest `not_installed` so
+        // they can be installed on demand later.
+        foreach (self::WELL_KNOWN_SERVICES as $component => $def) {
+            $this->seedRow($server, $def['unit'], 'systemd', $def['label'], $component, null, in_array($component, $components, true));
         }
 
-        if (in_array('php', $components, true)) {
-            foreach ($phpVersions as $version) {
-                Service::firstOrCreate(
-                    ['server_id' => $server->id, 'name' => "php{$version}-fpm", 'type' => 'systemd'],
-                    ['status' => self::STATUS_WAITING, 'config' => ['label' => "PHP {$version} FPM"], 'application_id' => null],
-                );
-            }
+        $installingPhp = in_array('php', $components, true);
+        foreach (ProvisioningCatalog::PHP_VERSIONS as $version) {
+            $this->seedRow($server, "php{$version}-fpm", 'systemd', "PHP {$version} FPM", 'php', $version, $installingPhp && in_array($version, $phpVersions, true));
         }
+
+        foreach (self::TOOL_SERVICES as $component => $def) {
+            $this->seedRow($server, $def['name'], 'tool', $def['label'], $component, null, in_array($component, $components, true));
+        }
+    }
+
+    /**
+     * Seed a single service/tool row (idempotent). New rows start `waiting` when
+     * about to be installed, otherwise `not_installed`. The component (and PHP
+     * version) are stored in config so the row can be (re)installed later.
+     */
+    private function seedRow(Server $server, string $name, string $type, string $label, string $component, ?string $phpVersion, bool $installing): void
+    {
+        Service::firstOrCreate(
+            ['server_id' => $server->id, 'name' => $name, 'type' => $type],
+            [
+                'status' => $installing ? self::STATUS_WAITING : self::STATUS_NOT_INSTALLED,
+                'config' => array_filter([
+                    'label' => $label,
+                    'component' => $component,
+                    'php_version' => $phpVersion,
+                ], fn ($v) => $v !== null),
+                'application_id' => null,
+            ],
+        );
+    }
+
+    /**
+     * The service/tool row name(s) installed by a given provisioning component.
+     *
+     * @return array<int, string>
+     */
+    public function serviceNamesForComponent(string $component, ?string $phpVersion = null): array
+    {
+        if ($component === 'php') {
+            return $phpVersion !== null ? ["php{$phpVersion}-fpm"] : [];
+        }
+        if (isset(self::WELL_KNOWN_SERVICES[$component])) {
+            return [self::WELL_KNOWN_SERVICES[$component]['unit']];
+        }
+        if (isset(self::TOOL_SERVICES[$component])) {
+            return [self::TOOL_SERVICES[$component]['name']];
+        }
+
+        return [];
     }
 
     /**
@@ -207,22 +256,33 @@ class ServiceManager
     }
 
     /**
-     * The systemd unit(s) a provisioning step installs, derived from its job
-     * label (e.g. "Install nginx" → nginx, "Install PHP 8.3" → php8.3-fpm).
-     * Steps that don't produce a tracked service (base, PPA, certbot, composer,
-     * node) return an empty array.
+     * The service/tool row name(s) a provisioning step touches, derived from its
+     * job label (e.g. "Install nginx" → nginx, "Install PHP 8.3" → php8.3-fpm,
+     * "Install Node.js" → node). Steps without a tracked row (base, PPA) return
+     * an empty array.
      *
      * @return array<int, string>
      */
-    public function unitsForJobLabel(string $label): array
+    public function serviceNamesForJobLabel(string $label): array
     {
         if (preg_match('/PHP (\d+\.\d+)/', $label, $m)) {
             return ["php{$m[1]}-fpm"];
         }
 
-        foreach (['nginx' => 'nginx', 'Redis' => 'redis-server', 'supervisor' => 'supervisor', 'MariaDB' => 'mariadb', 'PostgreSQL' => 'postgresql', 'MongoDB' => 'mongod'] as $needle => $unit) {
+        $map = [
+            'nginx' => 'nginx',
+            'Redis' => 'redis-server',
+            'supervisor' => 'supervisor',
+            'MariaDB' => 'mariadb',
+            'PostgreSQL' => 'postgresql',
+            'MongoDB' => 'mongod',
+            'Node.js' => 'node',
+            'composer' => 'composer',
+            'certbot' => 'certbot',
+        ];
+        foreach ($map as $needle => $name) {
             if (str_contains($label, $needle)) {
-                return [$unit];
+                return [$name];
             }
         }
 
@@ -230,19 +290,18 @@ class ServiceManager
     }
 
     /**
-     * Update the lifecycle status of the given systemd units on a server.
+     * Update the lifecycle status of the given service/tool rows on a server.
      *
-     * @param  array<int, string>  $units
+     * @param  array<int, string>  $names
      */
-    public function setUnitsStatus(Server $server, array $units, string $status): void
+    public function setUnitsStatus(Server $server, array $names, string $status): void
     {
-        if ($units === []) {
+        if ($names === []) {
             return;
         }
 
         Service::where('server_id', $server->id)
-            ->where('type', 'systemd')
-            ->whereIn('name', $units)
+            ->whereIn('name', $names)
             ->update(['status' => $status]);
     }
 

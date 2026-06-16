@@ -1,19 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import echo from '@/echo';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -21,13 +11,23 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Label } from '@/components/ui/label';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import ServerLayout from '@/layouts/server-layout';
 import { type AgentJob, type BreadcrumbItem, type SystemdService } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
-import { CheckCircle2Icon, CircleDashedIcon, EllipsisIcon, LoaderIcon, PackagePlusIcon, TriangleAlertIcon, XCircleIcon } from 'lucide-react';
+import {
+    ActivityIcon,
+    CheckCircle2Icon,
+    CircleDashedIcon,
+    EllipsisIcon,
+    LoaderIcon,
+    PackageIcon,
+    TriangleAlertIcon,
+    XCircleIcon,
+} from 'lucide-react';
 
-type ServiceAction = 'start' | 'stop' | 'restart' | 'reload';
+type ControlAction = 'start' | 'stop' | 'restart' | 'reload';
+type RowAction = ControlAction | 'install' | 'reinstall';
 
 interface AgentJobUpdatedEvent {
     uuid: string;
@@ -38,22 +38,16 @@ interface AgentJobUpdatedEvent {
     output: string | null;
 }
 
-const COMPONENTS = [
-    { key: 'nginx', label: 'NGINX', group: 'Web' },
-    { key: 'certbot', label: 'Certbot (SSL)', group: 'Web' },
-    { key: 'php', label: 'PHP-FPM', group: 'PHP' },
-    { key: 'composer', label: 'Composer', group: 'PHP' },
-    { key: 'redis', label: 'Redis', group: 'Database' },
-    { key: 'mariadb', label: 'MariaDB', group: 'Database' },
-    { key: 'postgresql', label: 'PostgreSQL', group: 'Database' },
-    { key: 'mongodb', label: 'MongoDB', group: 'Database' },
-    { key: 'supervisor', label: 'Supervisord', group: 'Runtime' },
-    { key: 'node', label: 'Node.js', group: 'Runtime' },
-] as const;
+const ACTION_LABELS: Record<RowAction, string> = {
+    install: 'Install',
+    reinstall: 'Reinstall',
+    start: 'Start',
+    restart: 'Restart',
+    reload: 'Reload',
+    stop: 'Stop',
+};
 
-const PHP_VERSIONS = ['8.1', '8.2', '8.3', '8.4'] as const;
-
-const COMPONENT_GROUPS = ['Web', 'PHP', 'Database', 'Runtime'] as const;
+const JOB_DONE: AgentJob['status'][] = ['succeeded', 'failed', 'timeout'];
 
 function serviceIcon(name: string): { bg: string; letter: string } {
     const n = name.toLowerCase();
@@ -64,11 +58,18 @@ function serviceIcon(name: string): { bg: string; letter: string } {
     if (n.startsWith('supervisor')) return { bg: 'bg-indigo-600', letter: 'S' };
     if (n.startsWith('php')) return { bg: 'bg-purple-600', letter: 'P' };
     if (n.startsWith('mongod')) return { bg: 'bg-green-700', letter: 'M' };
+    if (n.startsWith('certbot')) return { bg: 'bg-teal-600', letter: 'C' };
+    if (n.startsWith('composer')) return { bg: 'bg-amber-700', letter: 'C' };
+    if (n.startsWith('node')) return { bg: 'bg-lime-600', letter: 'N' };
     if (n.startsWith('apache') || n.startsWith('httpd')) return { bg: 'bg-red-700', letter: 'A' };
     return { bg: 'bg-slate-500', letter: (name[0] ?? '?').toUpperCase() };
 }
 
-function statusBadge(status: string) {
+function statusBadge(status: string, isTool: boolean) {
+    const running = status === 'running' || status === 'active';
+    if (isTool && running) {
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">Installed</Badge>;
+    }
     switch (status) {
         case 'running':
         case 'active': // legacy
@@ -81,9 +82,7 @@ function statusBadge(status: string) {
                 </Badge>
             );
         case 'waiting':
-            return (
-                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400">Waiting</Badge>
-            );
+            return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400">Waiting</Badge>;
         case 'restarting':
             return (
                 <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
@@ -122,13 +121,6 @@ function jobStatusIcon(status: AgentJob['status']) {
     }
 }
 
-const ACTION_LABELS: Record<ServiceAction, string> = {
-    start: 'Start',
-    restart: 'Restart',
-    reload: 'Reload',
-    stop: 'Stop',
-};
-
 // Only services whose systemd unit defines a graceful reload (ExecReload).
 function supportsReload(name: string): boolean {
     const n = name.toLowerCase();
@@ -143,31 +135,42 @@ function supportsReload(name: string): boolean {
     );
 }
 
-// Actions that make sense for the current status (and service). A service that
-// is waiting/installing/restarting/not-installed has no actionable controls.
-function availableActions(status: string, name: string): ServiceAction[] {
-    const running = status === 'running' || status === 'active';
-    const stopped = status === 'stopped' || status === 'inactive';
-    const transient = status === 'waiting' || status === 'installing' || status === 'restarting' || status === 'not_installed';
+// Actions appropriate for the row's status and kind. Tools (node/composer/
+// certbot) only install/reinstall; services get runtime controls once running.
+function rowActions(service: SystemdService): RowAction[] {
+    const s = service.status;
+    const isTool = service.type === 'tool';
 
-    if (transient) return [];
-    if (stopped) return ['start'];
-    if (running) return supportsReload(name) ? ['reload', 'restart', 'stop'] : ['restart', 'stop'];
-    // unknown / legacy fallback
-    return supportsReload(name) ? ['start', 'reload', 'restart', 'stop'] : ['start', 'restart', 'stop'];
+    if (s === 'waiting' || s === 'installing' || s === 'restarting') return [];
+    if (s === 'not_installed' || s === 'failed') return ['install'];
+
+    const running = s === 'running' || s === 'active';
+    const stopped = s === 'stopped' || s === 'inactive';
+
+    if (isTool) return ['reinstall'];
+    if (stopped) return ['start', 'reinstall'];
+    if (running) return [...(supportsReload(service.name) ? (['reload'] as RowAction[]) : []), 'restart', 'reinstall', 'stop'];
+    return ['start', 'restart', 'reinstall', 'stop']; // unknown / legacy
 }
 
 function ServiceRow({ service }: { service: SystemdService }) {
-    const controlForm = useForm<{ action: ServiceAction }>({ action: 'restart' });
+    const controlForm = useForm<{ action: ControlAction }>({ action: 'restart' });
+    const installForm = useForm({});
+    const processing = controlForm.processing || installForm.processing;
 
-    const dispatch = (action: ServiceAction) => {
+    const run = (action: RowAction) => {
+        if (action === 'install' || action === 'reinstall') {
+            installForm.post(route('services.install', service.id), { preserveScroll: true });
+            return;
+        }
         controlForm.transform(() => ({ action }));
         controlForm.post(route('services.control', service.id), { preserveScroll: true });
     };
 
     const icon = serviceIcon(service.name);
     const label = service.config?.label ?? service.name;
-    const actions = availableActions(service.status, service.name);
+    const actions = rowActions(service);
+    const primary = actions.filter((a) => a !== 'stop');
 
     return (
         <tr className="border-b last:border-0 hover:bg-muted/30 transition-colors">
@@ -188,32 +191,25 @@ function ServiceRow({ service }: { service: SystemdService }) {
             <td className="px-4 py-3 text-sm text-muted-foreground">
                 {service.memory_usage != null ? formatMemory(service.memory_usage) : '—'}
             </td>
-            <td className="px-4 py-3">
-                {statusBadge(service.status)}
-            </td>
+            <td className="px-4 py-3">{statusBadge(service.status, service.type === 'tool')}</td>
             <td className="py-3 pl-2 pr-4 text-right">
                 {actions.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={controlForm.processing}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" disabled={processing}>
                                 <EllipsisIcon className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            {actions
-                                .filter((a) => a !== 'stop')
-                                .map((a) => (
-                                    <DropdownMenuItem key={a} onClick={() => dispatch(a)}>
-                                        {ACTION_LABELS[a]}
-                                    </DropdownMenuItem>
-                                ))}
+                            {primary.map((a) => (
+                                <DropdownMenuItem key={a} onClick={() => run(a)}>
+                                    {ACTION_LABELS[a]}
+                                </DropdownMenuItem>
+                            ))}
                             {actions.includes('stop') && (
                                 <>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                        onClick={() => dispatch('stop')}
-                                        className="text-destructive focus:text-destructive"
-                                    >
+                                    <DropdownMenuItem onClick={() => run('stop')} className="text-destructive focus:text-destructive">
                                         Stop
                                     </DropdownMenuItem>
                                 </>
@@ -226,117 +222,53 @@ function ServiceRow({ service }: { service: SystemdService }) {
     );
 }
 
-function ProvisionDialog({ serverId }: { serverId: string }) {
-    const [open, setOpen] = useState(false);
-    const [selectedComponents, setSelectedComponents] = useState<string[]>(['nginx', 'php', 'redis', 'supervisor']);
-    const [selectedVersions, setSelectedVersions] = useState<string[]>(['8.3']);
-
-    const form = useForm<{ components: string[]; php_versions: string[] }>({
-        components: [],
-        php_versions: [],
-    });
-
-    const toggleComponent = (key: string) => {
-        setSelectedComponents((prev) =>
-            prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key],
-        );
-    };
-
-    const toggleVersion = (v: string) => {
-        setSelectedVersions((prev) =>
-            prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v],
-        );
-    };
-
-    const handleSubmit = () => {
-        form.transform(() => ({
-            components: selectedComponents,
-            php_versions: selectedVersions,
-        }));
-        form.post(route('services.provision', serverId), {
-            onSuccess: () => setOpen(false),
-        });
-    };
-
-    const phpSelected = selectedComponents.includes('php');
+function ActivitiesSheet({ jobs }: { jobs: AgentJob[] }) {
+    const active = jobs.filter((j) => !JOB_DONE.includes(j.status)).length;
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button size="sm">
-                    <PackagePlusIcon className="mr-1.5 h-4 w-4" />
-                    Provision Stack
+        <Sheet>
+            <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="relative">
+                    <ActivityIcon className="mr-1.5 h-4 w-4" />
+                    Activities
+                    {active > 0 && (
+                        <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold text-white">
+                            {active}
+                        </span>
+                    )}
                 </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Provision Server Stack</DialogTitle>
-                    <DialogDescription>
-                        Select the services to install on this server. This runs apt-based installation via the agent.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4 py-2">
-                    {COMPONENT_GROUPS.map((group) => {
-                        const items = COMPONENTS.filter((c) => c.group === group);
-                        return (
-                            <div key={group}>
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group}</p>
-                                <div className="space-y-2">
-                                    {items.map(({ key, label }) => (
-                                        <div key={key} className="flex items-center gap-2">
-                                            <Checkbox
-                                                id={`comp-${key}`}
-                                                checked={selectedComponents.includes(key)}
-                                                onCheckedChange={() => toggleComponent(key)}
-                                            />
-                                            <Label htmlFor={`comp-${key}`} className="cursor-pointer text-sm font-normal">
-                                                {label}
-                                            </Label>
-                                        </div>
-                                    ))}
-                                    {group === 'PHP' && phpSelected && (
-                                        <div className="ml-6 mt-2 space-y-1.5 border-l pl-3">
-                                            <p className="text-xs text-muted-foreground">PHP versions to install:</p>
-                                            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                                                {PHP_VERSIONS.map((v) => (
-                                                    <div key={v} className="flex items-center gap-1.5">
-                                                        <Checkbox
-                                                            id={`php-${v}`}
-                                                            checked={selectedVersions.includes(v)}
-                                                            onCheckedChange={() => toggleVersion(v)}
-                                                        />
-                                                        <Label htmlFor={`php-${v}`} className="cursor-pointer text-sm font-normal">
-                                                            {v}
-                                                        </Label>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+            </SheetTrigger>
+            <SheetContent className="flex w-full flex-col sm:max-w-md">
+                <SheetHeader>
+                    <SheetTitle>Activities</SheetTitle>
+                    <SheetDescription>Recent provisioning and service jobs on this server.</SheetDescription>
+                </SheetHeader>
+                <div className="mt-2 flex-1 divide-y overflow-y-auto">
+                    {jobs.length === 0 ? (
+                        <p className="px-1 py-6 text-center text-sm text-muted-foreground">No recent activity.</p>
+                    ) : (
+                        jobs.map((job) => (
+                            <div key={job.uuid} className="flex items-center gap-3 px-1 py-2.5">
+                                {jobStatusIcon(job.status)}
+                                <span className="flex-1 truncate text-sm">{job.label ?? job.type}</span>
+                                <Badge
+                                    variant={
+                                        job.status === 'succeeded'
+                                            ? 'outline'
+                                            : job.status === 'failed' || job.status === 'timeout'
+                                              ? 'destructive'
+                                              : 'secondary'
+                                    }
+                                    className="text-xs"
+                                >
+                                    {job.status}
+                                </Badge>
                             </div>
-                        );
-                    })}
+                        ))
+                    )}
                 </div>
-
-                {form.errors.components && (
-                    <p className="text-xs text-destructive">{form.errors.components}</p>
-                )}
-
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpen(false)} disabled={form.processing}>
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={handleSubmit}
-                        disabled={form.processing || selectedComponents.length === 0 || (phpSelected && selectedVersions.length === 0)}
-                    >
-                        {form.processing ? 'Installing…' : `Install ${selectedComponents.length} component${selectedComponents.length !== 1 ? 's' : ''}`}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+            </SheetContent>
+        </Sheet>
     );
 }
 
@@ -396,11 +328,9 @@ export default function ServerServices({
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <h1 className="text-xl font-semibold">Services</h1>
-                        <p className="text-muted-foreground mt-1 text-sm">
-                            Install and manage services running on your server.
-                        </p>
+                        <p className="text-muted-foreground mt-1 text-sm">Install and manage services running on your server.</p>
                     </div>
-                    <ProvisionDialog serverId={server.id} />
+                    <ActivitiesSheet jobs={liveJobs} />
                 </div>
 
                 {server.status !== 'online' && (
@@ -417,9 +347,9 @@ export default function ServerServices({
                     <CardContent className="p-0">
                         {services.length === 0 ? (
                             <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
-                                <PackagePlusIcon className="h-8 w-8 text-muted-foreground/50" />
+                                <PackageIcon className="h-8 w-8 text-muted-foreground/50" />
                                 <p className="text-sm text-muted-foreground">
-                                    No services installed yet. Use <strong>Provision Stack</strong> to install nginx, PHP, Redis, and more.
+                                    No services yet. They appear automatically once the agent connects and provisioning starts.
                                 </p>
                             </div>
                         ) : (
@@ -447,28 +377,6 @@ export default function ServerServices({
                         )}
                     </CardContent>
                 </Card>
-
-                {liveJobs.length > 0 && (
-                    <Card>
-                        <CardContent className="p-0">
-                            <p className="border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">Recent Jobs</p>
-                            <div className="divide-y">
-                                {liveJobs.map((job) => (
-                                    <div key={job.uuid} className="flex items-center gap-3 px-4 py-2.5">
-                                        {jobStatusIcon(job.status)}
-                                        <span className="flex-1 truncate text-sm">{job.label ?? job.type}</span>
-                                        <Badge
-                                            variant={job.status === 'succeeded' ? 'outline' : job.status === 'failed' || job.status === 'timeout' ? 'destructive' : 'secondary'}
-                                            className="text-xs"
-                                        >
-                                            {job.status}
-                                        </Badge>
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
             </div>
         </ServerLayout>
     );

@@ -2,11 +2,11 @@
 
 use App\Models\AgentJob;
 use App\Models\Server;
-use App\Models\Service;
 use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Redis;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+uses(RefreshDatabase::class);
 
 test('guests are redirected to the login page', function () {
     $server = Server::factory()->create();
@@ -49,9 +49,16 @@ test('provisioning auto-seeds well-known services', function () {
         'php_versions' => ['8.3', '8.4'],
     ])->assertRedirect();
 
-    $services = $server->services()->where('type', 'systemd')->pluck('name')->sort()->values();
+    // The whole catalog is seeded; requested components are `waiting`, the rest
+    // `not_installed` so they can be installed on demand later.
+    $services = $server->services()->where('type', 'systemd')->get()->keyBy('name');
 
-    expect($services->all())->toEqual(['nginx', 'php8.3-fpm', 'php8.4-fpm', 'redis-server']);
+    expect($services['nginx']->status)->toBe('waiting')
+        ->and($services['redis-server']->status)->toBe('waiting')
+        ->and($services['php8.3-fpm']->status)->toBe('waiting')
+        ->and($services['php8.4-fpm']->status)->toBe('waiting')
+        ->and($services['mariadb']->status)->toBe('not_installed')
+        ->and($services['php8.1-fpm']->status)->toBe('not_installed');
 });
 
 test('provisioning auto-seeding is idempotent when run twice', function () {
@@ -66,8 +73,11 @@ test('provisioning auto-seeding is idempotent when run twice', function () {
     $this->post(route('servers.provision', $server), $payload)->assertRedirect();
     $this->post(route('servers.provision', $server), $payload)->assertRedirect();
 
-    expect($server->services()->where('type', 'systemd')->where('name', 'nginx')->count())->toBe(1);
-    expect($server->services()->where('type', 'systemd')->count())->toBe(2);
+    // No duplicates, and the full systemd catalog (6 well-known + 5 PHP) is seeded once.
+    expect($server->services()->where('type', 'systemd')->where('name', 'nginx')->count())->toBe(1)
+        ->and($server->services()->where('type', 'systemd')->count())->toBe(11)
+        ->and($server->services()->where('name', 'nginx')->first()->status)->toBe('waiting')
+        ->and($server->services()->where('name', 'redis-server')->first()->status)->toBe('not_installed');
 });
 
 test('php component requires at least one php version', function () {

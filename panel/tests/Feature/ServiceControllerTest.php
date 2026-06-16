@@ -284,3 +284,58 @@ test('index renders with services and jobs props', function () {
         ->where('services.1.name', 'nginx')
     );
 });
+
+test('seedForServer seeds tools and uninstalled components as not_installed', function () {
+    $server = Server::factory()->online()->create();
+    app(ServiceManager::class)->seedForServer($server, ['nginx'], []);
+
+    $nginx = $server->services()->where('name', 'nginx')->first();
+    expect($nginx->status)->toBe('waiting');
+
+    $node = $server->services()->where('name', 'node')->first();
+    expect($node)->not->toBeNull()
+        ->and($node->type)->toBe('tool')
+        ->and($node->status)->toBe('not_installed')
+        ->and($node->config['component'])->toBe('node');
+
+    // MongoDB wasn't requested → present but not installed, ready to install later.
+    $mongo = $server->services()->where('name', 'mongod')->first();
+    expect($mongo->status)->toBe('not_installed')
+        ->and($mongo->config['component'])->toBe('mongodb');
+});
+
+test('install provisions the component behind a service and marks it installing', function () {
+    $published = [];
+    $conn = Mockery::mock();
+    $conn->shouldReceive('publish')->andReturnUsing(function ($c, $j) use (&$published) {
+        $published[] = json_decode($j, true);
+
+        return 1;
+    });
+    Redis::shouldReceive('connection')->andReturn($conn);
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $service = Service::create([
+        'server_id' => $server->id, 'type' => 'systemd', 'name' => 'mongod',
+        'status' => 'not_installed', 'config' => ['label' => 'MongoDB', 'component' => 'mongodb'],
+    ]);
+
+    $this->post(route('services.install', $service))->assertRedirect(route('services.index', $server));
+
+    expect($service->refresh()->status)->toBe('installing')
+        ->and($server->agentJobs()->count())->toBeGreaterThan(0);
+    // No base step on a single-component install.
+    expect($server->agentJobs()->where('label', 'Install base packages')->exists())->toBeFalse();
+});
+
+test('install rejects a service with no installable component', function () {
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+    $service = Service::create([
+        'server_id' => $server->id, 'type' => 'systemd', 'name' => 'custom',
+        'status' => 'not_installed', 'config' => ['label' => 'Custom'],
+    ]);
+
+    $this->post(route('services.install', $service))->assertStatus(422);
+});

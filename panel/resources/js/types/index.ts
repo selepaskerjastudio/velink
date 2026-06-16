@@ -150,8 +150,9 @@ export type SystemdServiceStatus =
 export interface SystemdService {
     id: number;
     name: string;
+    type?: 'systemd' | 'tool';
     status: SystemdServiceStatus;
-    config: { enabled?: boolean; label?: string } | null;
+    config: { enabled?: boolean; label?: string; component?: string; php_version?: string } | null;
     cpu_percent: number | null;
     memory_usage: number | null;
 }

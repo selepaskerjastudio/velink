@@ -21,9 +21,10 @@ class ServiceController extends Controller
         return Inertia::render('servers/services', [
             'server' => ['id' => $server->uuid, 'name' => $server->name, 'status' => $server->status, 'public_ip' => $server->public_ip],
             'services' => $server->services()
-                ->where('type', 'systemd')
+                ->whereIn('type', ['systemd', 'tool'])
+                ->orderByRaw("CASE type WHEN 'systemd' THEN 0 ELSE 1 END")
                 ->orderBy('name')
-                ->get(['id', 'name', 'status', 'config', 'cpu_percent', 'memory_usage']),
+                ->get(['id', 'name', 'type', 'status', 'config', 'cpu_percent', 'memory_usage']),
             'jobs' => $server->agentJobs()
                 ->where('type', 'shell')
                 ->latest('id')
@@ -60,31 +61,32 @@ class ServiceController extends Controller
         return redirect()->route('services.index', $server);
     }
 
-    public function provision(Request $request, Server $server, ProvisionService $provisionService, ServiceManager $manager): RedirectResponse
+    /**
+     * Install (or reinstall) the single component behind a service/tool row —
+     * used when a row is `not_installed` (or to repair a broken install). The
+     * component to install is read from the row's config, seeded earlier.
+     */
+    public function install(Request $request, Service $service, ProvisionService $provisionService): RedirectResponse
     {
-        $validated = $request->validate([
-            'components' => ['required', 'array', 'min:1'],
-            'components.*' => ['required', 'string', Rule::in(ProvisioningCatalog::COMPONENTS)],
-            'php_versions' => ['nullable', 'array'],
-            'php_versions.*' => ['required', 'string', Rule::in(ProvisioningCatalog::PHP_VERSIONS)],
-        ]);
+        $component = $service->config['component'] ?? null;
+        abort_unless(is_string($component) && in_array($component, ProvisioningCatalog::COMPONENTS, true), 422);
 
-        $components = $validated['components'];
-        $phpVersions = $validated['php_versions'] ?? ['8.3'];
-        $opts = in_array('php', $components, true) ? ['php_versions' => $phpVersions] : [];
+        $phpVersion = $service->config['php_version'] ?? null;
+        $opts = $component === 'php' ? ['php_versions' => array_values(array_filter([$phpVersion]))] : [];
 
-        $provisionService->provision($server, $components, $opts, $request->user()->id);
-        $manager->seedForServer($server, $components, $phpVersions);
+        // Skip base — the server is already provisioned; we only add this one.
+        $provisionService->provision($service->server, [$component], $opts, $request->user()->id, includeBase: false);
+        $service->update(['status' => ServiceManager::STATUS_INSTALLING]);
 
         AuditLogger::log(
-            action: 'server.provisioned',
-            description: "Provisioning started on '{$server->name}': ".implode(', ', $components),
+            action: 'service.install',
+            description: "Install '{$service->name}' on '{$service->server->name}'",
             userId: $request->user()->id,
-            serverId: $server->id,
-            properties: ['components' => $components, 'php_versions' => $phpVersions],
+            serverId: $service->server_id,
+            properties: ['component' => $component, 'php_version' => $phpVersion],
         );
 
-        return redirect()->route('services.index', $server);
+        return redirect()->route('services.index', $service->server);
     }
 
     public function control(Request $request, Service $service, ServiceManager $manager): RedirectResponse

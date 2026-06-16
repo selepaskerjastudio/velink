@@ -22,13 +22,18 @@ class ProvisionService
      * @param  array<string, mixed>  $opts
      * @return array<int, AgentJob>
      */
-    public function provision(Server $server, array $components, array $opts = [], ?int $userId = null): array
+    public function provision(Server $server, array $components, array $opts = [], ?int $userId = null, bool $includeBase = true): array
     {
         // Flatten every component's steps into one phased batch. Steps in the
         // same phase run concurrently (fast); phases enforce the dependencies:
         //   0 base → 1 services + PHP PPA → 2 PHP installs → 3 composer.
+        // Single-component installs on an already-provisioned server skip base.
+        $ordered = $includeBase
+            ? $this->order($components)
+            : array_values(array_filter(array_unique($components), fn ($c) => $c !== 'base'));
+
         $steps = [];
-        foreach ($this->order($components) as $component) {
+        foreach ($ordered as $component) {
             foreach ($this->catalog->steps($component, $opts) as $step) {
                 $step['phase'] = $this->phaseFor($component, $step);
                 $steps[] = $step;
