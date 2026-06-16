@@ -137,11 +137,25 @@ class ProvisioningCatalog
                 fn (string $ext) => "php{$v}-{$ext}",
                 ['fpm', 'cli', 'common', 'mysql', 'pgsql', 'mbstring', 'xml', 'curl', 'zip', 'gd', 'bcmath', 'intl'],
             ));
-            $steps[] = $this->shell("Install PHP {$v}", sprintf(<<<'SH'
-                export DEBIAN_FRONTEND=noninteractive
-                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y %s
-                systemctl enable --now php%s-fpm
-                SH, $pkgs, $v));
+            if ($v === '7.4') {
+                // PHP 7.4 is only available on Ubuntu 22 and below.
+                $steps[] = $this->shell("Install PHP {$v}", sprintf(<<<'SH'
+                    UBUNTU_VER=$(lsb_release -rs 2>/dev/null | cut -d. -f1)
+                    if [ "${UBUNTU_VER:-99}" -le 22 ]; then
+                        export DEBIAN_FRONTEND=noninteractive
+                        flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y %s
+                        systemctl enable --now php%s-fpm
+                    else
+                        echo "Skipping PHP 7.4 — not supported on Ubuntu ${UBUNTU_VER}"
+                    fi
+                    SH, $pkgs, $v));
+            } else {
+                $steps[] = $this->shell("Install PHP {$v}", sprintf(<<<'SH'
+                    export DEBIAN_FRONTEND=noninteractive
+                    flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y %s
+                    systemctl enable --now php%s-fpm
+                    SH, $pkgs, $v));
+            }
         }
 
         return $steps;

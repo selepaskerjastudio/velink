@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import echo from '@/echo';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,15 @@ import { Head, useForm } from '@inertiajs/react';
 import { CheckCircle2Icon, CircleDashedIcon, EllipsisIcon, LoaderIcon, PackagePlusIcon, TriangleAlertIcon, XCircleIcon } from 'lucide-react';
 
 type ServiceAction = 'start' | 'stop' | 'restart' | 'reload';
+
+interface AgentJobUpdatedEvent {
+    uuid: string;
+    type: string;
+    label: string | null;
+    status: AgentJob['status'];
+    exit_code: number | null;
+    output: string | null;
+}
 
 const COMPONENTS = [
     { key: 'nginx', label: 'NGINX', group: 'Web' },
@@ -269,6 +279,28 @@ export default function ServerServices({
     services: SystemdService[];
     jobs: AgentJob[];
 }) {
+    const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
+
+    useEffect(() => setLiveJobs(jobs), [jobs]);
+
+    useEffect(() => {
+        const channel = echo.private(`server.${server.id}`);
+
+        channel.listen('.agent-job.updated', (event: AgentJobUpdatedEvent) => {
+            setLiveJobs((current) => {
+                const index = current.findIndex((j) => j.uuid === event.uuid);
+                if (index === -1) return current;
+                const next = [...current];
+                next[index] = { ...next[index], ...event };
+                return next;
+            });
+        });
+
+        return () => {
+            echo.leave(`server.${server.id}`);
+        };
+    }, [server.id]);
+
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Servers', href: '/servers' },
         { title: server.name, href: `/servers/${server.id}` },
@@ -337,12 +369,12 @@ export default function ServerServices({
                     </CardContent>
                 </Card>
 
-                {jobs.length > 0 && (
+                {liveJobs.length > 0 && (
                     <Card>
                         <CardContent className="p-0">
                             <p className="border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">Recent Jobs</p>
                             <div className="divide-y">
-                                {jobs.map((job) => (
+                                {liveJobs.map((job) => (
                                     <div key={job.uuid} className="flex items-center gap-3 px-4 py-2.5">
                                         {jobStatusIcon(job.status)}
                                         <span className="flex-1 truncate text-sm">{job.label ?? job.type}</span>

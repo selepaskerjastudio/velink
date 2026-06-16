@@ -83,6 +83,11 @@ export default function ServersCreate() {
 
                             <div className="grid gap-3">
                                 <Label>Database</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    When the agent connects, the following will be installed automatically: NGINX,
+                                    Certbot, Supervisor, Redis, Composer, and PHP 7.4–8.4. Select additional
+                                    databases to include:
+                                </p>
                                 <div className="flex flex-wrap gap-3">
                                     {DB_OPTIONS.map(({ value, label }) => (
                                         <label
@@ -99,9 +104,6 @@ export default function ServersCreate() {
                                     ))}
                                 </div>
                                 <InputError message={errors.db_components} />
-                                <p className="text-sm text-muted-foreground">
-                                    Selected databases will be installed automatically when the agent connects.
-                                </p>
                             </div>
 
                             <Button type="submit" disabled={processing}>
