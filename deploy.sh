@@ -66,9 +66,11 @@ run() {
 
 # ── Args ───────────────────────────────────────────────────────────────────────
 RESTART_GATEWAY=false
+NO_INSTALL=false
 for arg in "$@"; do
     case $arg in
-        --gateway) RESTART_GATEWAY=true ;;
+        --gateway)   RESTART_GATEWAY=true ;;
+        --noinstall) NO_INSTALL=true ;;
     esac
 done
 
@@ -79,12 +81,17 @@ START_TIME=$SECONDS
 step "Pulling latest code"
 run "git pull" git -C "$REPO_DIR" pull
 
-step "Installing PHP dependencies"
 cd "$REPO_DIR/panel"
-run "Composer install" composer install --no-dev --optimize-autoloader --quiet
+
+if [ "$NO_INSTALL" = false ]; then
+    step "Installing PHP dependencies"
+    run "Composer install" composer install --no-dev --optimize-autoloader --quiet
+fi
 
 step "Building frontend assets"
-run "npm install" npm ci --silent
+if [ "$NO_INSTALL" = false ]; then
+    run "npm install" npm ci --silent
+fi
 run "Vite build" npm run build
 
 step "Running database migrations"
