@@ -223,18 +223,16 @@ class AppTemplates
     }
 
     /**
-     * The directory nginx serves from. custom/laravel/static apps serve from a
-     * /public subdirectory; only WordPress serves from the webapp root (its
-     * core, index.php, and wp-config.php sit there).
+     * The directory nginx serves from. Every app type serves from a /public
+     * subdirectory so the webapp root (holding .env, vendor, and — for
+     * WordPress — wp-config.php) always sits outside the docroot and can never
+     * be fetched over HTTP. For WordPress this means core is extracted into
+     * /public while wp-config.php stays one level up in the root (WordPress
+     * auto-loads it from the parent dir).
      */
     public static function webRoot(Application $app): string
     {
-        return match ($app->app_type) {
-            // WordPress core lives at the webapp root (index.php, wp-config.php).
-            'wordpress' => $app->root_path,
-            // custom, laravel, static all serve from the /public subdirectory.
-            default => $app->root_path.'/public',
-        };
+        return $app->root_path.'/public';
     }
 
     /** Per-app identity slug, falling back to linux_user for legacy rows. */

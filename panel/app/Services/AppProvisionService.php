@@ -88,13 +88,14 @@ class AppProvisionService
             systemctl reload nginx
             SH, $userId);
 
-        // 4. WordPress: download core + render wp-config.php wired to the DB
-        //    created in the same flow.
+        // 4. WordPress: download core into /public + render wp-config.php one
+        //    level up in the root (outside the docroot; WordPress auto-loads it
+        //    from the parent dir), wired to the DB created in the same flow.
         if ($app->app_type === 'wordpress' && $dbCreds !== null) {
             $jobs[] = $this->shell($app, 'Download WordPress core', <<<SH
-                if [ ! -f {$root}/wp-settings.php ]; then
+                if [ ! -f {$root}/public/wp-settings.php ]; then
                     curl -fsSL https://wordpress.org/latest.tar.gz -o /tmp/{$slug}-wp.tar.gz
-                    tar xzf /tmp/{$slug}-wp.tar.gz -C {$root} --strip-components=1
+                    tar xzf /tmp/{$slug}-wp.tar.gz -C {$root}/public --strip-components=1
                     rm -f /tmp/{$slug}-wp.tar.gz
                     chown -R {$osUser}:{$osUser} {$root}
                 fi

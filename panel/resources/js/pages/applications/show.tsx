@@ -105,7 +105,7 @@ export default function ApplicationsShow({
     })();
 
     const [section, setSection] = useState('dashboard');
-    const publicPath = application.app_type === 'wordpress' ? application.root_path : `${application.root_path}/public`;
+    const publicPath = `${application.root_path}/public`;
 
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs ?? []);
     const [liveDeployments, setLiveDeployments] = useState<Deployment[]>(deployments ?? []);

@@ -63,8 +63,10 @@ test('web_root and stack_mode vars follow the app type and mode', function () {
     $static = Application::factory()->create(['app_type' => 'static', 'root_path' => '/home/velink/webapps/s', 'app_slug' => 's']);
     expect(AppTemplates::vars($static)['web_root'])->toBe('/home/velink/webapps/s/public');
 
+    // Every type — WordPress included — serves from /public; only what lives
+    // inside that dir differs.
     $wp = Application::factory()->create(['app_type' => 'wordpress', 'root_path' => '/home/velink/webapps/w', 'app_slug' => 'w']);
-    expect(AppTemplates::vars($wp)['web_root'])->toBe('/home/velink/webapps/w');
+    expect(AppTemplates::vars($wp)['web_root'])->toBe('/home/velink/webapps/w/public');
 
     $dev = Application::factory()->create(['app_type' => 'custom', 'stack_mode' => 'development', 'app_slug' => 'd']);
     expect(AppTemplates::vars($dev)['display_errors'])->toBe('On');
@@ -183,9 +185,13 @@ test('provisionNew (wordpress) downloads core and renders a secured wp-config', 
 
     $core = collect($jobs)->firstWhere('label', 'Download WordPress core');
     expect($core->payload['command'])->toContain('wordpress.org/latest.tar.gz');
+    // Core is extracted into the /public docroot.
+    expect($core->payload['command'])->toContain('-C /home/velink/webapps/blog/public');
+    expect($core->payload['command'])->toContain('/home/velink/webapps/blog/public/wp-settings.php');
 
     $wpConfig = collect($jobs)->firstWhere('label', 'Write wp-config.php');
     expect($wpConfig->type)->toBe('render_config');
+    // wp-config.php stays one level up in the root, outside the docroot.
     expect($wpConfig->payload['path'])->toBe('/home/velink/webapps/blog/wp-config.php');
     expect($wpConfig->payload['mode'])->toBe('0640');
     expect($wpConfig->payload['vars']['db_name'])->toBe('blog_db');
