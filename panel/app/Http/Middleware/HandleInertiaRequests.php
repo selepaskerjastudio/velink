@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\AgentJob;
+use App\Models\Server;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -51,6 +53,17 @@ class HandleInertiaRequests extends Middleware
                 'plainDbUserPassword' => $request->session()->get('plain_db_user_password'),
                 'plainDbUserUsername' => $request->session()->get('plain_db_user_username'),
             ],
+            'server_provisioning' => function () use ($request): bool {
+                $server = $request->route('server');
+                if (! $server instanceof Server) {
+                    return false;
+                }
+
+                return $server->agentJobs()
+                    ->whereNull('application_id')
+                    ->whereNotIn('status', AgentJob::TERMINAL_STATUSES)
+                    ->exists();
+            },
         ]);
     }
 }

@@ -31,6 +31,7 @@ export interface SharedData {
         plainDbUserPassword: string | null;
         plainDbUserUsername: string | null;
     };
+    server_provisioning: boolean;
     [key: string]: unknown;
 }
 

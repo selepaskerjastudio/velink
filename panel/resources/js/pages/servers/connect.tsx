@@ -1,9 +1,10 @@
 import { Button } from '@/components/ui/button';
+import echo from '@/echo';
 import ServerLayout from '@/layouts/server-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { CheckIcon, ClipboardIcon, MapPinIcon, SettingsIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 
 interface ConnectServer {
@@ -58,6 +59,20 @@ export default function ServerConnect({ server }: { server: ConnectServer }) {
 
     const tokenForm = useForm({});
     const deleteForm = useForm({});
+
+    useEffect(() => {
+        const channel = echo.private(`server.${server.id}`);
+
+        channel.listen('.server.presence', (event: { status: string }) => {
+            if (event.status === 'online') {
+                router.visit(`/servers/${server.id}`);
+            }
+        });
+
+        return () => {
+            echo.leave(`server.${server.id}`);
+        };
+    }, [server.id]);
 
     const sshCommand = `ssh root@${server.public_ip ?? 'your-server-ip'}`;
     const installCommand = flash.installCommand ?? null;
