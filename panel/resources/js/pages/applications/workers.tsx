@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import echo from '@/echo';
 import AppLayout from '@/layouts/app-layout';
-import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type WorkerStatus, type WorkerSummary } from '@/types';
+import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type WorkerSummary } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
-import { ChevronDownIcon, TriangleAlertIcon } from 'lucide-react';
+import { ChevronDownIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -149,7 +149,7 @@ export default function ApplicationsWorkers({
     workers,
     jobs,
 }: {
-    application: { id: string; name: string };
+    application: { id: string; name: string; root_path: string };
     server: { id: string; name: string; status: string };
     workers: WorkerSummary[];
     jobs: AgentJob[];
@@ -157,6 +157,13 @@ export default function ApplicationsWorkers({
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs);
 
     useEffect(() => setLiveJobs(jobs), [jobs]);
+
+    const [search, setSearch] = useState('');
+    const filteredWorkers = workers.filter((worker) => {
+        if (!search.trim()) return true;
+        const q = search.toLowerCase();
+        return worker.name.toLowerCase().includes(q) || worker.command.toLowerCase().includes(q);
+    });
 
     useEffect(() => {
         const channel = echo.private(`server.${server.id}`);
@@ -220,11 +227,28 @@ export default function ApplicationsWorkers({
                 <Card className="max-w-2xl">
                     <CardHeader>
                         <CardTitle>Workers</CardTitle>
-                        <CardDescription>Supervisord programs managed for {application.name}.</CardDescription>
+                        <CardDescription>
+                            Supervisord programs managed for {application.name}. Runs inside{' '}
+                            <code className="text-xs">{application.root_path}</code>.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-2">
+                        {workers.length > 0 && (
+                            <div className="relative max-w-sm">
+                                <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search by name or command…"
+                                    className="pl-8 text-sm"
+                                />
+                            </div>
+                        )}
                         {workers.length === 0 && <p className="text-muted-foreground text-sm">No workers configured yet.</p>}
-                        {workers.map((worker) => (
+                        {filteredWorkers.length === 0 && workers.length > 0 && (
+                            <p className="text-muted-foreground text-sm">No workers match “{search}”.</p>
+                        )}
+                        {filteredWorkers.map((worker) => (
                             <WorkerRow key={worker.id} worker={worker} />
                         ))}
                     </CardContent>
