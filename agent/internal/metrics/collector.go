@@ -14,13 +14,14 @@ import (
 
 // Snapshot holds a single point-in-time reading of system resources.
 type Snapshot struct {
-	CpuPercent    float64 `json:"cpu_percent"`
-	MemTotal      uint64  `json:"mem_total"`
-	MemUsed       uint64  `json:"mem_used"`
-	DiskTotal     uint64  `json:"disk_total"`
-	DiskUsed      uint64  `json:"disk_used"`
-	Load1         float64 `json:"load1"`
-	UptimeSeconds uint64  `json:"uptime_seconds"`
+	CpuPercent    float64       `json:"cpu_percent"`
+	MemTotal      uint64        `json:"mem_total"`
+	MemUsed       uint64        `json:"mem_used"`
+	DiskTotal     uint64        `json:"disk_total"`
+	DiskUsed      uint64        `json:"disk_used"`
+	Load1         float64       `json:"load1"`
+	UptimeSeconds uint64        `json:"uptime_seconds"`
+	Services      []ServiceUsage `json:"services,omitempty"`
 }
 
 // Collect gathers a point-in-time snapshot. ctx is used for cancellation.
@@ -57,6 +58,10 @@ func Collect(ctx context.Context) (Snapshot, error) {
 		uptimeSec = 0
 	}
 
+	// Per-service CPU/memory is best-effort: a nil result (non-Linux hosts,
+	// no systemd) just omits the field from the snapshot.
+	services := CollectServices(ctx)
+
 	return Snapshot{
 		CpuPercent:    cpuPct,
 		MemTotal:      vmStat.Total,
@@ -65,5 +70,6 @@ func Collect(ctx context.Context) (Snapshot, error) {
 		DiskUsed:      diskStat.Used,
 		Load1:         math.Round(avgStat.Load1*100) / 100,
 		UptimeSeconds: uptimeSec,
+		Services:      services,
 	}, nil
 }
