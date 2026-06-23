@@ -40,6 +40,7 @@ const SECTIONS: SidebarItem[] = [
     { id: 'ssl', label: 'SSL / HTTPS' },
     { id: 'deploy', label: 'Git & Deploy' },
     { header: 'Web Settings' },
+    { id: 'nginx', label: 'NGINX Config' },
     { id: 'settings', label: 'Settings' },
     { id: 'activity', label: 'Activity Log' },
 ];
@@ -57,6 +58,18 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
         default:
             return 'secondary';
     }
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let value = bytes / 1024;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+    return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
 
 function deploymentStatusFromJob(status: AgentJobStatus): DeploymentStatus {
@@ -186,6 +199,16 @@ export default function ApplicationsShow({
     const submitSsl = () => {
         sslForm.post(route('applications.ssl', application.id), { preserveScroll: true });
     };
+
+    const nginxForm = useForm<{ config: string }>({
+        config: '',
+    });
+
+    const submitNginx = () => {
+        nginxForm.post(route('applications.nginx-config', application.id), { preserveScroll: true });
+    };
+
+    const sizeForm = useForm({});
 
     const [deleteOpen, setDeleteOpen] = useState(false);
     const deleteForm = useForm<{ confirmation: string }>({ confirmation: '' });
@@ -369,6 +392,20 @@ export default function ApplicationsShow({
                                         <span className="text-muted-foreground">Public path</span>
                                         <span className="truncate text-right font-mono">{publicPath}</span>
                                     </div>
+                                    <div className="flex items-center justify-between gap-4">
+                                        <span className="text-muted-foreground">Directory size</span>
+                                        <span className="flex items-center gap-2">
+                                            <span>{application.directory_size_bytes ? formatBytes(application.directory_size_bytes) : '—'}</span>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={sizeForm.processing}
+                                                onClick={() => sizeForm.post(route('applications.directory-size', application.id), { preserveScroll: true })}
+                                            >
+                                {sizeForm.processing ? 'Measuring…' : 'Refresh'}
+                            </Button>
+                                        </span>
+                                    </div>
                                     {application.app_type !== 'static' && (
                                         <div className="flex justify-between gap-4">
                                             <span className="text-muted-foreground">PHP version</span>
@@ -477,6 +514,40 @@ export default function ApplicationsShow({
                                         </div>
                                     </CardFooter>
                                 )}
+                            </Card>
+                        )}
+
+                        {section === 'nginx' && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>NGINX configuration</CardTitle>
+                                    <CardDescription>
+                                        Written to{' '}
+                                        <code className="text-xs">
+                                            /etc/nginx/sites-available/{application.domain ?? application.linux_user}.conf
+                                        </code>{' '}
+                                        and reloaded via <code className="text-xs">nginx -t &amp;&amp; systemctl reload nginx</code>.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="grid gap-2">
+                                    <Textarea
+                                        value={nginxForm.data.config}
+                                        onChange={(e) => nginxForm.setData('config', e.target.value)}
+                                        rows={16}
+                                        placeholder={`server {\n    listen 80;\n    server_name ${application.domain ?? 'example.com'};\n    root ${application.root_path}/public;\n    ...\n}`}
+                                        className="font-mono text-sm"
+                                        spellCheck={false}
+                                    />
+                                    <InputError message={nginxForm.errors.config} />
+                                    <p className="text-muted-foreground text-xs">
+                                        Paste your full server block. The agent validates the syntax before reloading.
+                                    </p>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button onClick={submitNginx} disabled={nginxForm.processing}>
+                                        Save &amp; reload NGINX
+                                    </Button>
+                                </CardFooter>
                             </Card>
                         )}
 
