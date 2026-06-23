@@ -37,6 +37,7 @@ class Application extends Model
         'name',
         'domain',
         'root_path',
+        'directory_size_bytes',
         'linux_user',
         'app_slug',
         'php_version',
@@ -61,6 +62,7 @@ class Application extends Model
         return [
             'env_content' => 'encrypted',
             'ssl_enabled_at' => 'datetime',
+            'directory_size_bytes' => 'integer',
         ];
     }
 

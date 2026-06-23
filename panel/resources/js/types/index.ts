@@ -74,6 +74,7 @@ export interface Application {
     name: string;
     domain: string | null;
     root_path: string;
+    directory_size_bytes: number | null;
     linux_user: string;
     php_version: string;
     app_type: string;

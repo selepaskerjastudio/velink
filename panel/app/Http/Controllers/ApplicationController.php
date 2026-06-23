@@ -272,7 +272,7 @@ class ApplicationController extends Controller
             'application' => [
                 ...$application->only([
                     'name', 'domain', 'root_path', 'linux_user', 'php_version', 'app_type', 'stack_mode', 'status', 'created_at',
-                    'repository', 'branch', 'deploy_mode', 'deploy_script', 'webhook_secret',
+                    'repository', 'branch', 'deploy_mode', 'deploy_script', 'webhook_secret', 'directory_size_bytes',
                 ]),
                 'id' => $application->uuid,
                 'git_credential_id' => $application->gitCredential?->uuid,
@@ -471,6 +471,33 @@ class ApplicationController extends Controller
         );
 
         return redirect()->route('applications.show', $application)->with('success', 'NGINX config updated and reloaded.');
+    }
+
+    /**
+     * Queue an on-demand `du -sb` against the app's root directory. The agent
+     * reports the byte count back through the gateway and the inbound processor
+     * stores it on `directory_size_bytes`.
+     */
+    public function refreshDirectorySize(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse
+    {
+        $escapedRoot = escapeshellarg($application->root_path);
+
+        $dispatcher->dispatch($application->server, 'shell', [
+            'command' => "du -sb {$escapedRoot}",
+        ], [
+            'application_id' => $application->id,
+            'user_id' => $request->user()->id,
+            'label' => 'Measure directory size',
+        ]);
+
+        AuditLogger::log(
+            action: 'application.directory_size_refreshed',
+            description: "Directory size refresh requested for '{$application->name}'",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+        );
+
+        return redirect()->route('applications.show', $application)->with('success', 'Measuring directory size… check back shortly.');
     }
 
     public function updateEnv(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse

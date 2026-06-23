@@ -7,6 +7,7 @@ use App\Events\ServerPresenceUpdated;
 use App\Models\AgentJob;
 use App\Models\Server;
 use App\Models\ServerMetric;
+use App\Models\Service;
 use App\Support\GatewayProtocol;
 
 /**
@@ -152,6 +153,18 @@ class GatewayInboundProcessor
                 && str_starts_with($job->label, 'Enable SSL for')) {
                 $job->application?->forceFill(['ssl_enabled_at' => now()])->save();
             }
+
+            // A successful "Measure directory size" `du -sb` job reports the
+            // app root size as "<bytes>\t<path>" on stdout — capture it. The
+            // agent streams stdout earlier via a job_output event, so it is
+            // already accumulated on $job->output by the time the result lands.
+            if ($job->status === AgentJob::STATUS_SUCCEEDED
+                && $job->label === 'Measure directory size') {
+                $output = is_string($job->output) ? $job->output : '';
+                if (preg_match('/(\d+)/', $output, $m)) {
+                    $job->application?->forceFill(['directory_size_bytes' => (int) $m[1]])->save();
+                }
+            }
         }
 
         event(new AgentJobUpdated($job->refresh()));
@@ -260,6 +273,22 @@ class GatewayInboundProcessor
         ServerMetric::where('server_id', $server->id)
             ->where('recorded_at', '<', now()->subDays(7))
             ->delete();
+
+        // Roll up per-service CPU/memory so the Services page can show live
+        // resource usage. Each entry is `{ name, cpu_percent, memory_usage }`;
+        // services the agent didn't report on this cycle are left untouched.
+        $services = is_array($body['services'] ?? null) ? $body['services'] : [];
+        foreach ($services as $svc) {
+            if (! is_array($svc) || ! ($svc['name'] ?? null)) {
+                continue;
+            }
+            Service::where('server_id', $server->id)
+                ->where('name', $svc['name'])
+                ->update([
+                    'cpu_percent' => isset($svc['cpu_percent']) ? (float) $svc['cpu_percent'] : null,
+                    'memory_usage' => isset($svc['memory_usage']) ? (int) $svc['memory_usage'] : null,
+                ]);
+        }
 
         // Check metrics against alert thresholds
         app(ThresholdChecker::class)->check($server, $body);
