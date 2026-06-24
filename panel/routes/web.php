@@ -49,3 +49,4 @@ require __DIR__.'/services.php';
 require __DIR__.'/cron.php';
 require __DIR__.'/databases.php';
 require __DIR__.'/database-users.php';
+require __DIR__.'/ssh-keys.php';
