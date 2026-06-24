@@ -120,6 +120,15 @@ export interface SshKey {
     servers: SshKeyServerDeployment[];
 }
 
+export interface SystemUserSummary {
+    id: string;
+    username: string;
+    shell: string;
+    is_sudo: boolean;
+    is_system_reserved: boolean;
+    ssh_keys_count: number;
+}
+
 export type DeploymentStatus = 'pending' | 'running' | 'success' | 'failed';
 
 export interface Deployment {

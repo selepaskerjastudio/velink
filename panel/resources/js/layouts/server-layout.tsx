@@ -16,7 +16,7 @@ import {
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import echo from '@/echo';
 import { Link, router, usePage } from '@inertiajs/react';
-import { Activity, ChevronLeft, Clock, Cpu, Database, Globe, KeyRound, LayoutGrid, Layers, Loader2, ScrollText, Settings } from 'lucide-react';
+import { Activity, ChevronLeft, Clock, Cpu, Database, Globe, KeyRound, LayoutGrid, Layers, Loader2, ScrollText, Settings, UserCog } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface ServerLayoutProps {
@@ -46,6 +46,7 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
     const utilityNavItems = [
         { title: 'Cron Jobs', url: `/servers/${server.id}/cron`, icon: Clock, exact: false },
         { title: 'Workers', url: `/servers/${server.id}/workers`, icon: Layers, exact: false },
+        { title: 'System Users', url: `/servers/${server.id}/system-users`, icon: UserCog, exact: false },
     ];
 
     const moreNavItems = [

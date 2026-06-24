@@ -19,6 +19,7 @@ interface Props {
     server: { id: string; name: string; public_ip: string | null; status: string };
     deployed: ServerSshKey[];
     available: ServerSshKey[];
+    systemUsers: { id: string; username: string }[];
     adminUser: string;
 }
 
@@ -28,8 +29,11 @@ const KEY_TYPE_LABELS: Record<string, string> = {
     'ecdsa-sha2-nistp256': 'ECDSA P-256',
 };
 
-export default function ServerSshKeys({ server, deployed, available, adminUser }: Props) {
+export default function ServerSshKeys({ server, deployed, available, systemUsers, adminUser }: Props) {
     const [selectedKey, setSelectedKey] = useState<string>(available[0]?.id ?? '');
+    // Default to the velink-admin system user if present, else the first user.
+    const defaultTarget = systemUsers.find((u) => u.username === adminUser)?.id ?? systemUsers[0]?.id ?? '';
+    const [targetUser, setTargetUser] = useState<string>(defaultTarget);
     const [deploying, setDeploying] = useState(false);
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -43,7 +47,7 @@ export default function ServerSshKeys({ server, deployed, available, adminUser }
         setDeploying(true);
         router.post(
             route('server.ssh-keys.deploy', [server.id, selectedKey]),
-            {},
+            { system_user_id: targetUser || undefined },
             {
                 preserveScroll: true,
                 onFinish: () => setDeploying(false),
@@ -116,6 +120,22 @@ export default function ServerSshKeys({ server, deployed, available, adminUser }
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                    {systemUsers.length > 0 && (
+                                        <div className="grid w-48 gap-1.5">
+                                            <Select value={targetUser} onValueChange={setTargetUser}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Target user" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {systemUsers.map((u) => (
+                                                        <SelectItem key={u.id} value={u.id}>
+                                                            {u.username}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
                                     <Button onClick={deploy} disabled={deploying || !selectedKey}>
                                         <PlusIcon className="mr-1.5 h-4 w-4" />
                                         {deploying ? 'Deploying…' : 'Deploy'}
