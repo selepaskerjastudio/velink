@@ -90,6 +90,10 @@ test('deploy_to_server syncs authorized_keys via a useradd + write_file + chmod 
 
     $user = User::factory()->create();
     $server = Server::factory()->online()->create();
+    $targetUser = \App\Models\SystemUser::create([
+        'server_id' => $server->id, 'username' => 'deployer',
+        'shell' => '/bin/bash', 'is_sudo' => true,
+    ]);
     $key = SshKey::create([
         'user_id' => $user->id,
         'name' => 'MacBook',
@@ -99,10 +103,15 @@ test('deploy_to_server syncs authorized_keys via a useradd + write_file + chmod 
         'comment' => 'test@velink',
     ]);
 
-    app(SshKeyService::class)->deployToServer($key, $server, $user->id);
+    app(SshKeyService::class)->deployToServer($key, $server, $targetUser, $user->id);
 
-    // Pivot row recorded.
-    expect($server->sshKeys()->where('ssh_key_id', $key->id)->exists())->toBeTrue();
+    // Pivot row recorded against the target user.
+    $deployed = \DB::table('server_ssh_key')
+        ->where('server_id', $server->id)
+        ->where('ssh_key_id', $key->id)
+        ->where('system_user_id', $targetUser->id)
+        ->exists();
+    expect($deployed)->toBeTrue();
 
     $captured = sshCaptured();
     expect($captured)->not->toBeEmpty();
@@ -113,15 +122,40 @@ test('deploy_to_server syncs authorized_keys via a useradd + write_file + chmod 
     expect($actions)->toContain('shell');
     expect($actions)->toContain('write_file');
 
-    // The useradd shell job references the dedicated admin user idempotently.
+    // The useradd shell job references the target user idempotently.
     $useraddJob = collect($jobs)->first(fn ($p) => $p['action'] === 'shell' && str_contains($p['params']['command'] ?? '', 'useradd'));
-    expect($useraddJob['params']['command'])->toContain('velink-admin');
+    expect($useraddJob['params']['command'])->toContain('deployer');
 
-    // The authorized_keys write_file lands under the admin user's home at 0600.
+    // The authorized_keys write_file lands under the target user's home at 0600.
     $writeJob = collect($jobs)->first(fn ($p) => $p['action'] === 'write_file');
-    expect($writeJob['params']['path'])->toBe('/home/velink-admin/.ssh/authorized_keys');
+    expect($writeJob['params']['path'])->toBe('/home/deployer/.ssh/authorized_keys');
     expect($writeJob['params']['mode'])->toBe('0600');
     expect($writeJob['params']['content'])->toContain(TEST_ED25519_KEY);
+});
+
+test('deploy_to_server to different users writes separate authorized_keys files', function () {
+    mockSshGatewayPublish();
+
+    $user = User::factory()->create();
+    $server = Server::factory()->online()->create();
+    $deployer = \App\Models\SystemUser::create(['server_id' => $server->id, 'username' => 'deployer', 'shell' => '/bin/bash']);
+    $ci = \App\Models\SystemUser::create(['server_id' => $server->id, 'username' => 'ci', 'shell' => '/bin/bash']);
+    $key = SshKey::create([
+        'user_id' => $user->id, 'name' => 'MacBook',
+        'public_key' => TEST_ED25519_KEY, 'fingerprint' => TEST_ED25519_FINGERPRINT,
+        'type' => 'ssh-ed25519', 'comment' => 'test@velink',
+    ]);
+
+    $service = app(SshKeyService::class);
+    $service->deployToServer($key, $server, $deployer, $user->id);
+    $service->deployToServer($key, $server, $ci, $user->id);
+
+    $captured = sshCaptured();
+    $paths = collect($captured)->pluck('payload')
+        ->filter(fn ($p) => $p['action'] === 'write_file')
+        ->pluck('params.path')->unique();
+    expect($paths)->toContain('/home/deployer/.ssh/authorized_keys')
+        ->and($paths)->toContain('/home/ci/.ssh/authorized_keys');
 });
 
 test('sync_server_keys rewrites authorized_keys with the full deployed set', function () {
@@ -129,6 +163,7 @@ test('sync_server_keys rewrites authorized_keys with the full deployed set', fun
 
     $user = User::factory()->create();
     $server = Server::factory()->online()->create();
+    $targetUser = \App\Models\SystemUser::create(['server_id' => $server->id, 'username' => 'deployer', 'shell' => '/bin/bash']);
 
     $keyA = SshKey::create([
         'user_id' => $user->id, 'name' => 'A',
@@ -141,8 +176,11 @@ test('sync_server_keys rewrites authorized_keys with the full deployed set', fun
         'fingerprint' => 'SHA256:bbb', 'type' => 'ssh-ed25519', 'comment' => 'b@velink',
     ]);
 
-    // Both keys deployed.
-    $server->sshKeys()->attach([$keyA->id => ['deployed_at' => now()], $keyB->id => ['deployed_at' => now()]]);
+    // Both keys deployed to the same target user.
+    \DB::table('server_ssh_key')->insert([
+        ['server_id' => $server->id, 'ssh_key_id' => $keyA->id, 'system_user_id' => $targetUser->id, 'deployed_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+        ['server_id' => $server->id, 'ssh_key_id' => $keyB->id, 'system_user_id' => $targetUser->id, 'deployed_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+    ]);
 
     app(SshKeyService::class)->syncServerKeys($server, $user->id);
 
@@ -152,15 +190,41 @@ test('sync_server_keys rewrites authorized_keys with the full deployed set', fun
         ->and($writeJob['params']['content'])->toContain('b@velink');
 });
 
-test('sync_server_keys writes an empty authorized_keys when no keys remain', function () {
+test('revoke from a user rebuilds only that user authorized_keys', function () {
     mockSshGatewayPublish();
 
+    $user = User::factory()->create();
     $server = Server::factory()->online()->create();
+    $deployer = \App\Models\SystemUser::create(['server_id' => $server->id, 'username' => 'deployer', 'shell' => '/bin/bash']);
+    $key = SshKey::create([
+        'user_id' => $user->id, 'name' => 'MacBook',
+        'public_key' => TEST_ED25519_KEY, 'fingerprint' => TEST_ED25519_FINGERPRINT,
+        'type' => 'ssh-ed25519', 'comment' => 'test@velink',
+    ]);
 
-    app(SshKeyService::class)->syncServerKeys($server, null);
+    $service = app(SshKeyService::class);
+    $service->deployToServer($key, $server, $deployer, $user->id);
+    $service->revokeFromUser($key, $server, $deployer, $user->id);
 
     $captured = sshCaptured();
-    $writeJob = collect($captured)->pluck('payload')->first(fn ($p) => $p['action'] === 'write_file');
-    // Empty file — not a missing file — so revoking the last key locks the user out cleanly.
-    expect(trim($writeJob['params']['content']))->toBe('');
+    // The last write_file after revoke contains no key.
+    $writeJobs = collect($captured)->pluck('payload')->filter(fn ($p) => $p['action'] === 'write_file');
+    expect(trim($writeJobs->last()['params']['content']))->toBe('');
+    // And the pivot row is gone.
+    expect(\DB::table('server_ssh_key')->where('system_user_id', $deployer->id)->exists())->toBeFalse();
 });
+
+test('ensure_default_admin materialises a velink-admin system user', function () {
+    $server = Server::factory()->online()->create();
+    $service = app(SshKeyService::class);
+
+    $admin = $service->ensureDefaultAdmin($server);
+    expect($admin->username)->toBe('velink-admin')
+        ->and($admin->is_sudo)->toBeTrue()
+        ->and($admin->is_system_reserved)->toBeTrue();
+
+    // Idempotent — returns the same row, doesn't create a duplicate.
+    expect($service->ensureDefaultAdmin($server)->id)->toBe($admin->id);
+    expect(\App\Models\SystemUser::where('server_id', $server->id)->count())->toBe(1);
+});
+

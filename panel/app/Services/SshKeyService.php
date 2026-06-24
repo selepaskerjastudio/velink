@@ -5,26 +5,22 @@ namespace App\Services;
 use App\Models\AgentJob;
 use App\Models\Server;
 use App\Models\SshKey;
+use App\Models\SystemUser;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Pure-PHP SSH public key handling plus deployment orchestration.
  *
- * Keys are written to a dedicated `velink-admin` OS user per server — kept
- * separate from the shared `velink` webapp user (which has a nologin shell)
- * so SSH access never intersects with the php-fpm runtime.
- *
- * On every deploy/revoke the server's authorized_keys is REWRITTEN in full
- * from the pivot table, making the DB the single source of truth for who can
- * log in. Each sync is a three-job sequence: ensure the admin user exists,
- * write the file, then fix ownership/perms (sshd StrictModes compliance).
+ * Keys are deployed to a {@see SystemUser}'s authorized_keys. Each system user
+ * keeps its own authorized_keys file under /home/{username}/.ssh, so a key may
+ * be deployed to multiple users on the same server. On every deploy/revoke the
+ * affected user's authorized_keys is REWRITTEN in full from the pivot table,
+ * making the DB the single source of truth for who can log in.
  */
 class SshKeyService
 {
-    /** The dedicated SSH-login OS user, distinct from the webapp user. */
-    public const ADMIN_USER = 'velink-admin';
-
-    /** SSH home directory for the admin user. */
-    public const ADMIN_HOME = '/home/velink-admin';
+    /** The default admin username materialised for servers that predate this feature. */
+    public const DEFAULT_ADMIN_USERNAME = 'velink-admin';
 
     /** Key types we accept, mapped to nothing (only used for validation). */
     private const ALLOWED_TYPES = [
@@ -52,11 +48,7 @@ class SshKeyService
             throw new \InvalidArgumentException('The public key is empty.');
         }
 
-        // Drop a leading "no-..." options field (e.g. from authorized_keys) —
-        // a bare pasted key never has one, but be defensive.
         if (str_starts_with($key, 'no-')) {
-            // Skip the options token; the first whitespace-separated token that
-            // starts with a known type prefix is the real key.
             $parts = preg_split('/\s+/', $key);
             while ($parts && ! in_array($parts[0], self::ALLOWED_TYPES, true)) {
                 array_shift($parts);
@@ -82,8 +74,6 @@ class SshKeyService
             throw new \InvalidArgumentException('The public key blob is not valid base64.');
         }
 
-        // Validate that the decoded blob's embedded type matches the prefix.
-        // OpenSSH blobs start with a 4-byte length followed by the type string.
         if (strlen($decoded) < 4) {
             throw new \InvalidArgumentException('The public key blob is truncated.');
         }
@@ -98,9 +88,6 @@ class SshKeyService
 
     /**
      * Compute the OpenSSH-format fingerprint ("SHA256:...") for a public key.
-     *
-     * Matches `ssh-keygen -lf` output. Implemented in pure PHP so the panel
-     * does not depend on the ssh-keygen binary being present.
      */
     public function computeFingerprint(string $key): string
     {
@@ -111,47 +98,113 @@ class SshKeyService
     }
 
     /**
-     * Deploy a key to a server: record the pivot and rewrite authorized_keys.
-     *
-     * @return array<int, AgentJob> The dispatched jobs.
+     * Ensure a default admin SystemUser exists for a server and return it.
+     * Used for backward compatibility when no target user is specified.
      */
-    public function deployToServer(SshKey $key, Server $server, ?int $userId = null): array
+    public function ensureDefaultAdmin(Server $server): SystemUser
     {
-        // Idempotent attach: attaching again would violate the unique pivot
-        // index, so use syncWithoutDetaching which is a no-op when present.
-        $server->sshKeys()->syncWithoutDetaching([
-            $key->id => ['deployed_at' => now()],
-        ]);
-
-        return $this->syncServerKeys($server, $userId);
+        return SystemUser::firstOrCreate(
+            ['server_id' => $server->id, 'username' => self::DEFAULT_ADMIN_USERNAME],
+            ['shell' => '/bin/bash', 'is_sudo' => true, 'is_system_reserved' => true],
+        );
     }
 
     /**
-     * Rebuild the admin user's authorized_keys from every key in the pivot.
+     * Deploy a key to a specific system user: record the pivot and rewrite
+     * that user's authorized_keys.
      *
-     * This is the single write path to the file — deploy and revoke both go
-     * through it so the server always reflects the DB exactly.
+     * @param  ?int  $userId  Panel user who triggered the deploy (for audit/job labeling).
+     * @return array<int, AgentJob>
+     */
+    public function deployToServer(SshKey $key, Server $server, SystemUser $targetUser, ?int $userId = null): array
+    {
+        // Idempotent attach scoped to the target user — the same key may target
+        // several different users on this server.
+        DB::table('server_ssh_key')->updateOrInsert(
+            [
+                'server_id' => $server->id,
+                'ssh_key_id' => $key->id,
+                'system_user_id' => $targetUser->id,
+            ],
+            ['deployed_at' => now()],
+        );
+
+        return $this->syncUserKeys($server, $targetUser, $userId);
+    }
+
+    /**
+     * Revoke a key from a specific user: detach the pivot row and rebuild
+     * that user's authorized_keys.
+     *
+     * @return array<int, AgentJob>
+     */
+    public function revokeFromUser(SshKey $key, Server $server, SystemUser $targetUser, ?int $userId = null): array
+    {
+        DB::table('server_ssh_key')->where([
+            'server_id' => $server->id,
+            'ssh_key_id' => $key->id,
+            'system_user_id' => $targetUser->id,
+        ])->delete();
+
+        return $this->syncUserKeys($server, $targetUser, $userId);
+    }
+
+    /**
+     * Rebuild the authorized_keys for every system user on a server that has
+     * any key deployed. Used by SshKeyController::destroy when a key is deleted
+     * from the account entirely and every affected user must be refreshed.
      *
      * @return array<int, AgentJob>
      */
     public function syncServerKeys(Server $server, ?int $userId = null): array
     {
+        $jobs = [];
+        $userIds = DB::table('server_ssh_key')
+            ->where('server_id', $server->id)
+            ->whereNotNull('system_user_id')
+            ->pluck('system_user_id')
+            ->unique();
+
+        foreach ($userIds as $systemUserId) {
+            $targetUser = SystemUser::find($systemUserId);
+            if ($targetUser) {
+                $jobs = array_merge($jobs, $this->syncUserKeys($server, $targetUser, $userId));
+            }
+        }
+
+        return $jobs;
+    }
+
+    /**
+     * Rewrite a single system user's authorized_keys from the pivot.
+     *
+     * This is the single write path to the file — deploy, revoke, and
+     * syncServerKeys all go through it so the file always reflects the DB.
+     *
+     * @return array<int, AgentJob>
+     */
+    public function syncUserKeys(Server $server, SystemUser $targetUser, ?int $userId = null): array
+    {
         $dispatcher = app(JobDispatcher::class);
 
-        $keys = $server->sshKeys()
-            ->orderBy('name')
-            ->pluck('public_key')
+        $keys = DB::table('server_ssh_key')
+            ->where('server_id', $server->id)
+            ->where('system_user_id', $targetUser->id)
+            ->join('ssh_keys', 'ssh_keys.id', '=', 'server_ssh_key.ssh_key_id')
+            ->orderBy('ssh_keys.name')
+            ->pluck('ssh_keys.public_key')
             ->implode("\n");
 
-        $user = self::ADMIN_USER;
-        $home = self::ADMIN_HOME;
+        $user = $targetUser->username;
+        $home = "/home/{$user}";
         $authKeys = "{$home}/.ssh/authorized_keys";
         $attrs = ['user_id' => $userId, 'label' => 'Sync SSH authorized_keys'];
 
-        // 1. Ensure the dedicated admin user exists (idempotent). It gets sudo
-        //    so the operator can actually administer the box once logged in.
+        $jobs = [];
+
+        // 1. Ensure the user can log in (it may be a freshly-created account).
         $jobs[] = $dispatcher->dispatch($server, 'shell', [
-            'command' => "id -u {$user} >/dev/null 2>&1 || useradd --create-home --shell /bin/bash --groups sudo {$user}",
+            'command' => "id -u {$user} >/dev/null 2>&1 || useradd --create-home --shell {$targetUser->shell} {$user}",
         ], $attrs + ['label' => "Ensure {$user} user"]);
 
         // 2. Rewrite the whole authorized_keys from the DB.
@@ -159,10 +212,9 @@ class SshKeyService
             'path' => $authKeys,
             'content' => $keys.($keys === '' ? '' : "\n"),
             'mode' => '0600',
-        ], $attrs + ['label' => 'Write authorized_keys']);
+        ], $attrs + ['label' => "Write {$user} authorized_keys"]);
 
-        // 3. Fix ownership and tighten perms — sshd StrictModes rejects a
-        //    root-owned authorized_keys in a non-root home.
+        // 3. Fix ownership and tighten perms for sshd StrictModes compliance.
         $jobs[] = $dispatcher->dispatch($server, 'shell', [
             'command' => "mkdir -p {$home}/.ssh && chown -R {$user}:{$user} {$home}/.ssh && chmod 700 {$home}/.ssh && chmod 600 {$authKeys}",
         ], $attrs + ['label' => "Fix {$user} SSH permissions"]);

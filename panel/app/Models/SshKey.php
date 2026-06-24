@@ -28,10 +28,10 @@ class SshKey extends Model
      */
     public function servers(): BelongsToMany
     {
-        // Using withTimestamps() + the explicit deployed_at pivot column so
-        // the deploy-time is queryable alongside created_at/updated_at.
+        // Using withTimestamps() + the explicit deployed_at + system_user_id
+        // pivot columns so the deploy-time and target OS user are queryable.
         return $this->belongsToMany(Server::class, 'server_ssh_key')
-            ->withPivot('deployed_at')
+            ->withPivot('deployed_at', 'system_user_id')
             ->withTimestamps();
     }
 

@@ -215,6 +215,11 @@ class ServerController extends Controller
                 'type' => $key->type,
             ]);
 
+        $systemUsers = $server->systemUsers()
+            ->orderBy('username')
+            ->get(['uuid', 'username'])
+            ->map(fn ($u) => ['id' => $u->uuid, 'username' => $u->username]);
+
         return Inertia::render('servers/ssh-keys', [
             'server' => [
                 ...$server->only(['name', 'public_ip', 'status']),
@@ -222,7 +227,8 @@ class ServerController extends Controller
             ],
             'deployed' => $deployed,
             'available' => $available,
-            'adminUser' => \App\Services\SshKeyService::ADMIN_USER,
+            'systemUsers' => $systemUsers,
+            'adminUser' => \App\Services\SshKeyService::DEFAULT_ADMIN_USERNAME,
         ]);
     }
 

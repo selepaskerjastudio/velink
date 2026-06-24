@@ -97,8 +97,18 @@ class Server extends Model
     public function sshKeys(): BelongsToMany
     {
         return $this->belongsToMany(SshKey::class, 'server_ssh_key')
-            ->withPivot('deployed_at')
+            ->withPivot('deployed_at', 'system_user_id')
             ->withTimestamps();
+    }
+
+    /**
+     * The OS login accounts managed on this server.
+     *
+     * @return HasMany<SystemUser>
+     */
+    public function systemUsers(): HasMany
+    {
+        return $this->hasMany(SystemUser::class);
     }
 
     public function latestMetric()

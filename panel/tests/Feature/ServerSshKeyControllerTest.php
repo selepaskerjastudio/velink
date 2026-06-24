@@ -40,7 +40,7 @@ test('guests cannot deploy or revoke ssh keys', function () {
     $this->delete(route('server.ssh-keys.revoke', [$server, $key]))->assertRedirect('/login');
 });
 
-test('deploy attaches the pivot and dispatches a sync job sequence', function () {
+test('deploy without a target user defaults to the velink-admin account', function () {
     mockDeployPublish();
 
     $user = User::factory()->create();
@@ -49,17 +49,43 @@ test('deploy attaches the pivot and dispatches a sync job sequence', function ()
     $key = sshKeyFixture($user->id);
 
     $this->post(route('server.ssh-keys.deploy', [$server, $key]))
-        ->assertRedirect(route('servers.settings', $server));
+        ->assertRedirect(route('servers.ssh-keys', $server));
 
-    expect($server->sshKeys()->where('ssh_key_id', $key->id)->exists())->toBeTrue();
+    // A velink-admin system user was materialised and the key is attached to it.
+    $admin = \App\Models\SystemUser::where('server_id', $server->id)->where('username', 'velink-admin')->first();
+    expect($admin)->not->toBeNull();
+    $deployed = \DB::table('server_ssh_key')
+        ->where('server_id', $server->id)
+        ->where('ssh_key_id', $key->id)
+        ->where('system_user_id', $admin->id)
+        ->exists();
+    expect($deployed)->toBeTrue();
 
-    // The full sync sequence (useradd + write_file + chmod) ran.
+    // The full sync sequence (useradd + write_file + chmod) ran against velink-admin.
     $writeJobs = AgentJob::where('server_id', $server->id)->where('type', 'write_file')->get();
     expect($writeJobs)->not->toBeEmpty();
     expect($writeJobs->last()->payload['path'])->toBe('/home/velink-admin/.ssh/authorized_keys');
     expect($writeJobs->last()->payload['content'])->toContain(TEST_KEY);
 
     expect(AuditLog::where('action', 'ssh_key.deployed')->where('server_id', $server->id)->exists())->toBeTrue();
+});
+
+test('deploy to a specific system user targets that users authorized_keys', function () {
+    mockDeployPublish();
+
+    $user = User::factory()->create();
+    $this->actingAs($user);
+    $server = Server::factory()->online()->create();
+    $deployer = \App\Models\SystemUser::create([
+        'server_id' => $server->id, 'username' => 'deployer', 'shell' => '/bin/bash',
+    ]);
+    $key = sshKeyFixture($user->id);
+
+    $this->post(route('server.ssh-keys.deploy', [$server, $key]), ['system_user_id' => $deployer->uuid])
+        ->assertRedirect(route('servers.ssh-keys', $server));
+
+    $writeJobs = AgentJob::where('server_id', $server->id)->where('type', 'write_file')->get();
+    expect($writeJobs->last()->payload['path'])->toBe('/home/deployer/.ssh/authorized_keys');
 });
 
 test('deploy is idempotent — re-deploying the same key does not duplicate the pivot', function () {
@@ -96,10 +122,11 @@ test('revoke detaches the pivot and rebuilds authorized_keys without the key', f
     $this->actingAs($user);
     $server = Server::factory()->online()->create();
     $key = sshKeyFixture($user->id);
-    $server->sshKeys()->attach($key->id, ['deployed_at' => now()]);
+    // Deploy first (materialises the default velink-admin user + pivot row).
+    $this->post(route('server.ssh-keys.deploy', [$server, $key]));
 
     $this->delete(route('server.ssh-keys.revoke', [$server, $key]))
-        ->assertRedirect(route('servers.settings', $server));
+        ->assertRedirect(route('servers.ssh-keys', $server));
 
     expect($server->sshKeys()->where('ssh_key_id', $key->id)->exists())->toBeFalse();
 

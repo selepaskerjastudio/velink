@@ -29,12 +29,20 @@ test('the index page lists the current users keys with deployed servers', functi
     $other = User::factory()->create();
 
     $server = Server::factory()->online()->create();
+    $admin = \App\Models\SystemUser::create([
+        'server_id' => $server->id, 'username' => 'velink-admin',
+        'shell' => '/bin/bash', 'is_sudo' => true,
+    ]);
     $mine = SshKey::create([
         'user_id' => $user->id, 'name' => 'MacBook',
         'public_key' => VALID_KEY, 'fingerprint' => VALID_FINGERPRINT,
         'type' => 'ssh-ed25519', 'comment' => 'test@velink',
     ]);
-    $server->sshKeys()->attach($mine->id, ['deployed_at' => now()]);
+    \DB::table('server_ssh_key')->insert([
+        'server_id' => $server->id, 'ssh_key_id' => $mine->id,
+        'system_user_id' => $admin->id, 'deployed_at' => now(),
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
 
     // A key owned by someone else must NOT appear.
     SshKey::create([
@@ -139,13 +147,17 @@ test('destroy removes the key and undeploys it from every affected server', func
 
     $serverA = Server::factory()->online()->create();
     $serverB = Server::factory()->online()->create();
+    $adminA = \App\Models\SystemUser::create(['server_id' => $serverA->id, 'username' => 'velink-admin', 'shell' => '/bin/bash']);
+    $adminB = \App\Models\SystemUser::create(['server_id' => $serverB->id, 'username' => 'velink-admin', 'shell' => '/bin/bash']);
     $key = SshKey::create([
         'user_id' => $user->id, 'name' => 'x',
         'public_key' => VALID_KEY, 'fingerprint' => VALID_FINGERPRINT,
         'type' => 'ssh-ed25519', 'comment' => 'x@host',
     ]);
-    $serverA->sshKeys()->attach($key->id, ['deployed_at' => now()]);
-    $serverB->sshKeys()->attach($key->id, ['deployed_at' => now()]);
+    \DB::table('server_ssh_key')->insert([
+        ['server_id' => $serverA->id, 'ssh_key_id' => $key->id, 'system_user_id' => $adminA->id, 'deployed_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+        ['server_id' => $serverB->id, 'ssh_key_id' => $key->id, 'system_user_id' => $adminB->id, 'deployed_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+    ]);
 
     $this->delete(route('ssh-keys.destroy', $key))
         ->assertRedirect(route('ssh-keys.index'));

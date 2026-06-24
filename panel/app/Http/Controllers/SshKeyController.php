@@ -40,7 +40,7 @@ class SshKeyController extends Controller
 
         return Inertia::render('settings/ssh-keys', [
             'sshKeys' => $sshKeys,
-            'adminUser' => SshKeyService::ADMIN_USER,
+            'adminUser' => SshKeyService::DEFAULT_ADMIN_USERNAME,
         ]);
     }
 
@@ -93,20 +93,33 @@ class SshKeyController extends Controller
     }
 
     /**
-     * Delete a key and rebuild authorized_keys on every server it was on.
+     * Delete a key and rebuild authorized_keys on every server/user it was on.
      */
     public function destroy(Request $request, SshKey $sshKey): RedirectResponse
     {
         abort_if($sshKey->user_id !== $request->user()->id, 403);
 
-        $affectedServers = $sshKey->servers()->get(['servers.id']);
+        // Capture the (server, system_user) pairs that currently carry this key
+        // BEFORE detaching — otherwise the rebuild has no rows to read.
+        $deployments = \DB::table('server_ssh_key')
+            ->where('ssh_key_id', $sshKey->id)
+            ->get(['server_id', 'system_user_id']);
+
         $sshKey->servers()->detach();
         $sshKey->delete();
 
-        foreach ($affectedServers as $server) {
-            $this->service->syncServerKeys($server, $request->user()->id);
+        // Rebuild each affected user's authorized_keys directly — syncUserKeys
+        // reads the pivot, which now (correctly) excludes this key, so the
+        // rewritten file reflects the remaining keys (or an empty file).
+        foreach ($deployments as $deployment) {
+            $server = \App\Models\Server::find($deployment->server_id);
+            $targetUser = \App\Models\SystemUser::find($deployment->system_user_id);
+            if ($server && $targetUser) {
+                $this->service->syncUserKeys($server, $targetUser, $request->user()->id);
+            }
         }
 
+        $affectedServers = $deployments->pluck('server_id')->unique();
         AuditLogger::log(
             action: 'ssh_key.deleted',
             description: "SSH key '{$sshKey->name}' removed and undeployed from {$affectedServers->count()} server(s)",
