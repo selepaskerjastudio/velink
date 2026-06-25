@@ -22,6 +22,11 @@ class SystemUserController extends Controller
      */
     public function index(Request $request, Server $server): Response
     {
+        // Auto-register the webapp user as a deployable SystemUser when apps exist.
+        if ($server->applications()->exists()) {
+            app(\App\Services\SshKeyService::class)->ensureWebappUser($server, $request->user()->id);
+        }
+
         $systemUsers = $server->systemUsers()
             ->withCount('sshKeys')
             ->orderByRaw('is_system_reserved desc')

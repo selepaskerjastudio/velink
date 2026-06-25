@@ -192,6 +192,13 @@ class ServerController extends Controller
      */
     public function sshKeys(Request $request, Server $server): Response
     {
+        // If the server has apps, the shared webapp OS user exists — register
+        // it as a SystemUser and flip its shell to bash so it becomes an SSH
+        // target (the RunCloud model: SSH in as the webapp user to manage files).
+        if ($server->applications()->exists()) {
+            app(\App\Services\SshKeyService::class)->ensureWebappUser($server, $request->user()->id);
+        }
+
         $deployedIds = $server->sshKeys()->pluck('ssh_keys.id')->all();
 
         $deployed = $server->sshKeys()
