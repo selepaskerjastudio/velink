@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ApplicationController;
+use App\Http\Controllers\DeploymentLogController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function () {
@@ -16,4 +17,11 @@ Route::middleware('auth')->group(function () {
     Route::post('apps/{application}/ssl', [ApplicationController::class, 'enableSsl'])->name('applications.ssl');
     Route::post('apps/{application}/nginx-config', [ApplicationController::class, 'nginxConfig'])->name('applications.nginx-config');
     Route::post('apps/{application}/directory-size', [ApplicationController::class, 'refreshDirectorySize'])->name('applications.directory-size');
+
+    // Dedicated full-page deployment log viewer (ANSI-rendered, realtime).
+    // Flat binding on {deployment} — the application is resolved via the
+    // deployment relation. (Nested two-model binding has a Laravel routing
+    // quirk that fails to resolve the child; the flat form is robust.)
+    Route::get('deployments/{deployment}/log', [DeploymentLogController::class, 'show'])
+        ->name('deployments.log');
 });
