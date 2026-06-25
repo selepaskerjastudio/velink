@@ -362,3 +362,52 @@ test('a failed Enable SSL job does not mark ssl_enabled_at', function () {
 
     expect($application->refresh()->ssl_enabled_at)->toBeNull();
 });
+
+test('metrics envelope with per-service usage updates matching services', function () {
+    $server = Server::factory()->create();
+    $server->services()->create(['name' => 'nginx', 'type' => 'systemd', 'status' => 'running']);
+    $server->services()->create(['name' => 'mariadb', 'type' => 'database', 'status' => 'running']);
+    // A service the agent did not report on this cycle stays untouched.
+    $server->services()->create(['name' => 'redis-server', 'type' => 'systemd', 'status' => 'running']);
+
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type' => GatewayProtocol::TYPE_METRICS,
+        'server_id' => $server->uuid,
+        'payload' => [
+            'cpu_percent' => 5.0,
+            'mem_total' => 1_000_000_000,
+            'mem_used' => 500_000_000,
+            'disk_total' => 10_000_000_000,
+            'disk_used' => 5_000_000_000,
+            'load1' => 0.5,
+            'services' => [
+                ['name' => 'nginx', 'cpu_percent' => 1.25, 'memory_usage' => 524288],
+                ['name' => 'mariadb', 'cpu_percent' => 8.5, 'memory_usage' => 33554432],
+            ],
+        ],
+    ]));
+
+    $nginx = $server->services()->where('name', 'nginx')->first();
+    $mariadb = $server->services()->where('name', 'mariadb')->first();
+    $redis = $server->services()->where('name', 'redis-server')->first();
+
+    expect($nginx->cpu_percent)->toBe(1.25)
+        ->and($nginx->memory_usage)->toBe(524288)
+        ->and($mariadb->cpu_percent)->toBe(8.5)
+        ->and($mariadb->memory_usage)->toBe(33554432)
+        ->and($redis->cpu_percent)->toBeNull()
+        ->and($redis->memory_usage)->toBeNull();
+});
+
+test('metrics envelope without per-service usage leaves services untouched', function () {
+    $server = Server::factory()->create();
+    $server->services()->create(['name' => 'nginx', 'type' => 'systemd', 'status' => 'running']);
+
+    app(GatewayInboundProcessor::class)->handleInbound(json_encode([
+        'type' => GatewayProtocol::TYPE_METRICS,
+        'server_id' => $server->uuid,
+        'payload' => ['cpu_percent' => 5.0],
+    ]));
+
+    expect($server->services()->where('name', 'nginx')->first()->cpu_percent)->toBeNull();
+});

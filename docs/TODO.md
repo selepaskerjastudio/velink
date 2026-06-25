@@ -117,36 +117,47 @@
 
 ### 🔴 Tinggi
 
-- [ ] **Uptime di dashboard** — Agent kirim `uptime_seconds` di metrics payload →
+- [x] **Uptime di dashboard** — Agent kirim `uptime_seconds` di metrics payload →
       kolom baru di `server_metrics` → card dashboard ganti CPU → Uptime (format: "3d 12h 4m").
       CPU tetap ditampilkan di chart monitoring.
-- [ ] **Halaman Monitoring dedicated** (`servers/monitoring.tsx`) — route baru
-      `GET servers/{server}/monitoring`, fix nav sidebar "Monitoring" yang saat ini
-      tidak punya route. Pindahkan chart CPU+RAM dari `show.tsx` ke sini, tambah
-      chart Load dan Disk terpisah, donut gauge Memory & Disk, time range selector
-      (1h / 6h / 24h).
-- [ ] **Settings page: edit server name** — form edit `name` → `PATCH /servers/{server}`.
-- [ ] **Settings page: restart server** — dispatch `AgentJob shell` dengan `sudo reboot`.
+      *(Migration `2026_06_16_000001`, `ServerMetric` model cast, `show.tsx` Uptime card, `monitoring.tsx` range query — all wired end-to-end.)*
+- [x] **Halaman Monitoring dedicated** (`servers/monitoring.tsx`) — route
+      `GET servers/{server}/monitoring`, nav sidebar "Monitoring" ter-link,
+      chart CPU/RAM/Load/Disk terpisah, donut gauge Memory & Disk (`HalfDonutGauge`),
+      time range selector (1h / 6h / 24h / 7d).
+      *(`ServerController::monitoring`, route `servers.monitoring`, sidebar entry active-state benar.)*
+- [x] **Settings page: edit server name** — form edit `name` → `PATCH /servers/{server}`.
+      *(`ServerController::settings` + `update`, `servers/settings.tsx`.)*
+- [x] **Settings page: restart server** — dispatch `AgentJob shell` dengan `sudo reboot`.
+      *(`ServerController::restart`, restart dialog di settings page.)*
 
 ### 🟡 Medium
 
-- [ ] **Web Applications list page per server** (`servers/applications.tsx`) —
+- [x] **Web Applications list page per server** (`servers/applications.tsx`) —
       route `GET servers/{server}/applications`, `ApplicationController@serverIndex`,
-      tabel dengan search + pagination + kolom Owner (linux_user).
-      Fix bug nav sidebar: "Web Applications" URL saat ini duplikat ke dashboard.
-- [ ] **Databases: gabungkan DB + DB Users satu halaman** — tabs "Databases" /
-      "Database Users" di `servers/databases.tsx`, hapus halaman `database-users.tsx`
-      terpisah dari nav (atau tetap pisah tapi navigasi lewat tab).
-- [ ] **Databases: tambah kolom** `created_at` ("Added On") dan `collation` di tabel.
+      tabel dengan search + kolom Owner (linux_user).
+      *(Nav sidebar "Web Applications" sekarang ter-link ke route yang benar — bukan duplikat dashboard.)*
+- [x] **Databases: gabungkan DB + DB Users satu halaman** — tabs per-engine
+      "Databases" / "Users" di `servers/databases.tsx`, route `database-users.index`
+      redirect ke `databases.index`.
+      *(`DatabaseInstanceController::index` kirim `databases` + `databaseUsers`; `DatabaseUserController::index` redirect.)*
+- [x] **Databases: tambah kolom** `created_at` ("Added On") dan `collation` di tabel.
+      *(`DatabaseInstanceSummary` type + `DatabasesPanel` table columns.)*
 
 ### 🟢 Rendah
 
-- [ ] Search/filter di halaman databases, cron jobs, workers.
-- [ ] Workers: tambah kolom "Directory" (root_path aplikasi).
-- [ ] App detail: tampilkan "Directory Size" (agent kirim via sysinfo atau shell job).
-- [ ] Services: per-service CPU% dan Memory usage (agent parse `/proc/{pid}`).
-- [ ] App detail: SSL/TLS UI (trigger certbot yang sudah ada di provisioning).
-- [ ] App detail: NGINX Config editor (baca/tulis file config via agent).
+- [x] Search/filter di halaman databases, cron jobs, workers.
+    *(Databases & cron jobs sudah punya search; **workers** search + directory info ditambahkan 2026-06-23.)*
+- [x] Workers: tambah kolom "Directory" (root_path aplikasi).
+    *(2026-06-23 — `workers.tsx` menampilkan root_path di deskripsi card.)*
+- [x] App detail: tampilkan "Directory Size".
+    *(2026-06-23 — kolom `directory_size_bytes`, endpoint `applications.directory-size`, inbound processor parse output `du -sb`, Summary card + tombol Refresh.)*
+- [x] Services: per-service CPU% dan Memory usage.
+    *(2026-06-23 — `handleMetrics` roll-up dari field `services[]` ke tabel `services`; agent `metrics/services.go` koleksi via cgroup + VmRSS.)*
+- [x] App detail: SSL/TLS UI (trigger certbot yang sudah ada di provisioning).
+    *(`applications/show.tsx` SSL card → `applications.ssl`.)*
+- [x] App detail: NGINX Config editor.
+    *(2026-06-23 — `ApplicationController::nginxConfig` + test `NginxConfigControllerTest`, `applications/show.tsx` section "NGINX Config".)*
 
 ## Lintas-Fase (Keamanan & Kualitas)
 

@@ -58,6 +58,7 @@ class WorkerController extends Controller
             'application' => [
                 'id' => $application->uuid,
                 'name' => $application->name,
+                'root_path' => $application->root_path,
             ],
             'server' => [
                 'id' => $application->server->uuid,
