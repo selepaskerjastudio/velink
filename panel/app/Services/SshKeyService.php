@@ -6,6 +6,7 @@ use App\Models\AgentJob;
 use App\Models\Server;
 use App\Models\SshKey;
 use App\Models\SystemUser;
+use App\Provisioning\AppTemplates;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -107,6 +108,38 @@ class SshKeyService
             ['server_id' => $server->id, 'username' => self::DEFAULT_ADMIN_USERNAME],
             ['shell' => '/bin/bash', 'is_sudo' => true, 'is_system_reserved' => true],
         );
+    }
+
+    /**
+     * Ensure the shared webapp OS user (the one that owns /home/{user}/webapps/)
+     * is registered as a deployable SystemUser, and flip its login shell to bash.
+     *
+     * This is the RunCloud model: the webapp user IS the SSH user, so you can
+     * SSH in and manage application files directly. Only called when the server
+     * has at least one application (meaning the webapp OS user exists on the box).
+     *
+     * @param  ?int  $userId  Panel user triggering the shell flip (for job labeling).
+     */
+    public function ensureWebappUser(Server $server, ?int $userId = null): SystemUser
+    {
+        $username = AppTemplates::webappUser();
+
+        $user = SystemUser::firstOrCreate(
+            ['server_id' => $server->id, 'username' => $username],
+            ['shell' => '/bin/bash', 'is_sudo' => false, 'is_system_reserved' => true],
+        );
+
+        // Flip the shell to bash. On existing servers the user was created with
+        // nologin; on new servers it's already bash. chsh is idempotent — safe
+        // to run unconditionally. Only dispatched the first time (newly created
+        // row) to avoid redundant jobs on every page load.
+        if ($user->wasRecentlyCreated) {
+            app(JobDispatcher::class)->dispatch($server, 'shell', [
+                'command' => "chsh -s /bin/bash {$username}",
+            ], ['user_id' => $userId, 'label' => "Enable SSH login for {$username}"]);
+        }
+
+        return $user;
     }
 
     /**

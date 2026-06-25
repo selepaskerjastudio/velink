@@ -228,3 +228,57 @@ test('ensure_default_admin materialises a velink-admin system user', function ()
     expect(\App\Models\SystemUser::where('server_id', $server->id)->count())->toBe(1);
 });
 
+test('ensure_webapp_user creates a reserved non-sudo system user named velink', function () {
+    mockSshGatewayPublish();
+
+    $user = User::factory()->create();
+    $server = Server::factory()->online()->create();
+
+    $webappUser = app(SshKeyService::class)->ensureWebappUser($server, $user->id);
+
+    expect($webappUser->username)->toBe('velink')
+        ->and($webappUser->shell)->toBe('/bin/bash')
+        ->and($webappUser->is_sudo)->toBeFalse()
+        ->and($webappUser->is_system_reserved)->toBeTrue();
+});
+
+test('ensure_webapp_user dispatches a chsh job to flip the shell on first registration', function () {
+    mockSshGatewayPublish();
+
+    $user = User::factory()->create();
+    $server = Server::factory()->online()->create();
+
+    app(SshKeyService::class)->ensureWebappUser($server, $user->id);
+
+    $commands = collect(sshCaptured())->pluck('payload')->filter(
+        fn ($p) => $p['action'] === 'shell'
+    )->pluck('params.command');
+
+    expect($commands)->toContain('chsh -s /bin/bash velink');
+});
+
+test('ensure_webapp_user is idempotent and does not re-dispatch chsh', function () {
+    mockSshGatewayPublish();
+
+    $user = User::factory()->create();
+    $server = Server::factory()->online()->create();
+
+    $service = app(SshKeyService::class);
+
+    // First call: creates the row + dispatches chsh.
+    $first = $service->ensureWebappUser($server, $user->id);
+    $chshCountAfterFirst = collect(sshCaptured())->pluck('payload')->filter(
+        fn ($p) => $p['action'] === 'shell' && str_contains($p['params']['command'] ?? '', 'chsh')
+    )->count();
+
+    // Second call: returns the same row, does NOT dispatch chsh again.
+    $second = $service->ensureWebappUser($server, $user->id);
+    $chshCountAfterSecond = collect(sshCaptured())->pluck('payload')->filter(
+        fn ($p) => $p['action'] === 'shell' && str_contains($p['params']['command'] ?? '', 'chsh')
+    )->count();
+
+    expect($second->id)->toBe($first->id)
+        ->and($chshCountAfterSecond)->toBe($chshCountAfterFirst)
+        ->and(\App\Models\SystemUser::where('server_id', $server->id)->count())->toBe(1);
+});
+

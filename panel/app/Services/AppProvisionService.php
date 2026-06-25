@@ -46,7 +46,7 @@ class AppProvisionService
         //    logs directory exist, with permissions that let www-data (nginx)
         //    traverse into the web root to serve static files.
         $jobs[] = $this->shell($app, 'Create web app directory', <<<SH
-            id -u {$osUser} >/dev/null 2>&1 || useradd --create-home --shell /usr/sbin/nologin {$osUser}
+            id -u {$osUser} >/dev/null 2>&1 || useradd --create-home --shell /bin/bash {$osUser}
             mkdir -p {$root}/public {$root}/tmp {$logsDir}
             chmod 711 {$home}
             chmod 711 {$webapps}
