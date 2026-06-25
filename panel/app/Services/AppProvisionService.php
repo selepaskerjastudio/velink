@@ -43,14 +43,14 @@ class AppProvisionService
         $jobs = [];
 
         // 1. Ensure the shared OS user, the per-app directory, and the shared
-        //    logs directory exist, with permissions that let www-data (nginx)
-        //    traverse into the web root to serve static files.
+        //    logs directory exist. The webapp user owns its home tree so it can
+        //    SSH in and manage files directly (RunCloud model). Directories are
+        //    world-traversable (755) so nginx/www-data can reach the web root.
         $jobs[] = $this->shell($app, 'Create web app directory', <<<SH
             id -u {$osUser} >/dev/null 2>&1 || useradd --create-home --shell /bin/bash {$osUser}
-            mkdir -p {$root}/public {$root}/tmp {$logsDir}
-            chmod 711 {$home}
-            chmod 711 {$webapps}
-            chown {$osUser}:{$osUser} {$logsDir}
+            mkdir -p {$home} {$webapps} {$root}/public {$root}/tmp {$logsDir}
+            chown {$osUser}:{$osUser} {$home} {$webapps} {$logsDir}
+            chmod 755 {$home} {$webapps}
             {$this->placeholder($app)}
             chown -R {$osUser}:{$osUser} {$root}
             chmod 755 {$root}
