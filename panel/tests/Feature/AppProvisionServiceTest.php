@@ -110,7 +110,13 @@ test('provisionNew (custom) dispatches the expected job sequence and creates a p
     expect($jobs[0]->payload['command'])
         ->toContain('useradd')
         ->toContain('velink')
-        ->toContain('/home/velink/webapps/example_app');
+        ->toContain('/home/velink/webapps/example_app')
+        // The webapp user must own its home/webapps/logs dirs (not root) so it
+        // can SSH in and manage files. See the /home/velink/webapps ownership bug.
+        ->toContain('chown velink:velink')
+        // 755 (not 711) so the owner can actually list directories.
+        ->toContain('chmod 755')
+        ->not->toContain('chmod 711');
 
     expect($jobs[1]->type)->toBe('render_config');
     expect($jobs[1]->payload['path'])->toBe('/etc/php/8.3/fpm/pool.d/example_app.conf');
