@@ -186,6 +186,52 @@ class ServerController extends Controller
         ]);
     }
 
+    /**
+     * The server's SSH access page: which keys are deployed here, and which of
+     * the user's keys can be deployed next.
+     */
+    public function sshKeys(Request $request, Server $server): Response
+    {
+        $deployedIds = $server->sshKeys()->pluck('ssh_keys.id')->all();
+
+        $deployed = $server->sshKeys()
+            ->orderBy('name')
+            ->get(['ssh_keys.id', 'ssh_keys.uuid', 'ssh_keys.name', 'ssh_keys.fingerprint', 'ssh_keys.type'])
+            ->map(fn ($key) => [
+                'id' => $key->uuid,
+                'name' => $key->name,
+                'fingerprint' => $key->fingerprint,
+                'type' => $key->type,
+            ]);
+
+        $available = $request->user()->sshKeys()
+            ->whereNotIn('id', $deployedIds)
+            ->orderBy('name')
+            ->get(['uuid', 'name', 'fingerprint', 'type'])
+            ->map(fn ($key) => [
+                'id' => $key->uuid,
+                'name' => $key->name,
+                'fingerprint' => $key->fingerprint,
+                'type' => $key->type,
+            ]);
+
+        $systemUsers = $server->systemUsers()
+            ->orderBy('username')
+            ->get(['uuid', 'username'])
+            ->map(fn ($u) => ['id' => $u->uuid, 'username' => $u->username]);
+
+        return Inertia::render('servers/ssh-keys', [
+            'server' => [
+                ...$server->only(['name', 'public_ip', 'status']),
+                'id' => $server->uuid,
+            ],
+            'deployed' => $deployed,
+            'available' => $available,
+            'systemUsers' => $systemUsers,
+            'adminUser' => \App\Services\SshKeyService::DEFAULT_ADMIN_USERNAME,
+        ]);
+    }
+
     public function update(Request $request, Server $server): RedirectResponse
     {
         $validated = $request->validate([

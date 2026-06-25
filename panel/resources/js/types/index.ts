@@ -105,6 +105,31 @@ export interface GitCredential {
     };
 }
 
+export interface SshKeyServerDeployment {
+    id: string;
+    name: string;
+    public_ip: string | null;
+}
+
+export interface SshKey {
+    id: string;
+    name: string;
+    fingerprint: string;
+    type: string;
+    comment: string | null;
+    created_at?: string;
+    servers: SshKeyServerDeployment[];
+}
+
+export interface SystemUserSummary {
+    id: string;
+    username: string;
+    shell: string;
+    is_sudo: boolean;
+    is_system_reserved: boolean;
+    ssh_keys_count: number;
+}
+
 export type DeploymentStatus = 'pending' | 'running' | 'success' | 'failed';
 
 export interface Deployment {

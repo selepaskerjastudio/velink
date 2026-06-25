@@ -64,4 +64,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(GitCredential::class);
     }
+
+    public function sshKeys(): HasMany
+    {
+        return $this->hasMany(SshKey::class);
+    }
 }

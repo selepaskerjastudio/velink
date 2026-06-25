@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\HasUuidRouteKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Server extends Model
@@ -86,6 +87,28 @@ class Server extends Model
     public function metrics(): HasMany
     {
         return $this->hasMany(ServerMetric::class);
+    }
+
+    /**
+     * The SSH keys deployed to this server's authorized_keys.
+     *
+     * @return BelongsToMany<SshKey>
+     */
+    public function sshKeys(): BelongsToMany
+    {
+        return $this->belongsToMany(SshKey::class, 'server_ssh_key')
+            ->withPivot('deployed_at', 'system_user_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * The OS login accounts managed on this server.
+     *
+     * @return HasMany<SystemUser>
+     */
+    public function systemUsers(): HasMany
+    {
+        return $this->hasMany(SystemUser::class);
     }
 
     public function latestMetric()

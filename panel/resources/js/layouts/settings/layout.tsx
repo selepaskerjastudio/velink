@@ -22,6 +22,11 @@ const sidebarNavItems: NavItem[] = [
         icon: null,
     },
     {
+        title: 'SSH Keys',
+        url: '/settings/ssh-keys',
+        icon: null,
+    },
+    {
         title: 'Two-Factor Auth',
         url: '/settings/two-factor',
         icon: null,
