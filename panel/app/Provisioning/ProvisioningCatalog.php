@@ -17,11 +17,14 @@ class ProvisioningCatalog
         'base', 'nginx', 'certbot', 'php', 'composer', 'node', 'supervisor', 'redis',
     ];
 
+    public const SECURITY_COMPONENTS = ['ufw', 'fail2ban'];
+
     public const DB_COMPONENTS = ['mariadb', 'postgresql', 'mongodb'];
 
     public const COMPONENTS = [
         'base', 'nginx', 'certbot', 'php', 'composer', 'node',
         'supervisor', 'redis', 'mariadb', 'postgresql', 'mongodb',
+        'ufw', 'fail2ban',
     ];
 
     public const PHP_VERSIONS = ['7.4', '8.1', '8.2', '8.3', '8.4'];
@@ -94,6 +97,25 @@ class ProvisioningCatalog
                 export DEBIAN_FRONTEND=noninteractive
                 flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y redis-server
                 systemctl enable --now redis-server
+                SH)],
+
+            'ufw' => [$this->shell('Install UFW firewall', <<<'SH'
+                export DEBIAN_FRONTEND=noninteractive
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y ufw
+                # Default policies: deny incoming, allow outgoing.
+                ufw --force reset
+                ufw default deny incoming
+                ufw default allow outgoing
+                # Always allow SSH first so we never lock ourselves out.
+                ufw allow 22/tcp
+                ufw --force enable
+                systemctl enable ufw
+                SH)],
+
+            'fail2ban' => [$this->shell('Install Fail2Ban', <<<'SH'
+                export DEBIAN_FRONTEND=noninteractive
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y fail2ban
+                systemctl enable --now fail2ban
                 SH)],
 
             'mariadb' => [$this->shell('Install MariaDB', <<<'SH'

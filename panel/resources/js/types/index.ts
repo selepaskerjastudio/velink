@@ -218,6 +218,15 @@ export interface CronApplicationOption {
     linux_user: string;
 }
 
+export interface FirewallRule {
+    id: string;
+    protocol: string;
+    port: number;
+    action: string;
+    source: string | null;
+    is_protected: boolean;
+}
+
 export interface ServerMetricPoint {
     cpu: number;
     ram: number;
