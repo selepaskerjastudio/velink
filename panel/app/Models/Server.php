@@ -111,6 +111,14 @@ class Server extends Model
         return $this->hasMany(SystemUser::class);
     }
 
+    /**
+     * @return HasMany<FirewallRule>
+     */
+    public function firewallRules(): HasMany
+    {
+        return $this->hasMany(FirewallRule::class);
+    }
+
     public function latestMetric()
     {
         return $this->hasOne(ServerMetric::class)->latestOfMany();

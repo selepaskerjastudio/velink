@@ -51,3 +51,4 @@ require __DIR__.'/databases.php';
 require __DIR__.'/database-users.php';
 require __DIR__.'/ssh-keys.php';
 require __DIR__.'/system-users.php';
+require __DIR__.'/security.php';
