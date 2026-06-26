@@ -184,6 +184,13 @@ class ApplicationController extends Controller
 
         $provisionService->provisionNew($application, $request->user()->id, $dbCreds);
 
+        // Auto-create DNS A record if the user has a verified Cloudflare token.
+        // Non-blocking: if it fails the app still provisions normally.
+        $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
+        if ($cfToken && $application->domain && $server->public_ip) {
+            app(\App\Services\DnsService::class)->provisionDomain($application, $cfToken);
+        }
+
         // Write the seeded .env onto the server (after the web root exists).
         if ($application->env_content) {
             $dispatcher->dispatch($server, 'write_file', [
@@ -282,6 +289,7 @@ class ApplicationController extends Controller
                 'ssl_enabled' => $application->ssl_enabled_at !== null,
                 'ssl_enabled_at' => $application->ssl_enabled_at?->toIso8601String(),
                 'ssl_provider' => $application->ssl_enabled_at !== null ? 'letsencrypt' : null,
+                'ssl_challenge' => $application->ssl_challenge,
             ],
             'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'status' => $application->server->status, 'os' => $application->server->os],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
@@ -418,19 +426,55 @@ class ApplicationController extends Controller
 
         $domain = escapeshellarg($application->domain);
         $email = escapeshellarg($request->user()->email);
+        $challenge = $request->input('challenge', 'http');
 
-        $dispatcher->dispatch($application->server, 'shell', [
-            'command' => "certbot --nginx -d {$domain} --non-interactive --agree-tos --email {$email} --redirect",
-            'timeout' => 120,
-        ], [
-            'application_id' => $application->id,
-            'user_id' => $request->user()->id,
-            'label' => "Enable SSL for {$application->domain}",
-        ]);
+        // DNS-01 challenge via Cloudflare (no HTTP needed, supports wildcards).
+        $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
+
+        if ($challenge === 'dns' && $cfToken) {
+            $application->forceFill(['ssl_challenge' => 'dns', 'ssl_dns_provider' => 'cloudflare'])->save();
+
+            $credsPath = '/root/.cloudflare.ini';
+            $credsContent = "dns_cloudflare_api_token = {$cfToken->api_token}\n";
+
+            // 1. Write the Cloudflare credentials file (mode 600).
+            $dispatcher->dispatch($application->server, 'write_file', [
+                'path' => $credsPath,
+                'content' => $credsContent,
+                'mode' => '0600',
+            ], ['application_id' => $application->id, 'user_id' => $request->user()->id, 'label' => 'Write Cloudflare credentials']);
+
+            // 2. Run certbot with the DNS-01 challenge.
+            $dispatcher->dispatch($application->server, 'shell', [
+                'command' => "certbot certonly --dns-cloudflare --dns-cloudflare-credentials {$credsPath} -d {$domain} --non-interactive --agree-tos --email {$email}",
+                'timeout' => 180,
+            ], [
+                'application_id' => $application->id,
+                'user_id' => $request->user()->id,
+                'label' => "Enable SSL for {$application->domain}",
+            ]);
+
+            // 3. Clean up the credentials file after the cert is obtained.
+            $dispatcher->dispatch($application->server, 'shell', [
+                'command' => "rm -f {$credsPath}",
+            ], ['application_id' => $application->id, 'user_id' => $request->user()->id, 'label' => 'Remove Cloudflare credentials']);
+        } else {
+            // HTTP-01 challenge (existing flow — requires DNS to already point here).
+            $application->forceFill(['ssl_challenge' => 'http'])->save();
+
+            $dispatcher->dispatch($application->server, 'shell', [
+                'command' => "certbot --nginx -d {$domain} --non-interactive --agree-tos --email {$email} --redirect",
+                'timeout' => 120,
+            ], [
+                'application_id' => $application->id,
+                'user_id' => $request->user()->id,
+                'label' => "Enable SSL for {$application->domain}",
+            ]);
+        }
 
         AuditLogger::log(
             action: 'application.ssl_enabled',
-            description: "SSL requested for '{$application->name}' ({$application->domain})",
+            description: "SSL requested for '{$application->name}' ({$application->domain}) via {$challenge}-01",
             userId: $request->user()->id,
             serverId: $application->server_id,
         );
@@ -545,6 +589,12 @@ class ApplicationController extends Controller
 
         $server = $application->server;
         $name = $application->name;
+
+        // Clean up any Cloudflare DNS records owned by this app (non-blocking).
+        $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
+        if ($cfToken) {
+            app(\App\Services\DnsService::class)->teardownDomain($application, $cfToken);
+        }
 
         $provisionService->deprovision($application, $request->user()->id);
 

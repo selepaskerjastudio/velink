@@ -51,6 +51,8 @@ class Application extends Model
         'status',
         'webhook_secret',
         'ssl_enabled_at',
+        'ssl_challenge',
+        'ssl_dns_provider',
     ];
 
     protected $hidden = [
@@ -89,6 +91,14 @@ class Application extends Model
     public function services(): HasMany
     {
         return $this->hasMany(Service::class);
+    }
+
+    /**
+     * @return HasMany<DnsRecord>
+     */
+    public function dnsRecords(): HasMany
+    {
+        return $this->hasMany(DnsRecord::class);
     }
 
     public function cronJobs(): HasMany

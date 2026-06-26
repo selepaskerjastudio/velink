@@ -27,6 +27,11 @@ const sidebarNavItems: NavItem[] = [
         icon: null,
     },
     {
+        title: 'Cloudflare',
+        url: '/settings/cloudflare',
+        icon: null,
+    },
+    {
         title: 'Two-Factor Auth',
         url: '/settings/two-factor',
         icon: null,
