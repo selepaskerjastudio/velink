@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Events\ServerAlertResolved;
+use App\Events\ServerAlertTriggered;
 use App\Models\Server;
 use App\Models\ServerAlert;
 
@@ -73,9 +75,20 @@ class ThresholdChecker
                     'threshold' => $threshold,
                     'message' => "{$check['label']} at {$check['value']}{$check['unit']} (threshold: {$threshold}{$check['unit']})",
                 ]);
+
+                // Fire event for notification delivery (queued, non-blocking).
+                $alert = ServerAlert::where('server_id', $server->id)
+                    ->where('metric_type', $type)
+                    ->whereNull('resolved_at')
+                    ->latest('id')
+                    ->first();
+                if ($alert) {
+                    ServerAlertTriggered::dispatch($alert);
+                }
             } elseif ($activeAlert) {
                 // Metric back to normal — resolve the alert
                 $activeAlert->update(['resolved_at' => now()]);
+                ServerAlertResolved::dispatch($activeAlert);
             }
         }
     }
