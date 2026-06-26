@@ -42,6 +42,7 @@ const SECTIONS: SidebarItem[] = [
     { header: 'Web Settings' },
     { id: 'nginx', label: 'NGINX Config' },
     { id: 'settings', label: 'Settings' },
+    { id: 'backups', label: 'Backups' },
     { id: 'activity', label: 'Activity Log' },
 ];
 

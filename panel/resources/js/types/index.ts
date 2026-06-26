@@ -228,6 +228,26 @@ export interface FirewallRule {
     is_protected: boolean;
 }
 
+export interface BackupSummary {
+    id: string;
+    status: string;
+    type: string;
+    size_bytes: number | null;
+    storage: string;
+    started_at: string | null;
+    completed_at: string | null;
+    created_at?: string;
+}
+
+export interface BackupSettings {
+    schedule: string;
+    retention_count: number;
+    include_database: boolean;
+    include_files: boolean;
+    storage_local: boolean;
+    storage_s3: boolean;
+}
+
 export interface NotificationChannelSummary {
     id: string;
     type: string;

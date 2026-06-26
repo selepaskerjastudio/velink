@@ -101,6 +101,22 @@ class Application extends Model
         return $this->hasMany(DnsRecord::class);
     }
 
+    /**
+     * @return HasMany<Backup>
+     */
+    public function backups(): HasMany
+    {
+        return $this->hasMany(Backup::class);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Relations\HasOne<BackupSetting>
+     */
+    public function backupSetting()
+    {
+        return $this->hasOne(BackupSetting::class);
+    }
+
     public function cronJobs(): HasMany
     {
         return $this->hasMany(CronJob::class);
