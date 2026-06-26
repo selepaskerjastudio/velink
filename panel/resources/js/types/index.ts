@@ -93,6 +93,7 @@ export interface Application {
     ssl_enabled: boolean;
     ssl_enabled_at?: string | null;
     ssl_provider: string | null;
+    ssl_challenge: string | null;
 }
 
 export interface GitCredential {
@@ -225,6 +226,22 @@ export interface FirewallRule {
     action: string;
     source: string | null;
     is_protected: boolean;
+}
+
+export interface CloudflareTokenSummary {
+    id: string;
+    email: string | null;
+    verified: boolean;
+    created_at?: string;
+}
+
+export interface DnsRecordSummary {
+    id: string;
+    type: string;
+    name: string;
+    content: string;
+    proxied: boolean;
+    ttl: number;
 }
 
 export interface ServerMetricPoint {

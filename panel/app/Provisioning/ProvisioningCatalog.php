@@ -60,7 +60,7 @@ class ProvisioningCatalog
 
             'certbot' => [$this->shell('Install certbot', <<<'SH'
                 export DEBIAN_FRONTEND=noninteractive
-                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y certbot python3-certbot-nginx
+                flock -w 300 /var/lib/dpkg/lock-frontend apt-get install -y certbot python3-certbot-nginx python3-certbot-dns-cloudflare
                 SH)],
 
             'php' => $this->phpSteps($opts),

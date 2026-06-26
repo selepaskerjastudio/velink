@@ -69,4 +69,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(SshKey::class);
     }
+
+    public function cloudflareTokens(): HasMany
+    {
+        return $this->hasMany(CloudflareToken::class);
+    }
 }
