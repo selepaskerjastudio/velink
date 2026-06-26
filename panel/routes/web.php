@@ -54,3 +54,4 @@ require __DIR__.'/system-users.php';
 require __DIR__.'/security.php';
 require __DIR__.'/cloudflare.php';
 require __DIR__.'/notifications.php';
+require __DIR__.'/backups.php';

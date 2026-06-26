@@ -165,6 +165,31 @@ class GatewayInboundProcessor
                     $job->application?->forceFill(['directory_size_bytes' => (int) $m[1]])->save();
                 }
             }
+
+            // Backup job result — update the Backup row with size and status.
+            if ($job->label !== null && str_starts_with($job->label, 'Backup for')) {
+                $backup = \App\Models\Backup::where('agent_job_id', $job->id)->first();
+                if ($backup) {
+                    if ($job->status === AgentJob::STATUS_SUCCEEDED) {
+                        $output = is_string($job->output) ? $job->output : '';
+                        $size = null;
+                        if (preg_match('/BACKUP_SIZE=.+:(\d+)/', $output, $m)) {
+                            $size = (int) $m[1];
+                        }
+                        $backup->forceFill([
+                            'status' => \App\Models\Backup::STATUS_SUCCEEDED,
+                            'size_bytes' => $size,
+                            'completed_at' => now(),
+                        ])->save();
+                    } else {
+                        $backup->forceFill([
+                            'status' => \App\Models\Backup::STATUS_FAILED,
+                            'message' => $job->error ?? 'Backup failed',
+                            'completed_at' => now(),
+                        ])->save();
+                    }
+                }
+            }
         }
 
         event(new AgentJobUpdated($job->refresh()));
