@@ -32,7 +32,12 @@ class WebhookController extends Controller
             return response()->json(['error' => 'No repository configured'], 422);
         }
 
-        $deploymentService->deploy($application, 'webhook');
+        $deployment = $deploymentService->deploy($application, 'webhook');
+
+        // The concurrency guard may skip the deploy if one is already running.
+        if ($deployment->status === 'failed') {
+            return response()->json(['status' => 'skipped_concurrent']);
+        }
 
         AuditLogger::log(
             action: 'application.deployed',
@@ -71,7 +76,11 @@ class WebhookController extends Controller
             return response()->json(['error' => 'No repository configured'], 422);
         }
 
-        $deploymentService->deploy($application, 'webhook');
+        $deployment = $deploymentService->deploy($application, 'webhook');
+
+        if ($deployment->status === 'failed') {
+            return response()->json(['status' => 'skipped_concurrent']);
+        }
 
         AuditLogger::log(
             action: 'application.deployed',

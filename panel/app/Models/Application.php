@@ -57,6 +57,7 @@ class Application extends Model
 
     protected $hidden = [
         'env_content',
+        'webhook_secret',
     ];
 
     protected function casts(): array
