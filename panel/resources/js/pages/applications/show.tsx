@@ -23,7 +23,7 @@ import {
     type GitCredential,
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { ChevronDownIcon, ExternalLinkIcon, ShieldCheckIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
+import { ChevronDownIcon, ExternalLinkIcon, ShieldCheckIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -891,6 +891,15 @@ export default function ApplicationsShow({
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <Badge variant={statusVariant(deployment.status)}>{deployment.status}</Badge>
+                                                    <Link
+                                                        href={route('deployments.log', deployment.id)}
+                                                        prefetch
+                                                        className="inline-flex"
+                                                    >
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7" title="View full log">
+                                                            <TerminalIcon className="h-4 w-4" />
+                                                        </Button>
+                                                    </Link>
                                                     {deployment.log && (
                                                         <CollapsibleTrigger asChild>
                                                             <Button variant="ghost" size="icon" className="h-7 w-7">
