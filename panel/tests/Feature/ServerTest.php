@@ -35,11 +35,13 @@ test('a server can be created and shows the agent token once', function () {
 
     $server = Server::query()->where('name', 'web-01')->firstOrFail();
 
-    $response->assertRedirect(route('servers.show', $server));
+    // After creation the server is pending, so the user is sent to the connect
+    // page which shows the agent token and install command (commit 5322f01).
+    $response->assertRedirect(route('servers.connect', $server));
 
     $this->assertNotNull($server->agent_token);
 
-    $follow = $this->get(route('servers.show', $server));
+    $follow = $this->get(route('servers.connect', $server));
     $follow->assertOk();
     $follow->assertInertia(fn ($page) => $page
         ->where('flash.plainAgentToken', fn ($token) => filled($token))

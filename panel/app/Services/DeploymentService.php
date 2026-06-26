@@ -19,6 +19,25 @@ class DeploymentService
 
     public function deploy(Application $app, string $triggeredBy = 'manual', ?int $userId = null): Deployment
     {
+        // Concurrency guard: reject if a deploy is already running/pending for
+        // this app. Two overlapping deploys against the same root_path can
+        // corrupt the working tree (concurrent git fetch/reset).
+        $alreadyRunning = Deployment::where('application_id', $app->id)
+            ->whereIn('status', ['pending', 'running'])
+            ->exists();
+
+        if ($alreadyRunning) {
+            return Deployment::create([
+                'application_id' => $app->id,
+                'user_id' => $userId,
+                'branch' => $app->branch,
+                'mode' => $app->deploy_mode,
+                'status' => 'failed',
+                'triggered_by' => $triggeredBy,
+                'log' => 'Skipped: another deployment is already running.',
+            ]);
+        }
+
         $deployment = Deployment::create([
             'application_id' => $app->id,
             'user_id' => $userId,

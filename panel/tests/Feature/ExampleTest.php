@@ -1,7 +1,13 @@
 <?php
 
-it('returns a successful response', function () {
-    $response = $this->get('/');
+use App\Models\User;
 
-    $response->assertStatus(200);
+it('redirects the root URL to the dashboard', function () {
+    $this->get('/')->assertRedirect('/dashboard');
+});
+
+it('shows the dashboard to authenticated users', function () {
+    $this->actingAs(User::factory()->create());
+
+    $this->get('/dashboard')->assertOk();
 });
