@@ -228,6 +228,14 @@ export interface FirewallRule {
     is_protected: boolean;
 }
 
+export interface NotificationChannelSummary {
+    id: string;
+    type: string;
+    label: string;
+    enabled: boolean;
+    created_at?: string;
+}
+
 export interface CloudflareTokenSummary {
     id: string;
     email: string | null;

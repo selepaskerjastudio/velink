@@ -74,4 +74,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(CloudflareToken::class);
     }
+
+    public function notificationChannels(): HasMany
+    {
+        return $this->hasMany(NotificationChannel::class);
+    }
 }
