@@ -6,6 +6,7 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/velink/agent/internal/metrics"
 	"github.com/velink/agent/internal/protocol"
 	"github.com/velink/agent/internal/sysinfo"
+	"github.com/velink/agent/internal/terminal"
 )
 
 const (
@@ -27,17 +29,19 @@ const (
 
 // Client is the agent's connection manager.
 type Client struct {
-	cfg  config.Config
-	exec *executor.Executor
-	log  *slog.Logger
+	cfg       config.Config
+	exec      *executor.Executor
+	terminal  *terminal.Manager
+	log       *slog.Logger
 }
 
 // New builds a Client.
 func New(cfg config.Config, log *slog.Logger) *Client {
 	return &Client{
-		cfg:  cfg,
-		exec: executor.New(cfg.ServerID),
-		log:  log,
+		cfg:      cfg,
+		exec:     executor.New(cfg.ServerID),
+		terminal: terminal.New(log),
+		log:      log,
 	}
 }
 
@@ -157,8 +161,17 @@ func (c *Client) readPump(ctx context.Context, cancel context.CancelFunc, ws *we
 		if err := wsjson.Read(ctx, ws, &env); err != nil {
 			return err
 		}
-		if env.Type == protocol.TypeJob {
+		switch env.Type {
+		case protocol.TypeJob:
 			go c.handleJob(ctx, env, send)
+		case protocol.TypeTerminalOpen:
+			go c.handleTerminalOpen(ctx, env, send)
+		case protocol.TypeTerminalData:
+			c.handleTerminalData(env)
+		case protocol.TypeTerminalResize:
+			c.handleTerminalResize(env)
+		case protocol.TypeTerminalClose:
+			c.terminal.Close(env.JobID)
 		}
 	}
 }
@@ -182,6 +195,55 @@ func (c *Client) emit(ctx context.Context, send chan protocol.Envelope, env prot
 	case send <- env:
 	case <-ctx.Done():
 	}
+}
+
+// handleTerminalOpen starts a PTY session for a web terminal.
+func (c *Client) handleTerminalOpen(ctx context.Context, env protocol.Envelope, send chan protocol.Envelope) {
+	var params terminal.OpenParams
+	if err := json.Unmarshal(env.Payload, &params); err != nil {
+		c.log.Warn("malformed terminal_open payload", "session", env.JobID, "error", err)
+		return
+	}
+
+	emit := func(msgType string, sessionID string, payload interface{}) {
+		data, _ := json.Marshal(payload)
+		c.emit(ctx, send, protocol.Envelope{
+			Type:      msgType,
+			JobID:     sessionID,
+			ServerID:  c.cfg.ServerID,
+			Payload:   data,
+			Timestamp: protocol.Now(),
+		})
+	}
+
+	if err := c.terminal.Open(env.JobID, params, emit); err != nil {
+		c.log.Error("failed to open terminal session", "session", env.JobID, "error", err)
+	}
+}
+
+// handleTerminalData writes input bytes to a PTY session.
+func (c *Client) handleTerminalData(env protocol.Envelope) {
+	var payload terminal.DataPayload
+	if err := json.Unmarshal(env.Payload, &payload); err != nil {
+		return
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(payload.Data)
+	if err != nil {
+		return
+	}
+
+	c.terminal.Write(env.JobID, decoded)
+}
+
+// handleTerminalResize changes the PTY window size.
+func (c *Client) handleTerminalResize(env protocol.Envelope) {
+	var size terminal.WinSize
+	if err := json.Unmarshal(env.Payload, &size); err != nil {
+		return
+	}
+
+	c.terminal.Resize(env.JobID, size)
 }
 
 // metricsLoop collects a system resource snapshot every 30 seconds and sends

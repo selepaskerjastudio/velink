@@ -27,6 +27,12 @@ const (
 	TypeError     = "error"
 	TypeMetrics   = "metrics"
 	TypeSysinfo   = "sysinfo"
+	// Terminal — bidirectional interactive shell sessions.
+	TypeTerminalOpen   = "terminal_open"
+	TypeTerminalData   = "terminal_data"
+	TypeTerminalResize = "terminal_resize"
+	TypeTerminalClose  = "terminal_close"
+	TypeTerminalExited = "terminal_exited"
 )
 
 // Now returns the current time in unix milliseconds.

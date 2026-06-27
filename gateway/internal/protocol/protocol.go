@@ -7,6 +7,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // Envelope is the single message type exchanged in every direction. The actual
@@ -38,10 +39,18 @@ const (
 	TypeJobResult = "job_result"
 	// TypeError reports a transport/protocol level error.
 	TypeError = "error"
+	// TypeMetrics carries periodic resource snapshots agent -> panel.
+	TypeMetrics = "metrics"
 	// TypeSysinfo carries static system metadata (hostname, private IP, OS)
 	// sent by the agent once on connect. The gateway enriches it with the
 	// agent's public IP before forwarding to the panel.
 	TypeSysinfo = "sysinfo"
+	// Terminal — bidirectional interactive shell sessions.
+	TypeTerminalOpen   = "terminal_open"
+	TypeTerminalData   = "terminal_data"
+	TypeTerminalResize = "terminal_resize"
+	TypeTerminalClose  = "terminal_close"
+	TypeTerminalExited = "terminal_exited"
 )
 
 // Presence status values.
@@ -72,4 +81,9 @@ type PresenceEvent struct {
 	Status       string `json:"status"`
 	AgentVersion string `json:"agent_version,omitempty"`
 	Timestamp    int64  `json:"ts"`
+}
+
+// Now returns the current time in unix milliseconds.
+func Now() int64 {
+	return time.Now().UnixMilli()
 }
