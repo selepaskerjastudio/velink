@@ -31,6 +31,14 @@ class AgentJobUpdated implements ShouldBroadcast
     }
 
     /**
+     * Keep the broadcast payload under Reverb's max message size (10 KB).
+     * Long-running jobs (deploy/provision) can emit hundreds of KB of output;
+     * send only the tail here — the full log is read from the DB by the
+     * deployment/activity log viewers.
+     */
+    private const MAX_OUTPUT_CHARS = 8000;
+
+    /**
      * @return array<string, mixed>
      */
     public function broadcastWith(): array
@@ -41,7 +49,9 @@ class AgentJobUpdated implements ShouldBroadcast
             'label' => $this->job->label,
             'status' => $this->job->status,
             'exit_code' => $this->job->exit_code,
-            'output' => $this->job->output,
+            'output' => $this->job->output !== null
+                ? mb_substr($this->job->output, -self::MAX_OUTPUT_CHARS)
+                : null,
         ];
     }
 }
