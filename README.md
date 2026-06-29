@@ -35,6 +35,28 @@ Tiga komponen:
 
 ---
 
+## Instalasi cepat (panel)
+
+Bootstrap VM Ubuntu kosong jadi panel lengkap lewat satu wizard interaktif:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/selepaskerjastudio/velink/main/installer/panel-install.sh | sudo bash
+```
+
+Wizard menanyakan domain, email (SSL), repo/branch, dan direktori, lalu otomatis: install PHP-FPM + Composer + Node 20 + Go + PostgreSQL + Redis + nginx + certbot, generate `.env` (semua secret acak), build panel + gateway, pre-build binary agent (linux amd64/arm64), pasang 4 systemd service, dan terbitkan SSL. Selesai → buka `https://<domain>/register`.
+
+Non-interaktif (otomasi/CI):
+
+```bash
+sudo bash panel-install.sh --non-interactive --domain panel.example.com --email you@example.com
+```
+
+Flag lain: `--repo` `--branch` `--dir` `--db-pass` `--php` `--go-version` `--no-ssl`. Log lengkap di `/var/log/velink-panel-install.log`.
+
+> Langkah manual di bawah (§1–§2) tetap tersedia untuk setup bertahap/kustom. Domain DNS (A record) harus sudah mengarah ke VM sebelum menjalankan installer (dibutuhkan certbot).
+
+---
+
 ## Kebutuhan Panel Server
 
 > Panel dan gateway diinstall di **satu VM khusus** (tidak tercampur dengan VM terkelola).
@@ -204,7 +226,9 @@ GATEWAY_REDIS_DB=0
 GATEWAY_PRESENCE_TTL=90
 ```
 
-> Gateway tidak perlu menghadap internet langsung. Nginx mem-proxy `/agent/connect` ke gateway di port 8080, sehingga agent cukup konek ke `wss://panel.velink.dev` (port 443) tanpa port khusus.
+> Gateway tidak perlu menghadap internet langsung. Nginx mem-proxy `/agent/connect` ke gateway, sehingga agent cukup konek ke `wss://panel.velink.dev` (port 443) tanpa port khusus.
+>
+> ⚠️ **Port jangan bentrok dengan Reverb.** Reverb (server) bind di `REVERB_SERVER_PORT` (default `8080`), jadi gateway harus port lain. Installer otomatis memakai **Reverb `8080` + Gateway `8081`** (`GATEWAY_LISTEN=:8081`), nginx mem-proxy `/app/` → 8080 dan `/agent/connect` → 8081. Catatan: di `panel/.env`, `REVERB_PORT=443`/`REVERB_SCHEME=https` adalah port **klien** (lewat nginx), bukan port bind server.
 
 ### 2.3 Jalankan sebagai systemd service
 
