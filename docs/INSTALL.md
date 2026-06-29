@@ -17,6 +17,44 @@ Velink memisahkan **VM panel** (control plane) dari **VM terkelola** (server yan
 
 ---
 
+## Spesifikasi server
+
+Dua peran mesin, kebutuhan beda.
+
+### VM Panel (control plane)
+
+Menjalankan panel Laravel + queue + Reverb + agent-listener + gateway Go + nginx + PostgreSQL + Redis. Beban **runtime ringan** (cuma orkestrasi), tapi langkah **build** (`npm run build` / Vite + `composer install`) butuh RAM lebih.
+
+| | Minimum | Disarankan |
+|---|---|---|
+| vCPU | 2 | 2–4 |
+| RAM | 2 GB | 4 GB |
+| Disk | 20 GB SSD | 40 GB SSD |
+| OS | Ubuntu 22.04 / 24.04 LTS | sama |
+| Arsitektur | amd64 / arm64 | sama |
+
+> Build Vite bisa kehabisan memori di RAM 2 GB. Kalau mentok: tambah **swap 2 GB** sebelum install, atau build aset di mesin lain lalu salin `panel/public/build`.
+
+**Jaringan:** inbound **80 + 443** (HTTP challenge, HTTPS, WSS browser & agent). Outbound bebas (clone repo, certbot, apt). Port internal 8080 (Reverb) & 8081 (gateway) cukup loopback — jangan diekspos.
+
+### VM Terkelola (server yang dikelola)
+
+Menjalankan agent Go (ringan, ±20 MB RAM) + stack yang kamu provision (nginx, php-fpm, MySQL/PostgreSQL/MongoDB, Redis, worker). Spek mengikuti **beban aplikasi**, bukan agent-nya.
+
+| | Minimum (1 site kecil) | Skala produksi |
+|---|---|---|
+| vCPU | 1 | naikkan per traffic/worker |
+| RAM | 1 GB | 2–4 GB+ (DB & php-fpm rakus RAM) |
+| Disk | 20 GB SSD | + ukuran data DB & file app |
+| OS | Ubuntu 22.04 / 24.04 LTS | sama |
+| Arsitektur | amd64 / arm64 (binary agent tersedia keduanya) | sama |
+
+**Jaringan:** agent **dial-out** ke panel (`wss://` port 443) — **tidak perlu inbound** untuk agent (NAT/firewall friendly). Tapi situs yang di-host butuh **80 + 443** inbound sendiri, plus SSH (22) sesuai kebijakanmu.
+
+> Satu VM panel bisa kelola puluhan VM terkelola. Selalu pisahkan — **jangan** host aplikasi di VM panel.
+
+---
+
 ## Pra-instalasi (VM Panel)
 
 Sebelum menjalankan installer, siapkan:
@@ -24,7 +62,7 @@ Sebelum menjalankan installer, siapkan:
 1. **VM Ubuntu 22.04 / 24.04 LTS** bersih, akses `root` (atau `sudo`).
 2. **Domain** (mis. `panel.example.com`) dengan **DNS A record sudah mengarah ke IP VM** — wajib untuk SSL (certbot).
 3. **Port 80 & 443 terbuka** di firewall/security group (HTTP challenge + HTTPS/WSS).
-4. Spesifikasi minimum disarankan: 2 vCPU, 2 GB RAM, 20 GB disk.
+4. **Spesifikasi** sesuai [Spesifikasi server](#spesifikasi-server) — minimum 2 vCPU / 2 GB RAM / 20 GB disk (4 GB RAM disarankan supaya build Vite tidak OOM).
 
 ### Paket yang dibutuhkan
 
