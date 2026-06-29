@@ -3,6 +3,7 @@
 namespace App\Events;
 
 use App\Models\AgentJob;
+use App\Services\AnsiStripper;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -34,7 +35,9 @@ class AgentJobUpdated implements ShouldBroadcast
      * Keep the broadcast payload under Reverb's max message size (10 KB).
      * Long-running jobs (deploy/provision) can emit hundreds of KB of output;
      * send only the tail here — the full log is read from the DB by the
-     * deployment/activity log viewers.
+     * deployment/activity log viewers. ANSI escapes are stripped first: they
+     * JSON-encode to ~6 bytes each (…), so a raw tail can blow the budget
+     * even after truncation, and the inline preview renders plain text anyway.
      */
     private const MAX_OUTPUT_CHARS = 8000;
 
@@ -50,7 +53,7 @@ class AgentJobUpdated implements ShouldBroadcast
             'status' => $this->job->status,
             'exit_code' => $this->job->exit_code,
             'output' => $this->job->output !== null
-                ? mb_substr($this->job->output, -self::MAX_OUTPUT_CHARS)
+                ? mb_substr(AnsiStripper::toHtml($this->job->output, false), -self::MAX_OUTPUT_CHARS)
                 : null,
         ];
     }
