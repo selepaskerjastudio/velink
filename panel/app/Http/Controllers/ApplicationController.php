@@ -25,7 +25,7 @@ use Inertia\Response;
 
 class ApplicationController extends Controller
 {
-    private const DOMAIN_REGEX = '/^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i';
+    public const DOMAIN_REGEX = '/^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i';
 
     private const REPOSITORY_REGEX = '/^[\w.-]+\/[\w.-]+$/';
 
@@ -366,6 +366,52 @@ class ApplicationController extends Controller
                 'repository' => $validated['repository'] ?: null,
                 'branch' => $validated['branch'],
             ],
+        );
+
+        return redirect()->route('applications.show', $application);
+    }
+
+    /**
+     * Update the app's domain — rewrites nginx vhost, invalidates SSL,
+     * and syncs Cloudflare DNS if configured.
+     */
+    public function updateDomain(Request $request, Application $application, AppProvisionService $provisionService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'domain' => ['nullable', 'string', 'max:255', 'regex:'.self::DOMAIN_REGEX, Rule::unique('applications', 'domain')->ignore($application)],
+        ]);
+
+        $newDomain = $validated['domain'] ?? null;
+        $oldDomain = $application->domain;
+
+        // Skip if nothing changed.
+        if ($newDomain === $oldDomain) {
+            return redirect()->route('applications.show', $application);
+        }
+
+        $application->forceFill(['domain' => $newDomain])->save();
+
+        // Rebuild nginx vhost for the new domain (or remove it if null).
+        $provisionService->changeDomain($application, $oldDomain, $request->user()->id);
+
+        // Sync Cloudflare DNS if the user has a token (non-blocking).
+        $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
+        if ($cfToken) {
+            $dnsService = app(\App\Services\DnsService::class);
+            if ($oldDomain) {
+                $dnsService->teardownDomain($application, $cfToken);
+            }
+            if ($newDomain && $application->server->public_ip) {
+                $dnsService->provisionDomain($application, $cfToken);
+            }
+        }
+
+        AuditLogger::log(
+            action: 'application.domain_updated',
+            description: "Domain changed from '{$oldDomain}' to '{$newDomain}' for '{$application->name}'",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+            properties: ['old_domain' => $oldDomain, 'new_domain' => $newDomain],
         );
 
         return redirect()->route('applications.show', $application);

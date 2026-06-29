@@ -165,6 +165,17 @@ export default function ApplicationsShow({
         phpForm.patch(route('applications.php-version', application.id), { preserveScroll: true });
     };
 
+    const domainForm = useForm<{ domain: string }>({
+        domain: application.domain ?? '',
+    });
+
+    const submitDomain = () => {
+        domainForm.transform((data) => ({
+            domain: data.domain.trim() || undefined,
+        }));
+        domainForm.patch(route('applications.domain', application.id), { preserveScroll: true });
+    };
+
     const envForm = useForm<{ env_content: string }>({
         env_content: application.env_content ?? '',
     });
@@ -435,6 +446,34 @@ export default function ApplicationsShow({
                                         <span className="text-muted-foreground">Status</span>
                                         <Badge variant={statusVariant(application.status)}>{application.status}</Badge>
                                     </div>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {section === 'settings' && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Domain</CardTitle>
+                                    <CardDescription>
+                                        The domain serving this application. Changing it rewrites the nginx config and invalidates any existing SSL certificate.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <Input
+                                        value={domainForm.data.domain}
+                                        onChange={(e) => domainForm.setData('domain', e.target.value)}
+                                        placeholder="app.example.com"
+                                        className="font-mono"
+                                    />
+                                    <InputError message={domainForm.errors.domain} />
+                                    {application.ssl_enabled && (
+                                        <p className="text-yellow-600 text-xs">
+                                            ⚠ SSL is currently active — changing the domain will invalidate the certificate.
+                                        </p>
+                                    )}
+                                    <Button onClick={submitDomain} disabled={domainForm.processing} size="sm">
+                                        {domainForm.processing ? 'Saving…' : 'Save domain'}
+                                    </Button>
                                 </CardContent>
                             </Card>
                         )}
