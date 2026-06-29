@@ -24,6 +24,13 @@ final class GatewayProtocol
     public const TYPE_METRICS = 'metrics';
     public const TYPE_SYSINFO = 'sysinfo';
 
+    // Terminal — bidirectional interactive shell sessions.
+    public const TYPE_TERMINAL_OPEN = 'terminal_open';
+    public const TYPE_TERMINAL_DATA = 'terminal_data';
+    public const TYPE_TERMINAL_RESIZE = 'terminal_resize';
+    public const TYPE_TERMINAL_CLOSE = 'terminal_close';
+    public const TYPE_TERMINAL_EXITED = 'terminal_exited';
+
     public const STATUS_ONLINE = 'online';
     public const STATUS_OFFLINE = 'offline';
 

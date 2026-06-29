@@ -1,11 +1,14 @@
 <?php
 
+use App\Events\ServerAlertResolved;
+use App\Events\ServerAlertTriggered;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\VerifyGatewaySecret;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -34,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'install/provision',
         ]);
     })
+    ->withEvents()
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })->create();

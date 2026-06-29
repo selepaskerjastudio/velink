@@ -82,3 +82,51 @@ func (v *Verifier) Verify(ctx context.Context, serverID string, token string) (S
 
 	return out.Server, nil
 }
+
+type terminalAuthRequest struct {
+	ServerUUID   string `json:"server_uuid"`
+	SessionToken string `json:"session_token"`
+}
+
+type terminalAuthResponse struct {
+	Valid    bool   `json:"valid"`
+	ServerID string `json:"server_id"`
+}
+
+// VerifyTerminal validates a browser terminal session token against the panel.
+// Returns the internal server ID if valid.
+func (v *Verifier) VerifyTerminal(ctx context.Context, serverUUID string, sessionToken string) (string, error) {
+	body, err := json.Marshal(terminalAuthRequest{ServerUUID: serverUUID, SessionToken: sessionToken})
+	if err != nil {
+		return "", err
+	}
+
+	url := v.panelURL + "/internal/terminal/auth"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Gateway-Secret", v.secret)
+
+	resp, err := v.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("panel terminal auth request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("panel rejected terminal session (status %d)", resp.StatusCode)
+	}
+
+	var out terminalAuthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("decode terminal auth response: %w", err)
+	}
+	if !out.Valid {
+		return "", fmt.Errorf("panel reported invalid terminal session")
+	}
+
+	return out.ServerID, nil
+}

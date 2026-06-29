@@ -14,11 +14,13 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/google/uuid"
 	"github.com/velink/gateway/internal/auth"
 	"github.com/velink/gateway/internal/bridge"
 	"github.com/velink/gateway/internal/hub"
 	"github.com/velink/gateway/internal/presence"
 	"github.com/velink/gateway/internal/protocol"
+	"github.com/velink/gateway/internal/terminal"
 )
 
 // Server holds the dependencies for the agent-facing endpoints.
@@ -27,18 +29,20 @@ type Server struct {
 	hub      *hub.Hub
 	presence *presence.Tracker
 	bridge   *bridge.Bridge
+	terminal *terminal.Manager
 	log      *slog.Logger
 }
 
 // New builds a Server.
 func New(v *auth.Verifier, h *hub.Hub, p *presence.Tracker, b *bridge.Bridge, log *slog.Logger) *Server {
-	return &Server{verifier: v, hub: h, presence: p, bridge: b, log: log}
+	return &Server{verifier: v, hub: h, presence: p, bridge: b, terminal: terminal.New(), log: log}
 }
 
 // Handler returns the HTTP mux for the gateway.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/agent/connect", s.handleAgentConnect)
+	mux.HandleFunc("/terminal/connect", s.handleTerminalConnect)
 	mux.HandleFunc("/healthz", s.handleHealth)
 	return mux
 }
@@ -152,6 +156,19 @@ func (s *Server) readPump(ctx context.Context, cancel context.CancelFunc, ws *we
 		// Stamp the authenticated server ID so the panel can trust the source.
 		env.ServerID = conn.ServerID
 
+		// Terminal messages from the agent go to the browser relay, not Redis.
+		if terminal.IsTerminalType(env.Type) {
+			if relay, ok := s.terminal.Get(env.JobID); ok {
+				select {
+				case relay.AgentOut <- env:
+				default:
+					s.log.Warn("terminal relay buffer full, dropping", "session", env.JobID)
+				}
+				continue
+			}
+			// No relay found — fall through to publish (panel may handle it).
+		}
+
 		switch env.Type {
 		case protocol.TypeHeartbeat:
 			if err := s.presence.Refresh(ctx, conn.ServerID); err != nil {
@@ -205,4 +222,122 @@ func bearerToken(header string) string {
 		return strings.TrimSpace(header[len(prefix):])
 	}
 	return strings.TrimSpace(header)
+}
+
+// handleTerminalConnect accepts a browser WebSocket for an interactive terminal
+// session, authenticates it, then relays bytes between the browser and the
+// target agent's PTY via the existing hub dispatch path.
+func (s *Server) handleTerminalConnect(w http.ResponseWriter, r *http.Request) {
+	serverUUID := r.URL.Query().Get("server")
+	sessionToken := r.URL.Query().Get("token")
+	user := r.URL.Query().Get("user")
+	colsStr := r.URL.Query().Get("cols")
+	rowsStr := r.URL.Query().Get("rows")
+
+	if serverUUID == "" || sessionToken == "" {
+		http.Error(w, "missing server or token", http.StatusUnauthorized)
+		return
+	}
+
+	// Authenticate the terminal session against the panel.
+	serverID, err := s.verifier.VerifyTerminal(r.Context(), serverUUID, sessionToken)
+	if err != nil {
+		s.log.Warn("terminal auth rejected", "server_uuid", serverUUID, "error", err)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Accept the WebSocket upgrade.
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
+	if err != nil {
+		s.log.Warn("terminal websocket accept failed", "error", err)
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer ws.CloseNow()
+
+	sessionID := uuid.New().String()
+
+	// Register the relay so agent-side terminal_data messages find this browser.
+	relay := s.terminal.Register(sessionID, serverID)
+	defer s.terminal.Unregister(sessionID)
+
+	s.log.Info("terminal session opened", "session", sessionID, "server", serverID, "user", user)
+
+	// Parse initial terminal size (default 80x24).
+	cols := uint16(80)
+	rows := uint16(24)
+	if c, err := strconv.Atoi(colsStr); err == nil && c > 0 {
+		cols = uint16(c)
+	}
+	if r, err := strconv.Atoi(rowsStr); err == nil && r > 0 {
+		rows = uint16(r)
+	}
+
+	// Send terminal_open to the agent via the hub dispatch path.
+	openPayload, _ := json.Marshal(map[string]any{
+		"user": user,
+		"cols": cols,
+		"rows": rows,
+	})
+	openEnv := protocol.Envelope{
+		Type:      protocol.TypeTerminalOpen,
+		JobID:     sessionID,
+		ServerID:  serverID,
+		Payload:   openPayload,
+		Timestamp: protocol.Now(),
+	}
+	if !s.hub.Dispatch(openEnv) {
+		s.log.Warn("terminal open: agent not connected", "server", serverID)
+		wsjson.Write(ctx, ws, map[string]string{"type": "error", "message": "Agent not connected"})
+		return
+	}
+
+	// Start the agent→browser relay goroutine.
+	go func() {
+		for env := range relay.AgentOut {
+			if err := wsjson.Write(ctx, ws, env); err != nil {
+				return
+			}
+		}
+	}()
+
+	// Read from browser→agent in this goroutine until disconnect.
+	for {
+		var msg map[string]any
+		if err := wsjson.Read(ctx, ws, &msg); err != nil {
+			break
+		}
+
+		msgType, _ := msg["type"].(string)
+
+		switch msgType {
+		case "input":
+			// Browser sends base64-encoded keystrokes.
+			data, _ := msg["data"].(string)
+			payload, _ := json.Marshal(map[string]string{"data": data})
+			s.hub.Dispatch(protocol.Envelope{
+				Type: protocol.TypeTerminalData, JobID: sessionID,
+				ServerID: serverID, Payload: payload, Timestamp: protocol.Now(),
+			})
+		case "resize":
+			c, _ := msg["cols"].(float64)
+			rw, _ := msg["rows"].(float64)
+			payload, _ := json.Marshal(map[string]uint16{"cols": uint16(c), "rows": uint16(rw)})
+			s.hub.Dispatch(protocol.Envelope{
+				Type: protocol.TypeTerminalResize, JobID: sessionID,
+				ServerID: serverID, Payload: payload, Timestamp: protocol.Now(),
+			})
+		}
+	}
+
+	// Browser disconnected — send terminal_close to the agent.
+	s.hub.Dispatch(protocol.Envelope{
+		Type: protocol.TypeTerminalClose, JobID: sessionID,
+		ServerID: serverID, Timestamp: protocol.Now(),
+	})
+
+	s.log.Info("terminal session closed", "session", sessionID)
 }

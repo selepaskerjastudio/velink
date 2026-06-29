@@ -16,7 +16,7 @@ import {
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import echo from '@/echo';
 import { Link, router, usePage } from '@inertiajs/react';
-import { Activity, ChevronLeft, Clock, Cpu, Database, Globe, KeyRound, LayoutGrid, Layers, Loader2, ScrollText, Settings, Shield, UserCog } from 'lucide-react';
+import { Activity, ChevronLeft, Clock, Cpu, Database, Globe, KeyRound, LayoutGrid, Layers, Loader2, ScrollText, Settings, Shield, TerminalSquare, UserCog } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface ServerLayoutProps {
@@ -42,6 +42,7 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
         { title: 'Databases', url: `/servers/${server.id}/databases`, icon: Database, exact: false },
         { title: 'Services', url: `/servers/${server.id}/services`, icon: Cpu, exact: false },
         { title: 'Security', url: `/servers/${server.id}/security`, icon: Shield, exact: false },
+        { title: 'Terminal', url: `/servers/${server.id}/terminal`, icon: TerminalSquare, exact: false },
     ];
 
     const utilityNavItems = [

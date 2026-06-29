@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Internal\AgentVerificationController;
+use App\Http\Controllers\TerminalController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -9,3 +10,4 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::post('agent/verify', [AgentVerificationController::class, 'verify'])->name('internal.agent.verify');
+Route::post('terminal/auth', [TerminalController::class, 'auth'])->name('internal.terminal.auth');
