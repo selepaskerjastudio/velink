@@ -155,19 +155,36 @@ class ApplicationController extends Controller
                 $request->user()->id,
             );
 
-            $userResult = $databaseUserService->create(
-                $server,
-                $validated['db_engine'],
-                $validated['db_username'],
-                'localhost',
-                [$validated['db_name'] => ['ALL']],
-                $request->user()->id,
-            );
+            // Reuse an existing DB user instead of failing on the unique
+            // (server, engine, username, host) constraint — one user can back
+            // many databases. Add the new DB to its grants and keep its current
+            // password; otherwise create a fresh user.
+            $existingUser = $server->databaseUsers()
+                ->where('engine', $validated['db_engine'])
+                ->where('username', $validated['db_username'])
+                ->where('host', 'localhost')
+                ->first();
+
+            if ($existingUser !== null) {
+                $mergedGrants = array_merge($existingUser->grants ?? [], [$validated['db_name'] => ['ALL']]);
+                $databaseUserService->updateGrants($existingUser, $mergedGrants, $request->user()->id);
+                $dbPassword = $existingUser->password;
+            } else {
+                $userResult = $databaseUserService->create(
+                    $server,
+                    $validated['db_engine'],
+                    $validated['db_username'],
+                    'localhost',
+                    [$validated['db_name'] => ['ALL']],
+                    $request->user()->id,
+                );
+                $dbPassword = $userResult['plainPassword'];
+            }
 
             $dbCreds = [
                 'name' => $validated['db_name'],
                 'user' => $validated['db_username'],
-                'password' => $userResult['plainPassword'],
+                'password' => $dbPassword,
                 'host' => 'localhost',
             ];
 
