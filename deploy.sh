@@ -107,11 +107,30 @@ run "velink-queue"        systemctl restart velink-queue
 run "velink-reverb"       systemctl restart velink-reverb
 run "velink-agent-listen" systemctl restart velink-agent-listen
 
-if [ "$RESTART_GATEWAY" = true ]; then
-    step "Rebuilding and restarting gateway"
+# Build agent binaries for managed servers (cross-compiled for amd64 + arm64).
+# These are served at /install/bin/agent-{os}-{arch}-latest for the installer.
+step "Building agent binaries"
+if command -v go >/dev/null 2>&1; then
+    cd "$REPO_DIR/agent"
+    mkdir -p "$REPO_DIR/panel/storage/app/agent-bins"
+    run "Agent amd64" env GOOS=linux GOARCH=amd64 go build -o "$REPO_DIR/panel/storage/app/agent-bins/agent-linux-amd64-latest" ./cmd/agent
+    run "Agent arm64" env GOOS=linux GOARCH=arm64 go build -o "$REPO_DIR/panel/storage/app/agent-bins/agent-linux-arm64-latest" ./cmd/agent
+    cd "$REPO_DIR"
+else
+    echo -e "  ${YELLOW}Go not installed — skipping agent binary build.${RESET}"
+    echo -e "  ${YELLOW}Install Go or run: cd agent && GOOS=linux GOARCH=amd64 go build -o ../panel/storage/app/agent-bins/agent-linux-amd64-latest ./cmd/agent${RESET}"
+fi
+
+# Gateway is always rebuilt so the binary stays in sync with the code.
+step "Rebuilding and restarting gateway"
+if command -v go >/dev/null 2>&1; then
     cd "$REPO_DIR/gateway"
     run "Build gateway binary" go build -o /usr/local/bin/velink-gateway ./cmd/gateway
     run "velink-gateway"       systemctl restart velink-gateway
+    cd "$REPO_DIR"
+else
+    echo -e "  ${YELLOW}Go not installed — skipping gateway rebuild.${RESET}"
+    echo -e "  ${YELLOW}Install Go: sudo apt-get install -y golang-go${RESET}"
 fi
 
 DURATION=$(( SECONDS - START_TIME ))
