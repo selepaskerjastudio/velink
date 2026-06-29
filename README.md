@@ -111,6 +111,65 @@ Halaman aplikasi → **Backups** → atur jadwal (harian/mingguan/bulanan), rete
 
 ---
 
+## Update & Maintenance
+
+### Update panel + gateway
+
+Jalankan di **VM panel**:
+
+```bash
+cd /root/velink && bash deploy.sh
+```
+
+`deploy.sh` otomatis: `git pull` → `composer install` → `npm build` → `migrate` → rebuild gateway binary → rebuild agent binaries → restart semua service.
+
+> **Prasyarat**: Go harus terinstall di VM panel (`sudo apt-get install -y golang-go`). Tanpa Go, gateway dan agent binaries tidak akan di-rebuild (akan ada pesan warning).
+
+### Update agent di server terkelola
+
+Setiap kali panel di-update, agent binaries baru otomatis di-build dan tersedia di:
+```
+/install/bin/agent-linux-amd64-latest
+/install/bin/agent-linux-arm64-latest
+```
+
+**Untuk update agent di setiap VM terkelola**, SSH ke server tersebut lalu jalankan:
+
+```bash
+# Hentikan agent lama
+sudo systemctl stop velink-agent
+
+# Download binary baru dari panel (ganti domain panel Anda)
+sudo curl -fsSL -o /usr/local/bin/velink-agent \
+    https://panel.domainanda.com/install/bin/agent-linux-amd64-latest
+
+# Set permission + jalankan ulang
+sudo chmod +x /usr/local/bin/velink-agent
+sudo systemctl start velink-agent
+```
+
+> Untuk server ARM64 (mis. Raspberry Pi, Graviton), ganti `amd64` dengan `arm64`.
+
+**Verifikasi agent sudah ter-update:**
+
+```bash
+# Cek agent berjalan
+sudo systemctl status velink-agent
+
+# Cek panel menampilkan server sebagai "online"
+```
+
+### Update agent via installer (fresh install)
+
+Untuk server baru yang belum punya agent, gunakan perintah install dari halaman **Servers → Connect** di panel:
+
+```bash
+curl -fsSL https://panel.domainanda.com/install/agent.sh | sudo bash -s -- \
+    --token=TOKEN_DARI_PANEL --server-id=UUID_DARI_PANEL
+```
+
+---
+
 ## Struktur monorepo
 
 ```
