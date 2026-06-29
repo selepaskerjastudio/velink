@@ -226,6 +226,61 @@ class AppProvisionService
     }
 
     /**
+     * Change the app's domain: remove the old nginx vhost, render a new one
+     * for the new domain, recreate the sites-enabled symlink, and reload nginx.
+     *
+     * If the new domain is null (static site with no domain), only removes the
+     * old vhost. Also resets SSL state since the old cert is invalid.
+     *
+     * @return array<int, AgentJob>
+     */
+    public function changeDomain(Application $app, ?string $oldDomain, ?int $userId = null): array
+    {
+        $jobs = [];
+
+        // 1. Invalidate SSL — the old cert is for the old domain.
+        if ($app->ssl_enabled_at || $app->ssl_challenge) {
+            $app->forceFill(['ssl_enabled_at' => null, 'ssl_challenge' => null, 'ssl_dns_provider' => null])->save();
+        }
+
+        // 2. Remove old vhost file + symlink.
+        if ($oldDomain) {
+            $oldVhost = escapeshellarg(AppTemplates::vhostPath($oldDomain));
+            $oldEnabled = escapeshellarg(AppTemplates::vhostEnabledPath($oldDomain));
+
+            $jobs[] = $this->shell($app, "Remove old vhost for {$oldDomain}", "rm -f {$oldEnabled} {$oldVhost}", $userId);
+        }
+
+        // 3. Render new vhost (if domain is not null).
+        if ($app->domain) {
+            $vars = AppTemplates::vars($app);
+            $jobs[] = $this->renderConfig(
+                $app,
+                "Write nginx vhost for {$app->domain}",
+                AppTemplates::vhostPath((string) $app->domain),
+                AppTemplates::vhostTemplate($app->app_type),
+                $vars,
+                $userId,
+            );
+
+            // 4. Create symlink + reload.
+            $vhostPath = escapeshellarg(AppTemplates::vhostPath((string) $app->domain));
+            $enabledPath = escapeshellarg(AppTemplates::vhostEnabledPath((string) $app->domain));
+
+            $jobs[] = $this->shell($app, 'Enable site & reload nginx', <<<SH
+                ln -sf {$vhostPath} {$enabledPath}
+                nginx -t
+                systemctl reload nginx
+                SH, $userId);
+        } else {
+            // No domain — just reload nginx after removing the old vhost.
+            $jobs[] = $this->shell($app, 'Reload nginx', "nginx -t && systemctl reload nginx", $userId);
+        }
+
+        return $jobs;
+    }
+
+    /**
      * Type-specific placeholder document so a freshly created app serves
      * something before the first deploy. WordPress gets none (its core
      * download provides index.php).

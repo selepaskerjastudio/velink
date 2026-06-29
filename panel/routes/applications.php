@@ -13,6 +13,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('apps/{application}/php-version', [ApplicationController::class, 'updatePhpVersion'])->name('applications.php-version');
     Route::patch('apps/{application}/env', [ApplicationController::class, 'updateEnv'])->name('applications.env');
     Route::patch('apps/{application}/deploy-settings', [ApplicationController::class, 'updateDeploySettings'])->name('applications.deploy-settings');
+    Route::patch('apps/{application}/domain', [ApplicationController::class, 'updateDomain'])->name('applications.domain');
     Route::post('apps/{application}/deployments', [ApplicationController::class, 'storeDeployment'])->name('applications.deployments.store');
     Route::post('apps/{application}/ssl', [ApplicationController::class, 'enableSsl'])->name('applications.ssl');
     Route::post('apps/{application}/nginx-config', [ApplicationController::class, 'nginxConfig'])->name('applications.nginx-config');
