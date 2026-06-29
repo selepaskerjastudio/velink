@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -139,7 +140,8 @@ func (e *Executor) streamPipe(r io.Reader, stream, jobID string, emit Emit, wg *
 type writeFileParams struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
-	Mode    string `json:"mode"` // octal string e.g. "0644"
+	Mode    string `json:"mode"`  // octal string e.g. "0644"
+	Owner   string `json:"owner"` // optional unix user to own the file; empty keeps the agent's (root)
 }
 
 func (e *Executor) runWriteFile(jobID string, raw json.RawMessage, emit Emit) {
@@ -153,7 +155,7 @@ func (e *Executor) runWriteFile(jobID string, raw json.RawMessage, emit Emit) {
 		return
 	}
 
-	if err := writeFile(p.Path, []byte(p.Content), p.Mode); err != nil {
+	if err := writeFile(p.Path, []byte(p.Content), p.Mode, p.Owner); err != nil {
 		e.result(jobID, emit, 1, err.Error())
 		return
 	}
@@ -166,6 +168,7 @@ type renderParams struct {
 	Template string         `json:"template"`
 	Vars     map[string]any `json:"vars"`
 	Mode     string         `json:"mode"`
+	Owner    string         `json:"owner"` // optional unix user to own the file; empty keeps the agent's (root)
 }
 
 func (e *Executor) runRenderConfig(jobID string, raw json.RawMessage, emit Emit) {
@@ -190,7 +193,7 @@ func (e *Executor) runRenderConfig(jobID string, raw json.RawMessage, emit Emit)
 		return
 	}
 
-	if err := writeFile(p.Path, buf.Bytes(), p.Mode); err != nil {
+	if err := writeFile(p.Path, buf.Bytes(), p.Mode, p.Owner); err != nil {
 		e.result(jobID, emit, 1, err.Error())
 		return
 	}
@@ -200,7 +203,7 @@ func (e *Executor) runRenderConfig(jobID string, raw json.RawMessage, emit Emit)
 
 // --- helpers ---
 
-func writeFile(path string, data []byte, modeStr string) error {
+func writeFile(path string, data []byte, modeStr, owner string) error {
 	mode := os.FileMode(0o644)
 	if modeStr != "" {
 		m, err := strconv.ParseUint(modeStr, 8, 32)
@@ -212,7 +215,39 @@ func writeFile(path string, data []byte, modeStr string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, mode)
+	if err := os.WriteFile(path, data, mode); err != nil {
+		return err
+	}
+	// The agent runs as root, so files default to root:root. App-scoped writes
+	// (e.g. an application's .env) must be owned by the app's unix user or the
+	// php-fpm pool — running as that user — cannot read them. Owner is opt-in:
+	// system configs under /etc intentionally leave it empty to stay root-owned.
+	if owner != "" {
+		if err := chownToUser(path, owner); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// chownToUser changes path ownership to the named unix user and its primary group.
+func chownToUser(path, username string) error {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return fmt.Errorf("lookup user %q: %w", username, err)
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return fmt.Errorf("parse uid %q: %w", u.Uid, err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return fmt.Errorf("parse gid %q: %w", u.Gid, err)
+	}
+	if err := os.Chown(path, uid, gid); err != nil {
+		return fmt.Errorf("chown %s to %s: %w", path, username, err)
+	}
+	return nil
 }
 
 func (e *Executor) output(jobID string, emit Emit, stream, data string) {

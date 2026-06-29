@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/velink/agent/internal/protocol"
@@ -112,6 +115,42 @@ func TestWriteFile(t *testing.T) {
 	info, _ := os.Stat(path)
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestWriteFileOwner(t *testing.T) {
+	// Chown to the current user is permitted without privileges; this exercises
+	// the user.Lookup + os.Chown path without needing root in CI.
+	me, err := user.Current()
+	if err != nil {
+		t.Skipf("cannot resolve current user: %v", err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "owned.txt")
+	c := run(t, ActionWriteFile, map[string]any{"path": path, "content": "x", "mode": "0640", "owner": me.Username})
+	if got := c.exitCode(t); got != 0 {
+		t.Fatalf("exit code = %d, want 0", got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Skip("stat_t unavailable on this platform")
+	}
+	wantUID, _ := strconv.Atoi(me.Uid)
+	if int(st.Uid) != wantUID {
+		t.Fatalf("uid = %d, want %d", st.Uid, wantUID)
+	}
+}
+
+func TestWriteFileUnknownOwnerFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.txt")
+	c := run(t, ActionWriteFile, map[string]any{"path": path, "content": "x", "owner": "velink_no_such_user_xyz"})
+	if got := c.exitCode(t); got != 1 {
+		t.Fatalf("exit code = %d, want 1 (unknown owner should fail)", got)
 	}
 }
 

@@ -197,6 +197,7 @@ class ApplicationController extends Controller
                 'path' => "{$application->root_path}/.env",
                 'content' => $application->env_content,
                 'mode' => '0640',
+                'owner' => $application->linux_user,
             ], [
                 'application_id' => $application->id,
                 'user_id' => $request->user()->id,
@@ -556,6 +557,7 @@ class ApplicationController extends Controller
             'path' => "{$application->root_path}/.env",
             'content' => $validated['env_content'] ?? '',
             'mode' => '0640',
+            'owner' => $application->linux_user,
         ], [
             'application_id' => $application->id,
             'user_id' => $request->user()->id,
