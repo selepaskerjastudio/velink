@@ -13,6 +13,8 @@ use App\Services\DatabaseProvisionService;
 use App\Services\DatabaseUserProvisionService;
 use App\Services\DeploymentService;
 use App\Services\DeployScriptValidator;
+use App\Services\DnsService;
+use App\Services\Edge\EdgeProxySync;
 use App\Services\JobDispatcher;
 use App\Support\DatabaseNaming;
 use Illuminate\Http\RedirectResponse;
@@ -201,11 +203,19 @@ class ApplicationController extends Controller
 
         $provisionService->provisionNew($application, $request->user()->id, $dbCreds);
 
-        // Auto-create DNS A record if the user has a verified Cloudflare token.
-        // Non-blocking: if it fails the app still provisions normally.
-        $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
-        if ($cfToken && $application->domain && $server->public_ip) {
-            app(\App\Services\DnsService::class)->provisionDomain($application, $cfToken);
+        if ($server->uses_edge_proxy) {
+            // Edge-backed server: push a reverse-proxy route to Caddy. The user
+            // points the domain at the edge themselves, so skip auto-DNS.
+            $application->setRelation('server', $server);
+            app(EdgeProxySync::class)->onProvisioned($application);
+        } else {
+            // Native server: auto-create a Cloudflare A record to the target if
+            // the user has a verified token. Non-blocking — if it fails the app
+            // still provisions normally.
+            $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
+            if ($cfToken && $application->domain && $server->public_ip) {
+                app(DnsService::class)->provisionDomain($application, $cfToken);
+            }
         }
 
         // Write the seeded .env onto the server (after the web root exists).
@@ -309,7 +319,7 @@ class ApplicationController extends Controller
                 'ssl_provider' => $application->ssl_enabled_at !== null ? 'letsencrypt' : null,
                 'ssl_challenge' => $application->ssl_challenge,
             ],
-            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'public_ip' => $application->server->public_ip, 'status' => $application->server->status, 'os' => $application->server->os],
+            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'public_ip' => $application->server->public_ip, 'status' => $application->server->status, 'os' => $application->server->os, 'uses_edge_proxy' => $application->server->uses_edge_proxy],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
             'defaultDeployScript' => DeployTemplates::DEFAULT_SCRIPT,
             'gitCredentials' => auth()->user()->gitCredentials()
@@ -411,15 +421,20 @@ class ApplicationController extends Controller
         // Rebuild nginx vhost for the new domain (or remove it if null).
         $provisionService->changeDomain($application, $oldDomain, $request->user()->id);
 
-        // Sync Cloudflare DNS if the user has a token (non-blocking).
-        $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
-        if ($cfToken) {
-            $dnsService = app(\App\Services\DnsService::class);
-            if ($oldDomain) {
-                $dnsService->teardownDomain($application, $cfToken);
-            }
-            if ($newDomain && $application->server->public_ip) {
-                $dnsService->provisionDomain($application, $cfToken);
+        if ($application->server->uses_edge_proxy) {
+            // Edge-backed: re-point (or drop) the Caddy route. DNS is user-managed.
+            app(EdgeProxySync::class)->onDomainChanged($application);
+        } else {
+            // Native: sync Cloudflare DNS if the user has a token (non-blocking).
+            $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
+            if ($cfToken) {
+                $dnsService = app(DnsService::class);
+                if ($oldDomain) {
+                    $dnsService->teardownDomain($application, $cfToken);
+                }
+                if ($newDomain && $application->server->public_ip) {
+                    $dnsService->provisionDomain($application, $cfToken);
+                }
             }
         }
 
@@ -480,6 +495,10 @@ class ApplicationController extends Controller
 
     public function enableSsl(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse
     {
+        if ($application->server->uses_edge_proxy) {
+            return redirect()->back()->withErrors(['domain' => 'TLS is handled by the edge proxy for this server.']);
+        }
+
         if (! $application->domain) {
             return redirect()->back()->withErrors(['domain' => 'Application has no domain configured.']);
         }
@@ -655,10 +674,15 @@ class ApplicationController extends Controller
         $server = $application->server;
         $name = $application->name;
 
-        // Clean up any Cloudflare DNS records owned by this app (non-blocking).
-        $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
-        if ($cfToken) {
-            app(\App\Services\DnsService::class)->teardownDomain($application, $cfToken);
+        if ($server->uses_edge_proxy) {
+            // Edge-backed: remove the Caddy route. No Cloudflare DNS to tear down.
+            app(EdgeProxySync::class)->onDeleted($application);
+        } else {
+            // Clean up any Cloudflare DNS records owned by this app (non-blocking).
+            $cfToken = $request->user()->cloudflareTokens()->whereNotNull('verified_at')->latest('id')->first();
+            if ($cfToken) {
+                app(DnsService::class)->teardownDomain($application, $cfToken);
+            }
         }
 
         $provisionService->deprovision($application, $request->user()->id);

@@ -26,6 +26,7 @@ class Server extends Model
         'hostname',
         'public_ip',
         'private_ip',
+        'uses_edge_proxy',
         'os',
         'status',
         'agent_token',
@@ -46,6 +47,7 @@ class Server extends Model
             'last_seen_at' => 'datetime',
             'resources' => 'array',
             'db_components' => 'array',
+            'uses_edge_proxy' => 'boolean',
         ];
     }
 

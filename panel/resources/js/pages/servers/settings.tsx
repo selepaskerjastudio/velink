@@ -1,14 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import ServerLayout from '@/layouts/server-layout';
@@ -18,6 +11,7 @@ import { useState } from 'react';
 
 export default function ServerSettings({
     server,
+    edgeProxyAvailable = false,
 }: {
     server: {
         id: string;
@@ -27,9 +21,11 @@ export default function ServerSettings({
         private_ip: string | null;
         os: string | null;
         status: string;
+        uses_edge_proxy: boolean;
     };
+    edgeProxyAvailable?: boolean;
 }) {
-    const nameForm = useForm({ name: server.name });
+    const nameForm = useForm({ name: server.name, uses_edge_proxy: server.uses_edge_proxy });
     const restartForm = useForm({});
     const deleteForm = useForm({});
 
@@ -66,9 +62,7 @@ export default function ServerSettings({
                                 onChange={(e) => nameForm.setData('name', e.target.value)}
                                 placeholder="My Server"
                             />
-                            {nameForm.errors.name && (
-                                <p className="text-destructive text-sm">{nameForm.errors.name}</p>
-                            )}
+                            {nameForm.errors.name && <p className="text-destructive text-sm">{nameForm.errors.name}</p>}
                         </div>
                         <div className="text-muted-foreground grid gap-1 text-sm">
                             {server.hostname && (
@@ -96,14 +90,31 @@ export default function ServerSettings({
                                 </div>
                             )}
                         </div>
+
+                        {edgeProxyAvailable && (
+                            <div className="grid gap-2 border-t pt-4">
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="uses_edge_proxy"
+                                        checked={nameForm.data.uses_edge_proxy}
+                                        onCheckedChange={(checked) => nameForm.setData('uses_edge_proxy', checked === true)}
+                                    />
+                                    <Label htmlFor="uses_edge_proxy" className="font-normal">
+                                        Serve this server behind the edge proxy (Caddy)
+                                    </Label>
+                                </div>
+                                <p className="text-muted-foreground text-xs">
+                                    For targets with no public IP. The panel pushes routes to Caddy and TLS is terminated there — certbot on the
+                                    target is disabled. Point each app's domain at the edge's public IP.
+                                </p>
+                            </div>
+                        )}
                     </CardContent>
                     <CardFooter>
                         <Button
                             size="sm"
                             disabled={nameForm.processing || !nameForm.data.name.trim()}
-                            onClick={() =>
-                                nameForm.patch(route('servers.update', server.id))
-                            }
+                            onClick={() => nameForm.patch(route('servers.update', server.id))}
                         >
                             Save
                         </Button>
@@ -117,16 +128,9 @@ export default function ServerSettings({
                         <CardDescription>Perform administrative actions on this server.</CardDescription>
                     </CardHeader>
                     <CardFooter className="flex items-center gap-4">
-                        <Dialog
-                            open={restartOpen}
-                            onOpenChange={setRestartOpen}
-                        >
+                        <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
                             <DialogTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={serverOffline || restartForm.processing}
-                                >
+                                <Button variant="outline" size="sm" disabled={serverOffline || restartForm.processing}>
                                     Restart Server
                                 </Button>
                             </DialogTrigger>
@@ -134,8 +138,8 @@ export default function ServerSettings({
                                 <DialogHeader>
                                     <DialogTitle>Restart server</DialogTitle>
                                     <DialogDescription>
-                                        This will reboot <strong>{server.name}</strong>. All active connections will be
-                                        disconnected briefly while the server restarts.
+                                        This will reboot <strong>{server.name}</strong>. All active connections will be disconnected briefly while the
+                                        server restarts.
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
@@ -156,11 +160,7 @@ export default function ServerSettings({
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
-                        {serverOffline && (
-                            <p className="text-muted-foreground text-sm">
-                                Server must be online to send a restart command.
-                            </p>
-                        )}
+                        {serverOffline && <p className="text-muted-foreground text-sm">Server must be online to send a restart command.</p>}
                     </CardFooter>
                 </Card>
 
@@ -187,8 +187,8 @@ export default function ServerSettings({
                                 <DialogHeader>
                                     <DialogTitle>Delete server</DialogTitle>
                                     <DialogDescription>
-                                        This will permanently delete <strong>{server.name}</strong> and all its applications,
-                                        databases, services, and jobs. This action cannot be undone.
+                                        This will permanently delete <strong>{server.name}</strong> and all its applications, databases, services, and
+                                        jobs. This action cannot be undone.
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className="grid gap-2 py-2">

@@ -104,7 +104,7 @@ export default function ApplicationsShow({
     defaultDeployScript,
 }: {
     application: Application;
-    server: { id: string; name: string; public_ip?: string | null; status: string; os?: string | null };
+    server: { id: string; name: string; public_ip?: string | null; status: string; os?: string | null; uses_edge_proxy?: boolean };
     phpVersions: string[];
     jobs: AgentJob[];
     deployments: Deployment[];
@@ -415,10 +415,12 @@ export default function ApplicationsShow({
                                                 size="sm"
                                                 variant="outline"
                                                 disabled={sizeForm.processing}
-                                                onClick={() => sizeForm.post(route('applications.directory-size', application.id), { preserveScroll: true })}
+                                                onClick={() =>
+                                                    sizeForm.post(route('applications.directory-size', application.id), { preserveScroll: true })
+                                                }
                                             >
-                                {sizeForm.processing ? 'Measuring…' : 'Refresh'}
-                            </Button>
+                                                {sizeForm.processing ? 'Measuring…' : 'Refresh'}
+                                            </Button>
                                         </span>
                                     </div>
                                     {application.app_type !== 'static' && (
@@ -458,7 +460,8 @@ export default function ApplicationsShow({
                                 <CardHeader>
                                     <CardTitle>Domain</CardTitle>
                                     <CardDescription>
-                                        The domain serving this application. Changing it rewrites the nginx config and invalidates any existing SSL certificate.
+                                        The domain serving this application. Changing it rewrites the nginx config and invalidates any existing SSL
+                                        certificate.
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
@@ -470,7 +473,7 @@ export default function ApplicationsShow({
                                     />
                                     <InputError message={domainForm.errors.domain} />
                                     {application.ssl_enabled && (
-                                        <p className="text-yellow-600 text-xs">
+                                        <p className="text-xs text-yellow-600">
                                             ⚠ SSL is currently active — changing the domain will invalidate the certificate.
                                         </p>
                                     )}
@@ -521,7 +524,15 @@ export default function ApplicationsShow({
                                         domain to point to this server.
                                     </CardDescription>
                                 </CardHeader>
-                                {application.ssl_enabled ? (
+                                {server.uses_edge_proxy ? (
+                                    <CardContent>
+                                        <p className="text-muted-foreground text-sm">
+                                            TLS for this server is handled by the edge proxy (Caddy) — a certificate is issued automatically on first
+                                            request. Point <strong>{application.domain ?? 'the domain'}</strong> at the edge's public IP. Per-app
+                                            certbot is disabled here.
+                                        </p>
+                                    </CardContent>
+                                ) : application.ssl_enabled ? (
                                     <>
                                         <CardContent>
                                             <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -934,11 +945,7 @@ export default function ApplicationsShow({
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <Badge variant={statusVariant(deployment.status)}>{deployment.status}</Badge>
-                                                    <Link
-                                                        href={route('deployments.log', deployment.id)}
-                                                        prefetch
-                                                        className="inline-flex"
-                                                    >
+                                                    <Link href={route('deployments.log', deployment.id)} prefetch className="inline-flex">
                                                         <Button variant="ghost" size="icon" className="h-7 w-7" title="View full log">
                                                             <TerminalIcon className="h-4 w-4" />
                                                         </Button>

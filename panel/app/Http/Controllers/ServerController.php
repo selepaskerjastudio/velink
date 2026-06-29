@@ -7,6 +7,7 @@ use App\Models\Server;
 use App\Provisioning\ProvisioningCatalog;
 use App\Services\AuditLogger;
 use App\Services\JobDispatcher;
+use App\Services\SshKeyService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -124,30 +125,30 @@ class ServerController extends Controller
                 ->limit(120)
                 ->get(['cpu_percent', 'mem_total', 'mem_used', 'disk_total', 'disk_used', 'load1', 'recorded_at'])
                 ->map(fn ($m) => [
-                    'cpu'   => round($m->cpu_percent, 1),
-                    'ram'   => $m->mem_total > 0 ? round($m->mem_used / $m->mem_total * 100, 1) : 0,
-                    'disk'  => $m->disk_total > 0 ? round($m->disk_used / $m->disk_total * 100, 1) : 0,
+                    'cpu' => round($m->cpu_percent, 1),
+                    'ram' => $m->mem_total > 0 ? round($m->mem_used / $m->mem_total * 100, 1) : 0,
+                    'disk' => $m->disk_total > 0 ? round($m->disk_used / $m->disk_total * 100, 1) : 0,
                     'load1' => round($m->load1, 2),
-                    'ts'    => $m->recorded_at->format('H:i:s'),
+                    'ts' => $m->recorded_at->format('H:i:s'),
                 ]),
             'latestMetric' => $server->metrics()
                 ->latest('recorded_at')
                 ->first(['cpu_percent', 'mem_total', 'mem_used', 'disk_total', 'disk_used', 'load1', 'uptime_seconds', 'recorded_at']),
             'counts' => [
                 'applications' => $server->applications()->count(),
-                'databases'    => $server->databases()->count(),
-                'cron_jobs'    => $server->cronJobs()->count(),
-                'workers'      => $server->services()->where('type', 'supervisor')->count(),
+                'databases' => $server->databases()->count(),
+                'cron_jobs' => $server->cronJobs()->count(),
+                'workers' => $server->services()->where('type', 'supervisor')->count(),
             ],
         ]);
     }
 
     public function monitoring(Request $request, Server $server): Response
     {
-        $hours = match($request->query('range', '1h')) {
-            '6h'  => 6,
+        $hours = match ($request->query('range', '1h')) {
+            '6h' => 6,
             '24h' => 24,
-            '7d'  => 168,
+            '7d' => 168,
             default => 1,
         };
 
@@ -162,13 +163,13 @@ class ServerController extends Controller
                 ->orderBy('recorded_at')
                 ->get(['cpu_percent', 'mem_total', 'mem_used', 'disk_total', 'disk_used', 'load1', 'uptime_seconds', 'recorded_at'])
                 ->map(fn ($m) => [
-                    'cpu'     => round($m->cpu_percent, 1),
-                    'ram'     => $m->mem_total > 0 ? round($m->mem_used / $m->mem_total * 100, 1) : 0,
-                    'ram_gb'  => round($m->mem_used / 1024 / 1024 / 1024, 2),
-                    'disk'    => $m->disk_total > 0 ? round($m->disk_used / $m->disk_total * 100, 1) : 0,
+                    'cpu' => round($m->cpu_percent, 1),
+                    'ram' => $m->mem_total > 0 ? round($m->mem_used / $m->mem_total * 100, 1) : 0,
+                    'ram_gb' => round($m->mem_used / 1024 / 1024 / 1024, 2),
+                    'disk' => $m->disk_total > 0 ? round($m->disk_used / $m->disk_total * 100, 1) : 0,
                     'disk_gb' => round($m->disk_used / 1024 / 1024 / 1024, 2),
-                    'load1'   => round($m->load1, 2),
-                    'ts'      => $m->recorded_at->format('H:i'),
+                    'load1' => round($m->load1, 2),
+                    'ts' => $m->recorded_at->format('H:i'),
                 ]),
             'latestMetric' => $server->metrics()
                 ->latest('recorded_at')
@@ -180,9 +181,10 @@ class ServerController extends Controller
     {
         return Inertia::render('servers/settings', [
             'server' => [
-                ...$server->only(['name', 'hostname', 'public_ip', 'private_ip', 'os', 'status']),
+                ...$server->only(['name', 'hostname', 'public_ip', 'private_ip', 'os', 'status', 'uses_edge_proxy']),
                 'id' => $server->uuid,
             ],
+            'edgeProxyAvailable' => config('velink.edge_proxy.driver') !== 'none',
         ]);
     }
 
@@ -196,7 +198,7 @@ class ServerController extends Controller
         // it as a SystemUser and flip its shell to bash so it becomes an SSH
         // target (the RunCloud model: SSH in as the webapp user to manage files).
         if ($server->applications()->exists()) {
-            app(\App\Services\SshKeyService::class)->ensureWebappUser($server, $request->user()->id);
+            app(SshKeyService::class)->ensureWebappUser($server, $request->user()->id);
         }
 
         $deployedIds = $server->sshKeys()->pluck('ssh_keys.id')->all();
@@ -235,7 +237,7 @@ class ServerController extends Controller
             'deployed' => $deployed,
             'available' => $available,
             'systemUsers' => $systemUsers,
-            'adminUser' => \App\Services\SshKeyService::DEFAULT_ADMIN_USERNAME,
+            'adminUser' => SshKeyService::DEFAULT_ADMIN_USERNAME,
         ]);
     }
 
@@ -243,18 +245,27 @@ class ServerController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'uses_edge_proxy' => ['boolean'],
         ]);
 
-        $server->update($validated);
+        $attrs = ['name' => $validated['name']];
 
-        return redirect()->route('servers.settings', $server)->with('success', 'Server name updated.');
+        // Only the edge-proxy toggle is editable when the feature is configured;
+        // otherwise leave the stored value untouched (the toggle isn't shown).
+        if (config('velink.edge_proxy.driver') !== 'none') {
+            $attrs['uses_edge_proxy'] = $request->boolean('uses_edge_proxy');
+        }
+
+        $server->update($attrs);
+
+        return redirect()->route('servers.settings', $server)->with('success', 'Server settings updated.');
     }
 
     public function restart(Request $request, Server $server, JobDispatcher $dispatcher): RedirectResponse
     {
         $dispatcher->dispatch($server, 'shell', ['command' => 'sudo reboot'], [
             'user_id' => $request->user()->id,
-            'label'   => 'Restart server',
+            'label' => 'Restart server',
         ]);
 
         return redirect()->route('servers.settings', $server)->with('success', 'Restart command dispatched.');
