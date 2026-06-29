@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> See also [AGENTS.md](AGENTS.md) — the concise, tool-agnostic agent guide (commands + hard rules); `AGENT.md` is a symlink to it. Keep AGENTS.md and this file in sync when either changes.
+> See also [AGENTS.md](AGENTS.md) — the concise, tool-agnostic agent guide (commands + hard rules). Keep AGENTS.md and this file in sync when either changes.
 
 ## What this project is
 

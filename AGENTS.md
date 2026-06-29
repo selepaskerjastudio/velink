@@ -2,7 +2,7 @@
 
 Guide for AI coding agents working in this repo. Tool-agnostic, canonical agent doc. For full architecture detail see [CLAUDE.md](CLAUDE.md) and `docs/` (PRD.md, PLAN.md, TODO.md).
 
-> `AGENT.md` is a symlink to this file (singular-convention tools). `CLAUDE.md` is the detailed companion read by Claude Code. Keep this file and CLAUDE.md in sync when either changes.
+> `CLAUDE.md` is the detailed companion read by Claude Code. Keep this file and CLAUDE.md in sync when either changes.
 
 ## Project
 
