@@ -76,10 +76,16 @@ func (m *Manager) Open(sessionID string, params OpenParams, emit Emit) error {
 		user = "root"
 	}
 
-	// Build the command: su to the target user and start a login bash shell.
+	// Build the command: use runuser (no PAM password check, root-only) to
+	// switch to the target user and start a login bash shell.
+	// 'su -' would require a password for locked accounts (e.g. velink).
 	// TERM is set so programs know they're in a 256-color terminal.
-	shell := fmt.Sprintf("su - %s", user)
-	cmd := exec.Command("/bin/sh", "-c", shell)
+	var cmd *exec.Cmd
+	if user == "root" {
+		cmd = exec.Command("/bin/bash", "--login")
+	} else {
+		cmd = exec.Command("runuser", "-l", user, "--", "/bin/bash", "--login")
+	}
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
 		fmt.Sprintf("COLUMNS=%d", params.Cols),
