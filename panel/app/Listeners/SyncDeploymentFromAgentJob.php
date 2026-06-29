@@ -27,6 +27,18 @@ class SyncDeploymentFromAgentJob
             'status' => $this->status($job),
             'finished_at' => $job->isTerminal() ? ($job->finished_at ?? now()) : $deployment->finished_at,
         ])->save();
+
+        // A successful deploy recovers an app stuck in `failed` — e.g. an early
+        // deploy that ran before the stack was ready. The provisioning lifecycle
+        // in GatewayInboundProcessor is one-way (it only acts while the app is
+        // `provisioning`), so without this a since-fixed app would display
+        // `failed` forever.
+        if ($job->status === AgentJob::STATUS_SUCCEEDED) {
+            $application = $deployment->application;
+            if ($application !== null && $application->status === 'failed') {
+                $application->forceFill(['status' => 'active'])->save();
+            }
+        }
     }
 
     private function status(AgentJob $job): string

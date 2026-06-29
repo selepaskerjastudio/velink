@@ -78,6 +78,48 @@ test('a failed or timed-out job marks the deployment as failed', function () {
     expect($deployment->finished_at)->not->toBeNull();
 });
 
+test('a succeeded deploy recovers an app stuck in failed back to active', function () {
+    $server = Server::factory()->create();
+    $application = Application::factory()->create(['server_id' => $server->id, 'status' => 'failed']);
+    $job = AgentJob::factory()->for($server)->running()->create(['application_id' => $application->id]);
+
+    Deployment::create([
+        'application_id' => $application->id,
+        'branch' => 'main',
+        'mode' => 'inplace',
+        'status' => 'running',
+        'triggered_by' => 'manual',
+        'agent_job_uuid' => $job->uuid,
+    ]);
+
+    $job->markSucceeded(0);
+
+    app(SyncDeploymentFromAgentJob::class)->handle(new AgentJobUpdated($job->refresh()));
+
+    expect($application->refresh()->status)->toBe('active');
+});
+
+test('a succeeded deploy does not reopen the lifecycle of a provisioning app', function () {
+    $server = Server::factory()->create();
+    $application = Application::factory()->create(['server_id' => $server->id, 'status' => 'provisioning']);
+    $job = AgentJob::factory()->for($server)->running()->create(['application_id' => $application->id]);
+
+    Deployment::create([
+        'application_id' => $application->id,
+        'branch' => 'main',
+        'mode' => 'inplace',
+        'status' => 'running',
+        'triggered_by' => 'manual',
+        'agent_job_uuid' => $job->uuid,
+    ]);
+
+    $job->markSucceeded(0);
+
+    app(SyncDeploymentFromAgentJob::class)->handle(new AgentJobUpdated($job->refresh()));
+
+    expect($application->refresh()->status)->toBe('provisioning');
+});
+
 test('a job without a matching deployment is ignored', function () {
     $server = Server::factory()->create();
     $job = AgentJob::factory()->for($server)->running()->create();
