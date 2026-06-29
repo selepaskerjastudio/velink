@@ -18,6 +18,7 @@ installer/.env
 /gateway/bin/
 /agent/agent
 /agent/bin/
+/agent/dist/
 /agent/agent-linux-amd64-latest
 *.exe
 
