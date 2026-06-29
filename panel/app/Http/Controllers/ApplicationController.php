@@ -292,7 +292,7 @@ class ApplicationController extends Controller
                 'ssl_provider' => $application->ssl_enabled_at !== null ? 'letsencrypt' : null,
                 'ssl_challenge' => $application->ssl_challenge,
             ],
-            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'status' => $application->server->status, 'os' => $application->server->os],
+            'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'public_ip' => $application->server->public_ip, 'status' => $application->server->status, 'os' => $application->server->os],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
             'defaultDeployScript' => DeployTemplates::DEFAULT_SCRIPT,
             'gitCredentials' => auth()->user()->gitCredentials()

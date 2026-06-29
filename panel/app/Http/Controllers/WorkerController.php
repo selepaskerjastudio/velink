@@ -63,6 +63,7 @@ class WorkerController extends Controller
             'server' => [
                 'id' => $application->server->uuid,
                 'name' => $application->server->name,
+                'public_ip' => $application->server->public_ip,
                 'status' => $application->server->status,
             ],
             'workers' => $application->services()

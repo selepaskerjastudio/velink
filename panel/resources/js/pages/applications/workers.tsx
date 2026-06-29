@@ -6,7 +6,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import echo from '@/echo';
-import AppLayout from '@/layouts/app-layout';
+import ServerLayout from '@/layouts/server-layout';
 import { type AgentJob, type AgentJobStatus, type BreadcrumbItem, type WorkerSummary } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
 import { ChevronDownIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
@@ -150,7 +150,7 @@ export default function ApplicationsWorkers({
     jobs,
 }: {
     application: { id: string; name: string; root_path: string };
-    server: { id: string; name: string; status: string };
+    server: { id: string; name: string; public_ip?: string | null; status: string };
     workers: WorkerSummary[];
     jobs: AgentJob[];
 }) {
@@ -206,7 +206,10 @@ export default function ApplicationsWorkers({
     ];
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <ServerLayout
+            breadcrumbs={breadcrumbs}
+            server={{ id: server.id, name: server.name, public_ip: server.public_ip ?? null, status: server.status }}
+        >
             <Head title={`${application.name} — Workers`} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
@@ -345,6 +348,6 @@ export default function ApplicationsWorkers({
                     </Card>
                 )}
             </div>
-        </AppLayout>
+        </ServerLayout>
     );
 }

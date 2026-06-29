@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import echo from '@/echo';
-import AppLayout from '@/layouts/app-layout';
+import ServerLayout from '@/layouts/server-layout';
 import { cn } from '@/lib/utils';
 import {
     type AgentJob,
@@ -104,7 +104,7 @@ export default function ApplicationsShow({
     defaultDeployScript,
 }: {
     application: Application;
-    server: { id: string; name: string; status: string; os?: string | null };
+    server: { id: string; name: string; public_ip?: string | null; status: string; os?: string | null };
     phpVersions: string[];
     jobs: AgentJob[];
     deployments: Deployment[];
@@ -309,7 +309,10 @@ export default function ApplicationsShow({
     ];
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <ServerLayout
+            breadcrumbs={breadcrumbs}
+            server={{ id: server.id, name: server.name, public_ip: server.public_ip ?? null, status: server.status }}
+        >
             <Head title={application.name} />
 
             <div className="flex h-full flex-1 flex-col gap-4 rounded-xl p-4">
@@ -1008,6 +1011,6 @@ export default function ApplicationsShow({
                     </div>
                 </div>
             </div>
-        </AppLayout>
+        </ServerLayout>
     );
 }
