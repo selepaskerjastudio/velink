@@ -295,12 +295,18 @@ class ServerController extends Controller
     private function installCommand(Server $server, string $token): string
     {
         $panelUrl = rtrim(config('app.url'), '/');
+        $gatewayUrl = rtrim((string) config('services.gateway.public_url'), '/');
 
+        // Pass --panel and --gateway from the panel's own configuration so the
+        // agent dials whatever domain this install is actually served on; the
+        // installer must never assume a hardcoded domain.
         return sprintf(
-            'curl -fsSL %s/install/agent.sh | sudo bash -s -- --token=%s --server-id=%s',
+            'curl -fsSL %s/install/agent.sh | sudo bash -s -- --token=%s --server-id=%s --panel=%s --gateway=%s',
             $panelUrl,
             $token,
             $server->uuid,
+            $panelUrl,
+            $gatewayUrl,
         );
     }
 }
