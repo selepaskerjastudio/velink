@@ -11,7 +11,7 @@
 > rawan salah, sebaiknya pindah ke Opus (`/model` → Opus).
 >
 > - 🟢 **Sonnet cukup:** mayoritas Fase 0 (scaffold, auth, migrasi, CRUD, UI),
->   Fase 2 & Fase 4 yang banyak CRUD/template.
+>   Fase 2 & 4 yang banyak CRUD/template.
 > - 🔴 **Pindah ke Opus:** Skeleton Gateway Go (akhir Fase 0), **seluruh Fase 1**
 >   (transport agent, eksekusi privileged, provisioning idempotent), mesin deploy
 >   Fase 3 (zero-downtime + rollback), dan web terminal Fase 5.
@@ -49,7 +49,7 @@
 - [x] `/installer`: script `curl | bash` (`agent.sh`) untuk pasang agent + daftarkan ke panel.
 - [x] **Provisioning (Job idempotent, agent yang install)** — katalog `ProvisioningCatalog`
       + `ProvisionService` (base dulu, dispatch sebagai job `shell`):
-  - [x] nginx + certbot.
+  - [x] nginx + certbot (+ `certbot-dns-cloudflare` untuk DNS-01 SSL).
   - [x] php-fpm **7.4, 8.1, 8.2, 8.3, 8.4** via PPA `ondrej/php` + composer + node.
   - [x] supervisord.
   - [x] MySQL/MariaDB.
@@ -66,8 +66,11 @@
 - [x] Pilih versi PHP per app (7.4–8.4) saat buat app.
 - [x] **Ganti versi PHP:** regenerate fpm pool + upstream nginx → reload (downtime minimal).
 - [x] Editor `.env` aplikasi (encrypted).
-- [ ] SSL Let's Encrypt via certbot (opsional).
-- [ ] Verifikasi: situs hidup di PHP 8.3, ganti ke 8.4, dan app legacy PHP 7.4.
+- [x] SSL Let's Encrypt via certbot — **HTTP-01 dan DNS-01 (Cloudflare)**.
+      *(HTTP-01: `certbot --nginx`. DNS-01: `certbot certonly --dns-cloudflare` —
+      menulis `/root/.cloudflare.ini` temporer, hapus setelah selesai. PR #15.)*
+- [x] Verifikasi: situs hidup di PHP 8.3, ganti ke 8.4, dan app legacy PHP 7.4.
+      *(Diverifikasi di server produksi.)*
 
 ## Fase 3 — Deploy Git (GitHub & GitLab) 🟢 Sonnet (mesin deploy ZDT 🔴 Opus)
 
@@ -84,9 +87,12 @@
 - [x] Pilihan `deploy_mode` per aplikasi + editor deploy script di dashboard
       (Select `deploy_mode` saat ini hanya mengizinkan `inplace`; opsi
       zero-downtime tampil disabled "coming soon").
-- [ ] Endpoint webhook GitHub/GitLab → auto-deploy on push ke branch target.
+- [x] Endpoint webhook GitHub/GitLab → auto-deploy on push ke branch target.
+      *(PR #18 — `WebhookController` dengan HMAC signature verification,
+      concurrency guard, throttle middleware, dan branch matching.)*
 - [x] Halaman riwayat deployment + log live (via Reverb, `agent_job_uuid` ↔
       `AgentJobUpdated`); tombol rollback masih menunggu mode ZDT.
+      *(PR #6 — Deployment Log Viewer dengan ANSI color + realtime via Reverb.)*
 
 ## Fase 4 — Service / Worker / Cron 🟢 Sonnet
 
@@ -105,10 +111,15 @@
 
 ## Fase 5 — Monitoring + Web Terminal (lanjutan) 🟢 Sonnet (web terminal 🔴 Opus)
 
-- [ ] Agent: kumpulkan metrics (`gopsutil`: CPU/RAM/disk/load/net + status service).
-- [ ] Kirim metrics periodik → simpan time-series (Postgres/Timescale atau rolling Redis).
-- [ ] Dashboard: chart resource per server + multi-server overview.
-- [ ] 🔴 **Opus** — Web terminal: agent buka PTY (`creack/pty`) ↔ Gateway ↔ xterm.js (multiplex channel).
+- [x] Agent: kumpulkan metrics (`gopsutil`: CPU/RAM/disk/load/net + status service).
+      *(Agent `metrics/collector.go` — Snapshot dikirim setiap 30 detik.)*
+- [x] Kirim metrics periodik → simpan time-series (Postgres/Timescale atau rolling Redis).
+      *(PostgreSQL, retention 7 hari, `server_metrics` table.)*
+- [x] Dashboard: chart resource per server + multi-server overview.
+      *(Monitoring page dengan LineChart CPU/RAM/Load/Disk, donut gauges, time range selector.)*
+- [x] 🔴 **Opus** — Web terminal: agent buka PTY (`creack/pty`) ↔ Gateway ↔ xterm.js (multiplex channel).
+      *(PR #19 — Direct gateway WebSocket. Browser ↔ gateway `/terminal/connect` ↔ agent PTY.
+      User-selectable shell user (root/velink/custom). `runuser` untuk switch user tanpa password.)*
 - [ ] Audit khusus sesi terminal.
 
 ## Fase 6 — Parity RunCloud (UI/UX + Monitoring) 🟢 Sonnet
@@ -155,7 +166,7 @@
 - [x] Services: per-service CPU% dan Memory usage.
     *(2026-06-23 — `handleMetrics` roll-up dari field `services[]` ke tabel `services`; agent `metrics/services.go` koleksi via cgroup + VmRSS.)*
 - [x] App detail: SSL/TLS UI (trigger certbot yang sudah ada di provisioning).
-    *(`applications/show.tsx` SSL card → `applications.ssl`.)*
+    *(`applications/show.tsx` SSL card → `applications.ssl`. HTTP-01 + DNS-01 (Cloudflare) PR #15.)*
 - [x] App detail: NGINX Config editor.
     *(2026-06-23 — `ApplicationController::nginxConfig` + test `NginxConfigControllerTest`, `applications/show.tsx` section "NGINX Config".)*
 
@@ -181,8 +192,77 @@
       dengan `--server-id=<uuid>` baru dari panel agar `X-Server-Id`/`server_id`
       cocok dengan validasi UUID di gateway & panel.
 
-- [ ] Audit log untuk semua aksi (siapa, server, perintah).
+- [x] Audit log untuk semua aksi (siapa, server, perintah).
+      *(`AuditLogger::log()` dipanggil di setiap controller mutating action —
+      create/delete/deploy/SSL/firewall/backup/notification/dns/terminal.)*
 - [ ] Allowlist/Job bertemplate — hindari shell arbitrer dari UI.
 - [ ] mTLS/token rotation untuk agent (opsional, tingkatkan keamanan).
-- [ ] Dokumentasi instalasi panel + onboarding server.
+- [x] Dokumentasi instalasi panel + onboarding server.
+      *(`README.md` lengkap: setup panel, gateway, agent installer, deployment, development.)*
 - [ ] Uji end-to-end sesuai bagian Verifikasi di `PLAN.md`.
+
+---
+
+## Fitur Tambahan (di luar roadmap awal)
+
+> Fitur-fitur berikut ditambahkan di luar Fase 0–6 dan sudah selesai.
+
+- [x] **SSH Key Management (2026-06-24)**
+      Global per-user SSH keys, deploy ke managed server via SystemUser.
+      *(PR #8 — `SshKey` model, fingerprint (pure PHP), `SshKeyService`,
+      deploy/revoke per SystemUser. `settings/ssh-keys.tsx` + `servers/ssh-keys.tsx`.)*
+
+- [x] **System User Management (2026-06-24)**
+      OS user CRUD per server: add/delete, sudo toggle, shell selection.
+      SSH keys dapat dideploy ke user mana saja.
+      *(PR #9 — `SystemUser` model, `SystemUserProvisionService`, `SystemUserController`.
+      SSH key feature di-refactor agar user-aware.)*
+
+- [x] **Velink webapp user SSH access — RunCloud model (2026-06-25)**
+      User `velink` jadi SSH-accessible (shell bash, bukan nologin).
+      `ensureWebappUser()` auto-register + `chsh` saat server punya apps.
+      *(PR #11 + #12 — `AppProvisionService` shell fix + ownership fix.)*
+
+- [x] **Security: Firewall (UFW) + Fail2Ban (2026-06-25)**
+      UFW: port rules, default SSH/HTTP/HTTPS, DB source of truth sync.
+      Fail2Ban: install via provisioning, manual ban/unban via `fail2ban-client`.
+      *(PR #13 — `FirewallRule` model, `FirewallService`, `Fail2BanService`,
+      `SecurityController`, `servers/security.tsx`.)*
+
+- [x] **Deployment Log Viewer with ANSI Color + Realtime (2026-06-25)**
+      Dedicated full-page log viewer with terminal-style ANSI rendering,
+      realtime streaming via Reverb, download, prev/next navigation.
+      *(PR #6 — `DeploymentLogController`, `AnsiStripper`, `deployments/show.tsx`.)*
+
+- [x] **Cloudflare DNS Management + DNS-01 SSL (2026-06-26)**
+      Connect Cloudflare account, auto-create A records on app creation,
+      DNS-01 SSL challenge via certbot-dns-cloudflare (no HTTP needed).
+      *(PR #15 — `CloudflareToken` model, `CloudflareService` (panel-side HTTP),
+      `DnsService`, `DnsRecord` model, `DnsRecordController`, `apps/dns.tsx`.)*
+
+- [x] **Notification System (2026-06-26)**
+      Server alert notifications via Email + Slack + Discord + Telegram.
+      Events fire on threshold trigger/resolve, queued listener delivers.
+      *(PR #16 — `NotificationChannel` model, `ServerAlertNotification`,
+      `SendAlertNotifications` listener, `DiscordWebhookService`, `TelegramService`.)*
+
+- [x] **Backup & Restore (2026-06-26)**
+      Per-app backup: database dump + app files, local + S3 storage,
+      optional schedule (off/daily/weekly/monthly), retention auto-prune.
+      *(PR #17 — `Backup` model, `BackupSetting` model, `BackupService`,
+      `BackupController`, `apps/backups.tsx`.)*
+
+- [x] **Webhook Auto-Deploy Hardening (2026-06-29)**
+      Concurrency guard (reject overlapping deploys), throttle middleware,
+      webhook_secret hidden from Inertia, improved test coverage.
+      *(PR #18 — `DeploymentService` guard, `WebhookController` skip response.)*
+
+- [x] **Web Terminal (2026-06-29)**
+      Direct gateway WebSocket + PTY via creack/pty. User-selectable shell.
+      Browser ↔ gateway `/terminal/connect` ↔ agent PTY in real-time.
+      *(PR #19 — `terminal` package (agent), `relay` package (gateway),
+      `TerminalController` (panel), xterm.js frontend.)*
+
+- [x] **Security Advisories Resolved (2026-06-26)**
+      4 Dependabot alerts fixed: guzzlehttp/guzzle, guzzlehttp/psr7, shell-quote.
+      *(PR #14 — 0 vulnerabilities remaining.)*
