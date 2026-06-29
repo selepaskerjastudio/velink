@@ -169,6 +169,13 @@ REVERB_SCHEME=https
 REVERB_SERVER_HOST=0.0.0.0
 REVERB_SERVER_PORT=8080
 
+# Di-bake ke bundle JS saat `npm run build` — WAJIB ada, kalau kosong browser
+# lempar "You must pass your app key" dan halaman blank.
+VITE_REVERB_APP_KEY="${REVERB_APP_KEY}"
+VITE_REVERB_HOST="${REVERB_HOST}"
+VITE_REVERB_PORT="${REVERB_PORT}"
+VITE_REVERB_SCHEME="${REVERB_SCHEME}"
+
 # Gateway — agent konek ke wss://domain/agent/connect (nginx → 127.0.0.1:8081)
 GATEWAY_SECRET=rahasia_panjang_acak_64char   # harus sama dengan GATEWAY_PANEL_SECRET di gateway/.env
 GATEWAY_PUBLIC_URL=wss://panel.example.com

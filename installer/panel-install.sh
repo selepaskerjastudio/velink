@@ -261,6 +261,12 @@ set_env REVERB_PORT           "443" .env
 set_env REVERB_SCHEME         "https" .env
 set_env REVERB_SERVER_HOST    "0.0.0.0" .env
 set_env REVERB_SERVER_PORT    "8080" .env
+# Vite bakes these into the JS bundle at build time; without them the browser
+# Echo/Pusher client throws "You must pass your app key" and the panel is blank.
+set_env VITE_REVERB_APP_KEY   "${REVERB_APP_KEY}" .env
+set_env VITE_REVERB_HOST      "${DOMAIN}" .env
+set_env VITE_REVERB_PORT      "443" .env
+set_env VITE_REVERB_SCHEME    "https" .env
 # Gateway: agents reach it at wss://domain/agent/connect (nginx → 127.0.0.1:8081).
 set_env GATEWAY_SECRET        "${GATEWAY_SECRET}" .env
 set_env GATEWAY_PUBLIC_URL    "wss://${DOMAIN}" .env
