@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Server;
 use App\Services\AuditLogger;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -14,16 +15,18 @@ class TerminalController extends Controller
 {
     /**
      * Render the terminal page with a one-time session token.
+     * Returns JSON when the request is AJAX (for reconnect without page reload).
      */
-    public function show(Request $request, Server $server): Response
+    public function show(Request $request, Server $server): Response|JsonResponse
     {
-        // Generate a one-time terminal session token (60s TTL).
-        $token = Str::uuid()->toString();
-        Cache::put("terminal:session:{$token}", [
-            'server_uuid' => $server->uuid,
-            'server_id' => $server->id,
-            'user_id' => $request->user()->id,
-        ], 60);
+        $token = $this->generateToken($request, $server);
+
+        // AJAX request — return just the token (for reconnect without page reload).
+        if ($request->wantsJson()) {
+            return response()->json([
+                'terminalToken' => $token,
+            ]);
+        }
 
         // Get available system users for the terminal user picker.
         $systemUsers = $server->systemUsers()
@@ -77,6 +80,21 @@ class TerminalController extends Controller
             'valid' => true,
             'server_id' => $server?->uuid,
         ]);
+    }
+
+    /**
+     * Generate a one-time terminal session token.
+     */
+    private function generateToken(Request $request, Server $server): string
+    {
+        $token = Str::uuid()->toString();
+        Cache::put("terminal:session:{$token}", [
+            'server_uuid' => $server->uuid,
+            'server_id' => $server->id,
+            'user_id' => $request->user()->id,
+        ], 60);
+
+        return $token;
     }
 
     /**

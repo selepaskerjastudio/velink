@@ -30,12 +30,36 @@ export default function ServerTerminal({ server, terminalToken, systemUsers, gat
     const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
 
     const connect = () => {
+        // Clean up any existing terminal + WebSocket before reconnecting.
         if (wsRef.current) {
             wsRef.current.close();
+            wsRef.current = null;
+        }
+        if (termRef.current) {
+            termRef.current.dispose();
+            termRef.current = null;
         }
 
         setConnectionState('connecting');
 
+        // Fetch a fresh session token (the old one was single-use).
+        fetch(route('servers.terminal', server.id), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (!data.terminalToken) {
+                    throw new Error('No token received');
+                }
+                openTerminal(data.terminalToken);
+            })
+            .catch(() => {
+                // Fallback: use the original token (may fail if expired).
+                openTerminal(terminalToken);
+            });
+    };
+
+    const openTerminal = (token: string) => {
         // Initialize xterm.js
         const term = new Terminal({
             cursorBlink: true,
@@ -50,7 +74,10 @@ export default function ServerTerminal({ server, terminalToken, systemUsers, gat
 
         const fit = new FitAddon();
         term.loadAddon(fit);
-        term.open(containerRef.current!);
+        if (containerRef.current) {
+            containerRef.current.innerHTML = '';
+            term.open(containerRef.current);
+        }
         fit.fit();
 
         termRef.current = term;
@@ -58,8 +85,8 @@ export default function ServerTerminal({ server, terminalToken, systemUsers, gat
 
         term.writeln('\x1b[33mConnecting to terminal...\x1b[0m');
 
-        // Open WebSocket to the gateway.
-        const url = `${gatewayUrl}?server=${server.id}&token=${terminalToken}&user=${encodeURIComponent(selectedUser)}&cols=${term.cols}&rows=${term.rows}`;
+        // Open WebSocket to the gateway with the fresh token.
+        const url = `${gatewayUrl}?server=${server.id}&token=${token}&user=${encodeURIComponent(selectedUser)}&cols=${term.cols}&rows=${term.rows}`;
         const ws = new WebSocket(url);
         wsRef.current = ws;
 
