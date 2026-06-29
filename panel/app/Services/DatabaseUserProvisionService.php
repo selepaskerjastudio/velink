@@ -240,6 +240,7 @@ class DatabaseUserProvisionService
             $lines[] = <<<SH
                 sudo -u postgres psql -c "GRANT {$privilegeList} ON DATABASE \\"{$database}\\" TO \\"{$username}\\";"
                 SH;
+            $lines[] = $this->postgresSchemaGrant($database, $username, $privileges);
         }
 
         return implode("\n", $lines);
@@ -264,9 +265,31 @@ class DatabaseUserProvisionService
             $lines[] = <<<SH
                 sudo -u postgres psql -c "GRANT {$privilegeList} ON DATABASE \\"{$database}\\" TO \\"{$username}\\";"
                 SH;
+            $lines[] = $this->postgresSchemaGrant($database, $username, $privileges);
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * PG15+ removed the implicit CREATE on the `public` schema: privileges
+     * granted ON DATABASE let a role connect and create *schemas*, but not
+     * tables in `public`, so Laravel migrations fail with "permission denied
+     * for schema public". Grant schema-level USAGE (always) and CREATE (when
+     * the role has ALL/CREATE) so app users can migrate. `public` is
+     * per-database, so this must connect to the target DB with `-d`.
+     *
+     * @param  array<int, string>  $privileges
+     */
+    private function postgresSchemaGrant(string $database, string $username, array $privileges): string
+    {
+        $schemaPrivs = in_array('ALL', $privileges, true) || in_array('CREATE', $privileges, true)
+            ? 'USAGE, CREATE'
+            : 'USAGE';
+
+        return <<<SH
+            sudo -u postgres psql -d "{$database}" -c "GRANT {$schemaPrivs} ON SCHEMA public TO \\"{$username}\\";"
+            SH;
     }
 
     /**
