@@ -10,7 +10,7 @@ import (
 )
 
 // Version is the agent build version, reported to the panel on connect.
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 // Config holds runtime settings.
 type Config struct {
