@@ -303,6 +303,52 @@ systemctl enable --now velink-queue velink-reverb velink-agent-listen velink-gat
 
 ---
 
+## Varian: di belakang reverse proxy (Caddy / TLS edge terpisah)
+
+Kalau TLS di-terminate di **mesin edge terpisah** (mis. Caddy di IP publik) dan VM Panel cuma punya IP internal, edge meneruskan semua ke nginx VM Panel di port 80 — nginx tetap yang split `/app/` & `/agent/connect`.
+
+```
+Browser ─https─▶ Caddy (publik :443) ─http─▶ nginx VM Panel :80 ─▶ php-fpm / Reverb 8080 / Gateway 8081
+```
+
+**Caddy edge** (`/etc/caddy/Caddyfile`):
+
+```caddy
+{
+    email you@example.com
+}
+
+panel.example.com {
+    encode zstd gzip
+    request_body { max_size 100MB }
+    reverse_proxy 192.168.230.67:80 {   # IP internal VM Panel
+        header_up Host {host}
+    }
+}
+```
+
+**VM Panel** — beda dari install standar:
+
+1. nginx `listen 80;` saja, **tanpa certbot** (TLS sudah di edge).
+2. Di blok `location ~ \.php$`, tambah `fastcgi_param HTTPS on;` supaya PHP tahu request asalnya https.
+3. (opsional log) `set_real_ip_from <subnet-edge>;` + `real_ip_header X-Forwarded-For;` untuk IP klien asli.
+4. `panel/.env`: `APP_URL`, `REVERB_HOST` = domain publik; `REVERB_PORT=443`; `REVERB_SCHEME=https`. `gateway/.env` `GATEWAY_PANEL_URL=http://127.0.0.1:80` tetap (gateway & nginx satu mesin).
+5. Firewall: VM Panel `:80` hanya menerima dari IP edge — jangan diekspos ke publik.
+
+### Trust proxy (opsional)
+
+> **Opsional.** Hanya perlu kalau muncul gejala: redirect loop `http`↔`https`, login/cookie gagal ter-set, atau link/asset ter-generate `http://` (mixed-content). Kalau panel jalan normal, **lewati saja**.
+
+Kalau perlu, beri tahu Laravel agar percaya header `X-Forwarded-*` dari edge — `bootstrap/app.php`:
+
+```php
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->trustProxies(at: '192.168.230.0/24');   // subnet / IP edge
+})
+```
+
+---
+
 ## Akun pertama
 
 Buka `https://panel.example.com/register` untuk membuat akun admin.
