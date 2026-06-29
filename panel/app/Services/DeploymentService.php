@@ -49,10 +49,16 @@ class DeploymentService
 
         $script = trim((string) ($app->deploy_script ?: DeployTemplates::DEFAULT_SCRIPT));
 
+        // The deploy script must run under the PHP version chosen for this app,
+        // not the server's default `php`. Expose it as $PHP_BIN (e.g. php8.2);
+        // the default script and any custom script use it for composer/artisan.
+        $phpBin = $app->usesPhp() ? 'php'.$app->php_version : 'php';
+
         $inner = "set -e\n"
             .'cd '.escapeshellarg($app->root_path)."\n"
             .'export REPO_URL='.escapeshellarg($this->repoUrl($app))."\n"
             .'export BRANCH='.escapeshellarg((string) $app->branch)."\n"
+            .'export PHP_BIN='.escapeshellarg($phpBin)."\n"
             .$script."\n";
 
         $command = sprintf('sudo -u %s -H bash -c %s', escapeshellarg($app->linux_user), escapeshellarg($inner));
