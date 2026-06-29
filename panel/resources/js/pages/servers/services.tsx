@@ -186,7 +186,7 @@ function ServiceRow({ service }: { service: SystemdService }) {
                 </div>
             </td>
             <td className="px-4 py-3 text-sm text-muted-foreground">
-                {service.cpu_percent != null ? `${service.cpu_percent.toFixed(4)}%` : '—'}
+                {service.cpu_percent != null ? `${Number(service.cpu_percent).toFixed(2)}%` : '—'}
             </td>
             <td className="px-4 py-3 text-sm text-muted-foreground">
                 {service.memory_usage != null ? formatMemory(service.memory_usage) : '—'}
