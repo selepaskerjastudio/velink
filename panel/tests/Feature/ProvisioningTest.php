@@ -24,6 +24,21 @@ test('php steps include the PPA and one install per version', function () {
     }
 });
 
+test('php install steps ship the default extension set per version', function () {
+    $steps = app(ProvisioningCatalog::class)->steps('php', ['php_versions' => ['8.1', '8.3']]);
+
+    // sqlite3 provides both ext-sqlite3 and ext-pdo_sqlite, required by common
+    // Laravel tooling (PHPUnit in-memory db, Sushi, Filament log viewer, etc.).
+    $expected = ['fpm', 'cli', 'common', 'mysql', 'pgsql', 'mbstring', 'xml', 'curl', 'zip', 'gd', 'bcmath', 'intl', 'sqlite3'];
+
+    foreach ([$steps[1], $steps[2]] as $installStep) {
+        $command = $installStep['params']['command'];
+        foreach ($expected as $ext) {
+            expect($command)->toContain($ext);
+        }
+    }
+});
+
 test('unsupported php version throws', function () {
     app(ProvisioningCatalog::class)->steps('php', ['php_versions' => ['5.6']]);
 })->throws(InvalidArgumentException::class);

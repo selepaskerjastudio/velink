@@ -17,7 +17,10 @@ class CronTemplates
 {
     public const FILE_PATH = '/etc/cron.d/velink';
 
-    public const SCHEDULE_REGEX = '/^(\*|[\d,\-\/]+)(\s+(\*|[\d,\-\/]+)){4}$/';
+    // Each field is either a bare `*`, a `*/N` step, or a numeric range/list
+    // (`5`, `1-5`, `1,2,3`, `1-5/2`). Bare `*` plus `/` without digits (e.g.
+    // `*/`, `**/5`) is rejected; cron itself would refuse those at runtime.
+    public const SCHEDULE_REGEX = '/^(\*(\/\d+)?|[\d,\/\-]+)(\s+(\*(\/\d+)?|[\d,\/\-]+)){4}$/';
 
     public const USER_REGEX = '/^[a-z_][a-z0-9_-]*$/';
 

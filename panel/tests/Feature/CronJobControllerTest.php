@@ -117,10 +117,36 @@ test('creating a cron job rejects invalid schedule strings', function () {
     $response = $this->post(route('cron.store', $server), [
         'user' => 'root',
         'command' => 'php artisan schedule:run',
-        'schedule' => '* * *',
+        'schedule' => '* * * *',
     ]);
 
     $response->assertSessionHasErrors('schedule');
+});
+
+test('creating a cron job accepts step expressions like */5', function () {
+    mockCronGatewayPublish();
+
+    $this->actingAs(User::factory()->create());
+    $server = Server::factory()->online()->create();
+
+    foreach (['*/5 * * * *', '*/15 * * * *', '0 */2 * * *', '0 0 1 */3 *', '1-10/2 * * * *'] as $schedule) {
+        $response = $this->post(route('cron.store', $server), [
+            'user' => 'root',
+            'command' => 'php artisan schedule:run',
+            'schedule' => $schedule,
+        ]);
+
+        $response->assertSessionHasNoErrors('schedule');
+    }
+
+    // Sanity check: malformed step expressions are still rejected.
+    foreach (['**/5 * * * *', '*/ * * * *'] as $schedule) {
+        $this->post(route('cron.store', $server), [
+            'user' => 'root',
+            'command' => 'php artisan schedule:run',
+            'schedule' => $schedule,
+        ])->assertSessionHasErrors('schedule');
+    }
 });
 
 test('creating a cron job rejects invalid user names', function () {

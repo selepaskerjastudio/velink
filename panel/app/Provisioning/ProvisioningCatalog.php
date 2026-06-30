@@ -169,7 +169,7 @@ class ProvisioningCatalog
             }
             $pkgs = implode(' ', array_map(
                 fn (string $ext) => "php{$v}-{$ext}",
-                ['fpm', 'cli', 'common', 'mysql', 'pgsql', 'mbstring', 'xml', 'curl', 'zip', 'gd', 'bcmath', 'intl'],
+                ['fpm', 'cli', 'common', 'mysql', 'pgsql', 'mbstring', 'xml', 'curl', 'zip', 'gd', 'bcmath', 'intl', 'sqlite3'],
             ));
             if ($v === '7.4') {
                 // PHP 7.4 is only available on Ubuntu 22 and below.
