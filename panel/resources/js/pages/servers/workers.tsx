@@ -109,7 +109,7 @@ export default function ServerWorkers({
                                             <div className="flex items-center gap-1">
                                                 <span className="text-muted-foreground text-xs">App:</span>
                                                 <Link
-                                                    href={`/applications/${worker.application.id}`}
+                                                    href={`/apps/${worker.application.id}`}
                                                     className="text-xs underline-offset-2 hover:underline"
                                                 >
                                                     {worker.application.name}
@@ -119,7 +119,7 @@ export default function ServerWorkers({
                                         <div className="flex items-center gap-2">
                                             <Badge variant={statusVariant(worker.status)}>{worker.status}</Badge>
                                             <Button asChild variant="outline" size="sm">
-                                                <Link href={`/applications/${worker.application.id}/workers`}>Manage</Link>
+                                                <Link href={`/apps/${worker.application.id}/workers`}>Manage</Link>
                                             </Button>
                                         </div>
                                     </div>
