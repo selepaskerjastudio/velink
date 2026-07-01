@@ -193,7 +193,11 @@ class AppTemplates
             'access_log' => self::logPath($slug, 'access'),
             'error_log' => self::logPath($slug, 'error'),
             'display_errors' => $app->stack_mode === 'development' ? 'On' : 'Off',
-            'opcache_validate_timestamps' => $app->stack_mode === 'development' ? '1' : '0',
+            // Always revalidate opcache timestamps (even in production). With this
+            // off, opcache serves stale bytecode after a git deploy until PHP-FPM
+            // is restarted manually — deploys silently ship old code. The per-request
+            // stat() cost is negligible and makes `git pull` deploys just work.
+            'opcache_validate_timestamps' => '1',
             ...$settings,
         ];
     }
