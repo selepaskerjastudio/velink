@@ -6,6 +6,7 @@ use App\Models\AgentJob;
 use App\Models\Application;
 use App\Models\PhpPool;
 use App\Provisioning\AppTemplates;
+use App\Provisioning\PhpSettings;
 
 /**
  * Provisions a web application's directory, php-fpm pool, and nginx vhost on a
@@ -220,6 +221,45 @@ class AppProvisionService
                 'socket_path' => $vars['socket_path'],
                 'config' => $vars,
             ]);
+        }
+
+        return $jobs;
+    }
+
+    /**
+     * Persist the per-app PHP-FPM / PHP ini settings and re-render the pool
+     * conf for the active PHP version, then reload PHP-FPM. Mirrors the FPM
+     * half of changePhpVersion() — the socket path (and therefore the nginx
+     * vhost) is unchanged.
+     *
+     * @param  array<string, string>  $settings
+     * @return array<int, AgentJob>
+     */
+    public function updatePhpSettings(Application $app, array $settings, ?int $userId = null): array
+    {
+        $slug = AppTemplates::slug($app);
+        $version = $app->php_version;
+
+        $app->forceFill(['php_settings' => $settings])->save();
+        $vars = AppTemplates::vars($app);
+
+        $jobs = [];
+        $jobs[] = $this->renderConfig(
+            $app,
+            'Write PHP-FPM pool config',
+            AppTemplates::poolConfigPath($version, $slug),
+            AppTemplates::PHP_FPM_POOL,
+            $vars,
+            $userId,
+        );
+
+        $jobs[] = $this->shell($app, 'Reload PHP-FPM', <<<SH
+            systemctl reload php{$version}-fpm
+            SH, $userId);
+
+        $pool = $app->phpPools()->where('pool_name', $slug)->first();
+        if ($pool !== null) {
+            $pool->forceFill(['config' => $vars])->save();
         }
 
         return $jobs;

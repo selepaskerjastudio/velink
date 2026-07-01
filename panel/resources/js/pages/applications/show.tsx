@@ -21,6 +21,7 @@ import {
     type Deployment,
     type DeploymentStatus,
     type GitCredential,
+    type PhpSettings,
 } from '@/types';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ChevronDownIcon, ExternalLinkIcon, ShieldCheckIcon, TerminalIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
@@ -41,6 +42,7 @@ const SECTIONS: SidebarItem[] = [
     { id: 'deploy', label: 'Git & Deploy' },
     { header: 'Web Settings' },
     { id: 'nginx', label: 'NGINX Config' },
+    { id: 'php-fpm', label: 'PHP & FPM' },
     { id: 'settings', label: 'Settings' },
     { id: 'backups', label: 'Backups' },
     { id: 'activity', label: 'Activity Log' },
@@ -98,6 +100,7 @@ export default function ApplicationsShow({
     application,
     server,
     phpVersions,
+    phpSettingsPresets,
     jobs,
     deployments,
     gitCredentials,
@@ -106,6 +109,7 @@ export default function ApplicationsShow({
     application: Application;
     server: { id: string; name: string; public_ip?: string | null; status: string; os?: string | null; uses_edge_proxy?: boolean };
     phpVersions: string[];
+    phpSettingsPresets: Record<string, PhpSettings>;
     jobs: AgentJob[];
     deployments: Deployment[];
     gitCredentials: GitCredential[];
@@ -218,6 +222,31 @@ export default function ApplicationsShow({
 
     const submitNginx = () => {
         nginxForm.post(route('applications.nginx-config', application.id), { preserveScroll: true });
+    };
+
+    const defaultPhpSettings: PhpSettings = {
+        pm: 'dynamic',
+        pm_max_children: 5,
+        pm_start_servers: 2,
+        pm_min_spare_servers: 1,
+        pm_max_spare_servers: 3,
+        pm_max_requests: 0,
+        pm_process_idle_timeout: '10s',
+        memory_limit: '128M',
+        max_execution_time: 30,
+        max_input_time: 60,
+        upload_max_filesize: '2M',
+        post_max_size: '8M',
+    };
+
+    const phpSettingsForm = useForm<PhpSettings>(application.php_settings ?? defaultPhpSettings);
+
+    const submitPhpSettings = () => {
+        phpSettingsForm.patch(route('applications.php-settings', application.id), { preserveScroll: true });
+    };
+
+    const applyPreset = (preset: PhpSettings) => {
+        phpSettingsForm.setData(preset);
     };
 
     const sizeForm = useForm({});
@@ -603,6 +632,234 @@ export default function ApplicationsShow({
                                     </Button>
                                 </CardFooter>
                             </Card>
+                        )}
+
+                        {section === 'php-fpm' && application.app_type !== 'static' && (
+                            <div className="grid gap-6">
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>PHP-FPM Process Manager</CardTitle>
+                                        <CardDescription>
+                                            Tuning for the <code className="text-xs">{application.app_slug}</code> pool. Changes rewrite{' '}
+                                            <code className="text-xs">
+                                                /etc/php/{application.php_version}/fpm/pool.d/{application.app_slug}.conf
+                                            </code>{' '}
+                                            and reload PHP-FPM.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="grid gap-4">
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="text-muted-foreground self-center text-xs">Presets:</span>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => applyPreset(phpSettingsPresets.low ?? defaultPhpSettings)}
+                                            >
+                                                Low traffic
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => applyPreset(phpSettingsPresets.medium ?? defaultPhpSettings)}
+                                            >
+                                                Medium traffic
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => applyPreset(phpSettingsPresets.high ?? defaultPhpSettings)}
+                                            >
+                                                High traffic
+                                            </Button>
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="pm">Process manager (pm)</Label>
+                                            <Select
+                                                value={phpSettingsForm.data.pm}
+                                                onValueChange={(v) => phpSettingsForm.setData('pm', v)}
+                                            >
+                                                <SelectTrigger id="pm" className="max-w-xs">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="dynamic">dynamic</SelectItem>
+                                                    <SelectItem value="static">static</SelectItem>
+                                                    <SelectItem value="ondemand">ondemand</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-muted-foreground text-xs">
+                                                <code>dynamic</code> spawns workers on demand up to <code>max_children</code>;{' '}
+                                                <code>static</code> keeps a fixed count; <code>ondemand</code> idles at zero.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="pm_max_children">pm.max_children</Label>
+                                                <Input
+                                                    id="pm_max_children"
+                                                    type="number"
+                                                    min={1}
+                                                    className="max-w-xs"
+                                                    value={phpSettingsForm.data.pm_max_children}
+                                                    onChange={(e) => phpSettingsForm.setData('pm_max_children', e.target.value)}
+                                                />
+                                                <InputError message={phpSettingsForm.errors.pm_max_children} />
+                                            </div>
+
+                                            {phpSettingsForm.data.pm === 'static' && (
+                                                <p className="text-muted-foreground self-end text-xs">
+                                                    In <code>static</code> mode, <code>max_children</code> is the fixed worker count.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {phpSettingsForm.data.pm === 'dynamic' && (
+                                            <div className="grid gap-4 sm:grid-cols-3">
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor="pm_start_servers">pm.start_servers</Label>
+                                                    <Input
+                                                        id="pm_start_servers"
+                                                        type="number"
+                                                        min={1}
+                                                        value={phpSettingsForm.data.pm_start_servers}
+                                                        onChange={(e) => phpSettingsForm.setData('pm_start_servers', e.target.value)}
+                                                    />
+                                                    <InputError message={phpSettingsForm.errors.pm_start_servers} />
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor="pm_min_spare_servers">pm.min_spare_servers</Label>
+                                                    <Input
+                                                        id="pm_min_spare_servers"
+                                                        type="number"
+                                                        min={1}
+                                                        value={phpSettingsForm.data.pm_min_spare_servers}
+                                                        onChange={(e) => phpSettingsForm.setData('pm_min_spare_servers', e.target.value)}
+                                                    />
+                                                    <InputError message={phpSettingsForm.errors.pm_min_spare_servers} />
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor="pm_max_spare_servers">pm.max_spare_servers</Label>
+                                                    <Input
+                                                        id="pm_max_spare_servers"
+                                                        type="number"
+                                                        min={1}
+                                                        value={phpSettingsForm.data.pm_max_spare_servers}
+                                                        onChange={(e) => phpSettingsForm.setData('pm_max_spare_servers', e.target.value)}
+                                                    />
+                                                    <InputError message={phpSettingsForm.errors.pm_max_spare_servers} />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="pm_max_requests">pm.max_requests</Label>
+                                                <Input
+                                                    id="pm_max_requests"
+                                                    type="number"
+                                                    min={0}
+                                                    className="max-w-xs"
+                                                    value={phpSettingsForm.data.pm_max_requests}
+                                                    onChange={(e) => phpSettingsForm.setData('pm_max_requests', e.target.value)}
+                                                />
+                                                <InputError message={phpSettingsForm.errors.pm_max_requests} />
+                                                <p className="text-muted-foreground text-xs">0 = unlimited. Restarts a worker after N requests (guards against memory leaks).</p>
+                                            </div>
+
+                                            {phpSettingsForm.data.pm === 'ondemand' && (
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor="pm_process_idle_timeout">pm.process_idle_timeout</Label>
+                                                    <Input
+                                                        id="pm_process_idle_timeout"
+                                                        className="max-w-xs"
+                                                        value={phpSettingsForm.data.pm_process_idle_timeout}
+                                                        onChange={(e) => phpSettingsForm.setData('pm_process_idle_timeout', e.target.value)}
+                                                    />
+                                                    <InputError message={phpSettingsForm.errors.pm_process_idle_timeout} />
+                                                    <p className="text-muted-foreground text-xs">e.g. <code>10s</code>. Idle workers are killed after this duration.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>PHP Limits</CardTitle>
+                                        <CardDescription>Per-pool ini values applied via <code className="text-xs">php_admin_value</code> (not overridable by the app).</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="memory_limit">memory_limit</Label>
+                                            <Input
+                                                id="memory_limit"
+                                                className="max-w-xs font-mono"
+                                                value={phpSettingsForm.data.memory_limit}
+                                                onChange={(e) => phpSettingsForm.setData('memory_limit', e.target.value)}
+                                            />
+                                            <InputError message={phpSettingsForm.errors.memory_limit} />
+                                            <p className="text-muted-foreground text-xs">e.g. <code>128M</code>, <code>512M</code>, or <code>-1</code> for no limit.</p>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="max_execution_time">max_execution_time</Label>
+                                            <Input
+                                                id="max_execution_time"
+                                                type="number"
+                                                min={0}
+                                                className="max-w-xs"
+                                                value={phpSettingsForm.data.max_execution_time}
+                                                onChange={(e) => phpSettingsForm.setData('max_execution_time', e.target.value)}
+                                            />
+                                            <InputError message={phpSettingsForm.errors.max_execution_time} />
+                                            <p className="text-muted-foreground text-xs">Seconds. 0 = no limit.</p>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="max_input_time">max_input_time</Label>
+                                            <Input
+                                                id="max_input_time"
+                                                type="number"
+                                                min={0}
+                                                className="max-w-xs"
+                                                value={phpSettingsForm.data.max_input_time}
+                                                onChange={(e) => phpSettingsForm.setData('max_input_time', e.target.value)}
+                                            />
+                                            <InputError message={phpSettingsForm.errors.max_input_time} />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="upload_max_filesize">upload_max_filesize</Label>
+                                            <Input
+                                                id="upload_max_filesize"
+                                                className="max-w-xs font-mono"
+                                                value={phpSettingsForm.data.upload_max_filesize}
+                                                onChange={(e) => phpSettingsForm.setData('upload_max_filesize', e.target.value)}
+                                            />
+                                            <InputError message={phpSettingsForm.errors.upload_max_filesize} />
+                                            <p className="text-muted-foreground text-xs">e.g. <code>2M</code>, <code>64M</code>.</p>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="post_max_size">post_max_size</Label>
+                                            <Input
+                                                id="post_max_size"
+                                                className="max-w-xs font-mono"
+                                                value={phpSettingsForm.data.post_max_size}
+                                                onChange={(e) => phpSettingsForm.setData('post_max_size', e.target.value)}
+                                            />
+                                            <InputError message={phpSettingsForm.errors.post_max_size} />
+                                            <p className="text-muted-foreground text-xs">Should be ≥ <code>upload_max_filesize</code>.</p>
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter>
+                                        <Button onClick={submitPhpSettings} disabled={phpSettingsForm.processing}>
+                                            Save &amp; reload PHP-FPM
+                                        </Button>
+                                    </CardFooter>
+                                </Card>
+                            </div>
                         )}
 
                         {section === 'settings' && (

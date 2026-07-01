@@ -76,6 +76,7 @@ export interface Application {
     root_path: string;
     directory_size_bytes: number | null;
     linux_user: string;
+    app_slug?: string;
     php_version: string;
     app_type: string;
     stack_mode: string;
@@ -94,6 +95,22 @@ export interface Application {
     ssl_enabled_at?: string | null;
     ssl_provider: string | null;
     ssl_challenge: string | null;
+    php_settings?: PhpSettings;
+}
+
+export interface PhpSettings {
+    pm: string;
+    pm_max_children: number | string;
+    pm_start_servers: number | string;
+    pm_min_spare_servers: number | string;
+    pm_max_spare_servers: number | string;
+    pm_max_requests: number | string;
+    pm_process_idle_timeout: string;
+    memory_limit: string;
+    max_execution_time: number | string;
+    max_input_time: number | string;
+    upload_max_filesize: string;
+    post_max_size: string;
 }
 
 export interface GitCredential {

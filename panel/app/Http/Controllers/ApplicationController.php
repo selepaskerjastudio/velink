@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\GitCredential;
 use App\Models\Server;
 use App\Provisioning\DeployTemplates;
+use App\Provisioning\PhpSettings;
 use App\Provisioning\ProvisioningCatalog;
 use App\Services\AppProvisionService;
 use App\Services\AuditLogger;
@@ -306,7 +307,7 @@ class ApplicationController extends Controller
         return Inertia::render('applications/show', [
             'application' => [
                 ...$application->only([
-                    'name', 'domain', 'root_path', 'linux_user', 'php_version', 'app_type', 'stack_mode', 'status', 'created_at',
+                    'name', 'domain', 'root_path', 'linux_user', 'app_slug', 'php_version', 'app_type', 'stack_mode', 'status', 'created_at',
                     'repository', 'branch', 'deploy_mode', 'deploy_script', 'webhook_secret', 'directory_size_bytes',
                 ]),
                 'id' => $application->uuid,
@@ -318,9 +319,11 @@ class ApplicationController extends Controller
                 'ssl_enabled_at' => $application->ssl_enabled_at?->toIso8601String(),
                 'ssl_provider' => $application->ssl_enabled_at !== null ? 'letsencrypt' : null,
                 'ssl_challenge' => $application->ssl_challenge,
+                'php_settings' => $application->php_settings,
             ],
             'server' => ['id' => $application->server->uuid, 'name' => $application->server->name, 'public_ip' => $application->server->public_ip, 'status' => $application->server->status, 'os' => $application->server->os, 'uses_edge_proxy' => $application->server->uses_edge_proxy],
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
+            'phpSettingsPresets' => PhpSettings::presets(),
             'defaultDeployScript' => DeployTemplates::DEFAULT_SCRIPT,
             'gitCredentials' => auth()->user()->gitCredentials()
                 ->with('provider:id,type,name')
@@ -491,6 +494,33 @@ class ApplicationController extends Controller
         }
 
         return redirect()->route('applications.show', $application);
+    }
+
+    public function updatePhpSettings(Request $request, Application $application, AppProvisionService $provisionService): RedirectResponse
+    {
+        if (! $application->usesPhp()) {
+            return redirect()->back()->withErrors(['pm' => 'Static apps have no PHP-FPM pool.']);
+        }
+
+        $validated = $request->validate(PhpSettings::validationRules());
+
+        // No-op short-circuit when nothing changed (mirrors updatePhpVersion).
+        $current = PhpSettings::forApp($application);
+        if ($validated === $current) {
+            return redirect()->route('applications.show', $application);
+        }
+
+        $provisionService->updatePhpSettings($application, $validated, $request->user()->id);
+
+        AuditLogger::log(
+            action: 'application.php_settings_updated',
+            description: "PHP-FPM settings updated for '{$application->name}'",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+            properties: ['pm' => $validated['pm'], 'pm_max_children' => $validated['pm_max_children']],
+        );
+
+        return redirect()->route('applications.show', $application)->with('success', 'PHP & FPM settings updated and PHP-FPM reloaded.');
     }
 
     public function enableSsl(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse

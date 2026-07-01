@@ -110,11 +110,13 @@ class AppTemplates
         listen.group = www-data
         listen.mode = 0660
 
-        pm = dynamic
-        pm.max_children = 5
-        pm.start_servers = 2
-        pm.min_spare_servers = 1
-        pm.max_spare_servers = 3
+        pm = {{.pm}}
+        pm.max_children = {{.pm_max_children}}
+        pm.start_servers = {{.pm_start_servers}}
+        pm.min_spare_servers = {{.pm_min_spare_servers}}
+        pm.max_spare_servers = {{.pm_max_spare_servers}}
+        pm.max_requests = {{.pm_max_requests}}
+        pm.process_idle_timeout = {{.pm_process_idle_timeout}}
 
         chdir = {{.root_path}}
         catch_workers_output = yes
@@ -124,6 +126,11 @@ class AppTemplates
         php_admin_value[sys_temp_dir] = {{.root_path}}/tmp
         php_admin_flag[display_errors] = {{.display_errors}}
         php_admin_value[opcache.validate_timestamps] = {{.opcache_validate_timestamps}}
+        php_admin_value[memory_limit] = {{.memory_limit}}
+        php_admin_value[max_execution_time] = {{.max_execution_time}}
+        php_admin_value[max_input_time] = {{.max_input_time}}
+        php_admin_value[upload_max_filesize] = {{.upload_max_filesize}}
+        php_admin_value[post_max_size] = {{.post_max_size}}
         CONF;
 
     /**
@@ -170,6 +177,11 @@ class AppTemplates
     {
         $slug = self::slug($app);
 
+        // PHP-FPM / PHP ini settings are merged over defaults and cast to
+        // strings — Go text/template prints scalars verbatim, and the
+        // pool conf expects plain values.
+        $settings = array_map(fn ($v) => (string) $v, PhpSettings::forApp($app));
+
         return [
             'domain' => (string) $app->domain,
             'root_path' => $app->root_path,
@@ -182,6 +194,7 @@ class AppTemplates
             'error_log' => self::logPath($slug, 'error'),
             'display_errors' => $app->stack_mode === 'development' ? 'On' : 'Off',
             'opcache_validate_timestamps' => $app->stack_mode === 'development' ? '1' : '0',
+            ...$settings,
         ];
     }
 
