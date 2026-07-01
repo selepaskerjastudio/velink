@@ -48,6 +48,15 @@ const SECTIONS: SidebarItem[] = [
     { id: 'activity', label: 'Activity Log' },
 ];
 
+const SECTION_IDS = SECTIONS.filter((s): s is { id: string; label: string } => 'id' in s).map((s) => s.id);
+const DEFAULT_SECTION = 'dashboard';
+
+function sectionFromUrl(): string {
+    if (typeof window === 'undefined') return DEFAULT_SECTION;
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    return tab && SECTION_IDS.includes(tab) ? tab : DEFAULT_SECTION;
+}
+
 function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' {
     switch (status) {
         case 'succeeded':
@@ -122,8 +131,24 @@ export default function ApplicationsShow({
         return m && parseInt(m[1], 10) >= 24 ? phpVersions.filter((v) => v !== '7.4') : phpVersions;
     })();
 
-    const [section, setSection] = useState('dashboard');
+    const [section, setSection] = useState(sectionFromUrl);
     const publicPath = `${application.root_path}/public`;
+
+    // Keep the active tab in the URL (?tab=) so switching updates the link and a
+    // refresh restores the same tab. pushState also makes back/forward move tabs.
+    const selectSection = (id: string) => {
+        setSection(id);
+        if (typeof window === 'undefined') return;
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', id);
+        window.history.pushState({}, '', url);
+    };
+
+    useEffect(() => {
+        const onPop = () => setSection(sectionFromUrl());
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, []);
 
     const [liveJobs, setLiveJobs] = useState<AgentJob[]>(jobs ?? []);
     const [liveDeployments, setLiveDeployments] = useState<Deployment[]>(deployments ?? []);
@@ -396,7 +421,7 @@ export default function ApplicationsShow({
                                 <button
                                     key={item.id}
                                     type="button"
-                                    onClick={() => setSection(item.id)}
+                                    onClick={() => selectSection(item.id)}
                                     className={cn(
                                         'rounded-md px-3 py-2 text-left text-sm transition-colors',
                                         section === item.id ? 'bg-muted text-foreground font-medium' : 'text-muted-foreground hover:bg-muted/50',
