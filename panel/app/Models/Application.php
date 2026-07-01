@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasUuidRouteKey;
+use App\Provisioning\PhpSettings;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -43,6 +44,7 @@ class Application extends Model
         'php_version',
         'app_type',
         'stack_mode',
+        'php_settings',
         'repository',
         'branch',
         'deploy_mode',
@@ -66,6 +68,7 @@ class Application extends Model
             'env_content' => 'encrypted',
             'ssl_enabled_at' => 'datetime',
             'directory_size_bytes' => 'integer',
+            'php_settings' => 'array',
         ];
     }
 
@@ -135,6 +138,17 @@ class Application extends Model
     public function usesPhp(): bool
     {
         return $this->app_type !== 'static';
+    }
+
+    /**
+     * The per-app PHP-FPM + PHP ini settings, always fully merged over the
+     * code-level defaults (so a null column yields the default set).
+     *
+     * @return array<string, string>
+     */
+    public function getPhpSettingsAttribute(): array
+    {
+        return PhpSettings::forApp($this);
     }
 
     /**

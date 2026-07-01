@@ -41,6 +41,19 @@ test('app templates expose the expected vars and paths', function () {
         'error_log' => '/home/velink/logs/example_app_error.log',
         'display_errors' => 'Off',
         'opcache_validate_timestamps' => '0',
+        // PHP-FPM / PHP ini defaults (merged by PhpSettings::forApp).
+        'pm' => 'dynamic',
+        'pm_max_children' => '5',
+        'pm_start_servers' => '2',
+        'pm_min_spare_servers' => '1',
+        'pm_max_spare_servers' => '3',
+        'pm_max_requests' => '0',
+        'pm_process_idle_timeout' => '10s',
+        'memory_limit' => '128M',
+        'max_execution_time' => '30',
+        'max_input_time' => '60',
+        'upload_max_filesize' => '2M',
+        'post_max_size' => '8M',
     ]);
 
     expect(AppTemplates::poolConfigPath('8.3', 'example_app'))->toBe('/etc/php/8.3/fpm/pool.d/example_app.conf');
