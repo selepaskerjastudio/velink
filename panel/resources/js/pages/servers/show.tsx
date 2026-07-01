@@ -255,15 +255,17 @@ export default function ServersShow({
                             {server.os && <span className="text-muted-foreground">{server.os}</span>}
                             {server.agent_version && <span className="text-muted-foreground">Agent {server.agent_version}</span>}
                             {server.last_seen_at && <span className="text-muted-foreground">Seen: {server.last_seen_at}</span>}
-                            <Button
-                                variant="link"
-                                size="sm"
-                                className="text-muted-foreground h-auto p-0 text-sm font-normal"
-                                disabled={tokenForm.processing}
-                                onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
-                            >
-                                Regenerate token
-                            </Button>
+                            {!isOnline && (
+                                <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="text-muted-foreground h-auto p-0 text-sm font-normal"
+                                    disabled={tokenForm.processing}
+                                    onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
+                                >
+                                    Regenerate token
+                                </Button>
+                            )}
                         </div>
 
                         {/* Metric cards */}
