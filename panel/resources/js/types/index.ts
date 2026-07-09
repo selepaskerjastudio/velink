@@ -95,6 +95,7 @@ export interface Application {
     ssl_enabled_at?: string | null;
     ssl_provider: string | null;
     ssl_challenge: string | null;
+    behind_reverse_proxy?: boolean;
     php_settings?: PhpSettings;
 }
 

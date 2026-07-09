@@ -40,7 +40,9 @@ test('app templates expose the expected vars and paths', function () {
         'access_log' => '/home/velink/logs/example_app_access.log',
         'error_log' => '/home/velink/logs/example_app_error.log',
         'display_errors' => 'Off',
-        'opcache_validate_timestamps' => '0',
+        'opcache_validate_timestamps' => '1',
+        'behind_reverse_proxy' => 'false',
+        'trusted_proxy_subnet' => '0.0.0.0/0',
         // PHP-FPM / PHP ini defaults (merged by PhpSettings::forApp).
         'pm' => 'dynamic',
         'pm_max_children' => '5',
@@ -62,10 +64,12 @@ test('app templates expose the expected vars and paths', function () {
 
     // Every directly-templated var key is referenced by the relevant template
     // (Go text/template). app_slug is a convenience key backing pool_name /
-    // socket_path / the log paths, so it is not itself interpolated.
+    // socket_path / the log paths, so it is not itself interpolated; and
+    // behind_reverse_proxy is consumed via {{if eq .behind_reverse_proxy ...}}
+    // rather than the literal {{.behind_reverse_proxy}} form.
     $allTemplates = AppTemplates::NGINX_VHOST.AppTemplates::PHP_FPM_POOL;
     foreach (array_keys($vars) as $key) {
-        if ($key === 'app_slug') {
+        if ($key === 'app_slug' || $key === 'behind_reverse_proxy') {
             continue;
         }
         expect($allTemplates)->toContain("{{.{$key}}}");
