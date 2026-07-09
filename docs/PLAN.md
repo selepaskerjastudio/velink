@@ -69,7 +69,7 @@ Tiga komponen utama + Redis + DB:
 | Realtime browser | Laravel Reverb | Progress deploy, status, terminal ke browser |
 | Panel DB | PostgreSQL 16 | Relasional + JSONB untuk config |
 | Gateway & Agent | Go 1.23+ | `coder/websocket`, `creack/pty` (PTY), `gopsutil` (metrics) |
-| Managed OS | Ubuntu 22.04/24.04 LTS | `ondrej/php` PPA (7.4 + 8.x), PGDG (Postgres), repo resmi MongoDB |
+| Managed OS | Ubuntu 22.04/24.04 LTS | sury.org PHP repo (7.4 + 8.x), PGDG (Postgres), repo resmi MongoDB |
 
 ### Struktur repo (monorepo)
 ```
@@ -128,7 +128,7 @@ Rahasia (token Git, password DB, isi `.env`) disimpan pakai **encrypted cast** L
   file, render config dari payload), stream output. Jalan sebagai systemd unit, privileged.
 - Abstraksi `Job` di Laravel (model + state machine + broadcast progress via Reverb).
 - **Provisioning server (agent yang install semua service):**
-  - nginx, php-fpm **7.4 + 8.1/8.2/8.3/8.4** (PPA `ondrej/php`), composer, node,
+  - nginx, php-fpm **7.4 + 8.1/8.2/8.3/8.4** (sury.org PHP repo), composer, node,
     supervisord, certbot.
   - Database: MySQL/MariaDB, **PostgreSQL** (PGDG), **MongoDB** (repo resmi) — dipilih per server.
   - Redis.

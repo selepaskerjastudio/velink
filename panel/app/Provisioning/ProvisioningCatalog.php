@@ -31,6 +31,7 @@ class ProvisioningCatalog
 
     private const NODE_MAJOR = '20';
     private const PG_BASE = 'https://apt.postgresql.org/pub/repos/apt';
+    private const SURY_BASE = 'https://packages.sury.org/php';
     private const MONGO_VERSION = '7.0';
 
     /**
@@ -154,14 +155,19 @@ class ProvisioningCatalog
     private function phpSteps(array $opts): array
     {
         $versions = $opts['php_versions'] ?? ['8.3'];
-        $steps = [$this->shell('Add ondrej/php PPA', <<<'SH'
+        $steps = [$this->shell('Add sury.org PHP repository', sprintf(<<<'SH'
             export DEBIAN_FRONTEND=noninteractive
-            # add-apt-repository ships in software-properties-common (base step),
-            # which runs concurrently — wait for it before adding the PPA.
-            for _ in $(seq 1 120); do command -v add-apt-repository >/dev/null 2>&1 && break; sleep 5; done
-            flock -w 300 /var/lib/dpkg/lock-frontend add-apt-repository -y ppa:ondrej/php
+            # Ondřej Surý's PHP packages live on packages.sury.org now — the old
+            # Launchpad PPA (ppa:ondrej/php) is deprecated and flips its repo
+            # Label to "Use https://packages.sury.org/php/ instead", which breaks
+            # `apt update` until manually accepted. Pin the official repo directly
+            # instead. ca-certificates + gnupg are installed by the base step,
+            # which runs concurrently — wait for them before fetching the key.
+            for _ in $(seq 1 120); do command -v gpg >/dev/null 2>&1 && [ -d /usr/share/keyrings ] && break; sleep 5; done
+            curl -fsSL %1$s/apt.gpg | gpg --dearmor --yes -o /usr/share/keyrings/sury-php.gpg
+            echo "deb [signed-by=/usr/share/keyrings/sury-php.gpg] %1$s $(lsb_release -cs) main" > /etc/apt/sources.list.d/sury-php.list
             flock -w 300 /var/lib/dpkg/lock-frontend apt-get update
-            SH)];
+            SH, self::SURY_BASE))];
 
         foreach ($versions as $v) {
             if (! in_array($v, self::PHP_VERSIONS, true)) {
