@@ -50,7 +50,7 @@
 - [x] **Provisioning (Job idempotent, agent yang install)** — katalog `ProvisioningCatalog`
       + `ProvisionService` (base dulu, dispatch sebagai job `shell`):
   - [x] nginx + certbot (+ `certbot-dns-cloudflare` untuk DNS-01 SSL).
-  - [x] php-fpm **7.4, 8.1, 8.2, 8.3, 8.4** via PPA `ondrej/php` + composer + node.
+  - [x] php-fpm **7.4, 8.1, 8.2, 8.3, 8.4** via repo sury.org (`packages.sury.org/php`) + composer + node.
   - [x] supervisord.
   - [x] MySQL/MariaDB.
   - [x] PostgreSQL (repo PGDG).

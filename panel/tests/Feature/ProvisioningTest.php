@@ -8,11 +8,11 @@ use Illuminate\Support\Facades\Redis;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
-test('php steps include the PPA and one install per version', function () {
+test('php steps include the sury.org repo and one install per version', function () {
     $steps = app(ProvisioningCatalog::class)->steps('php', ['php_versions' => ['8.1', '8.3']]);
 
-    expect($steps)->toHaveCount(3); // PPA + 2 installs
-    expect($steps[0]['params']['command'])->toContain('ppa:ondrej/php');
+    expect($steps)->toHaveCount(3); // repo + 2 installs
+    expect($steps[0]['params']['command'])->toContain('packages.sury.org/php');
     expect($steps[1]['params']['command'])->toContain('php8.1-fpm');
     expect($steps[2]['params']['command'])->toContain('php8.3-fpm');
 
