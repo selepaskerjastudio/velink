@@ -64,14 +64,7 @@ test('a worker can be created', function () {
 });
 
 test('creating a worker renders the supervisor config with the expected vars', function () {
-    $published = [];
-    $conn = Mockery::mock();
-    $conn->shouldReceive('publish')->andReturnUsing(function ($channel, $json) use (&$published) {
-        $published[] = json_decode($json, true);
-
-        return 1;
-    });
-    Redis::shouldReceive('connection')->andReturn($conn);
+    mockWorkerGatewayPublish();
 
     $this->actingAs(User::factory()->create());
     $application = Application::factory()->create();
@@ -82,17 +75,21 @@ test('creating a worker renders the supervisor config with the expected vars', f
         'numprocs' => 2,
     ]);
 
-    $renderJob = collect($published)->firstWhere('payload.action', 'render_config');
+    // create() dispatches render_config -> reload -> start as a phased batch
+    // (see WorkerService::dispatchLifecycle): only phase 0 is published
+    // immediately, so assert against the DB rows rather than Redis publishes.
+    $renderJob = $application->server->agentJobs()->where('type', 'render_config')->first();
 
     expect($renderJob)->not->toBeNull();
-    expect($renderJob['payload']['params']['vars']['command'])->toBe('php artisan queue:work --tries=3');
-    expect($renderJob['payload']['params']['vars']['directory'])->toBe($application->root_path);
-    expect($renderJob['payload']['params']['vars']['linux_user'])->toBe($application->linux_user);
-    expect($renderJob['payload']['params']['vars']['numprocs'])->toBe('2');
-    expect($renderJob['payload']['params']['path'])->toContain('/etc/supervisor/conf.d/');
+    expect($renderJob->payload['vars']['command'])->toBe('php artisan queue:work --tries=3');
+    expect($renderJob->payload['vars']['directory'])->toBe($application->root_path);
+    expect($renderJob->payload['vars']['linux_user'])->toBe($application->linux_user);
+    expect($renderJob->payload['vars']['numprocs'])->toBe('2');
+    expect($renderJob->payload['path'])->toContain('/etc/supervisor/conf.d/');
 
-    $startJob = collect($published)->last();
-    expect($startJob['payload']['params']['command'])->toContain('supervisorctl start');
+    $startJob = $application->server->agentJobs()->where('type', 'shell')->where('batch_sequence', 2)->first();
+    expect($startJob)->not->toBeNull();
+    expect($startJob->payload['command'])->toContain('supervisorctl start');
 });
 
 test('creating a worker rejects invalid program names', function () {

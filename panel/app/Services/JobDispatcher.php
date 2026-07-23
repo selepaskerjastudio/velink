@@ -52,7 +52,7 @@ class JobDispatcher
      *
      * Only the lowest phase is dispatched now; the rest wait as `pending`.
      *
-     * @param  array<int, array{name?: string, type: string, phase?: int, params: array<string, mixed>}>  $steps
+     * @param  array<int, array{name?: string, type: string, phase?: int, application_id?: int|null, params: array<string, mixed>}>  $steps
      * @return array<int, AgentJob>
      */
     public function queueBatch(Server $server, array $steps, ?int $userId = null): array
@@ -69,6 +69,7 @@ class JobDispatcher
                 'batch_id' => $batchId,
                 'batch_sequence' => $step['phase'] ?? 0,
                 'server_id' => $server->id,
+                'application_id' => $step['application_id'] ?? null,
                 'user_id' => $userId,
                 'type' => $step['type'],
                 'label' => $step['name'] ?? null,

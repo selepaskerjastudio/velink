@@ -246,11 +246,15 @@ class GatewayInboundProcessor
         if (! $job->phaseHadSuccess()) {
             foreach ($job->laterPhasePendingJobs() as $skipped) {
                 $skipped->markFailed(null, 'Skipped — provisioning halted after a failed phase');
-                $this->serviceManager->setUnitsStatus(
-                    $skipped->server,
-                    $this->serviceManager->serviceNamesForJobLabel((string) $skipped->label),
-                    ServiceManager::STATUS_NOT_INSTALLED,
-                );
+                // Server-level provisioning steps only — app-scoped batches (e.g.
+                // worker create/update) don't correspond to a system service unit.
+                if ($skipped->application_id === null) {
+                    $this->serviceManager->setUnitsStatus(
+                        $skipped->server,
+                        $this->serviceManager->serviceNamesForJobLabel((string) $skipped->label),
+                        ServiceManager::STATUS_NOT_INSTALLED,
+                    );
+                }
             }
 
             return;
@@ -261,11 +265,13 @@ class GatewayInboundProcessor
             // Mark its service installing the moment it's dispatched, not only
             // once output arrives, so the UI never shows a dispatched step as
             // "waiting".
-            $this->serviceManager->setUnitsStatus(
-                $next->server,
-                $this->serviceManager->serviceNamesForJobLabel((string) $next->label),
-                ServiceManager::STATUS_INSTALLING,
-            );
+            if ($next->application_id === null) {
+                $this->serviceManager->setUnitsStatus(
+                    $next->server,
+                    $this->serviceManager->serviceNamesForJobLabel((string) $next->label),
+                    ServiceManager::STATUS_INSTALLING,
+                );
+            }
         }
     }
 
