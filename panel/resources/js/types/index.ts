@@ -1,7 +1,12 @@
 import { LucideIcon } from 'lucide-react';
 
+export type UserRole = 'admin' | 'member';
+
 export interface Auth {
     user: User;
+    can: {
+        admin: boolean;
+    };
 }
 
 export interface BreadcrumbItem {
@@ -164,12 +169,14 @@ export interface Deployment {
 
 export interface User {
     id: number;
+    uuid: string;
     name: string;
     email: string;
     avatar?: string;
     email_verified_at: string | null;
-    created_at: string;
-    updated_at: string;
+    role: UserRole;
+    is_active: boolean;
+    two_factor_enabled: boolean;
     [key: string]: unknown; // This allows for additional properties...
 }
 

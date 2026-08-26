@@ -276,12 +276,19 @@
       *(Catatan: payload wajib menyertakan `socket_id`; tanpa itu broadcaster melempar
       saat menandatangani respons yang sudah **diizinkan** — 200 menyamar jadi 500.)*
 
-### Langkah 6 — Inertia props 🟢 Sonnet
+### Langkah 6 — Inertia props 🟢 Sonnet ✅ (2026-08-26)
 
-- [ ] `HandleInertiaRequests:47-49` — persempit dari share whole-model ke shape eksplisit
-      + `auth.can.admin` (satu boolean cukup, jangan bikin matriks per-route) (§9).
-- [ ] Fix `:43-44` — `parent::share()` dipanggil dua kali (bug lama).
-- [ ] `types/index.ts` — `UserRole`, field `uuid`/`role`/`is_active`, `Auth.can`.
+- [x] `HandleInertiaRequests` — persempit dari share whole-model ke shape eksplisit
+      (`id`, `uuid`, `name`, `email`, `email_verified_at`, `role`, `is_active`,
+      `two_factor_enabled`) + `auth.can.admin` (satu boolean cukup, jangan bikin
+      matriks per-route) (§9).
+- [x] Fix double `parent::share()` (bug lama — sekaligus hilang saat ditulis ulang).
+- [x] `types/index.ts` — `UserRole`, field `uuid`/`role`/`is_active`/`two_factor_enabled`
+      di `User`, `Auth.can`. `created_at`/`updated_at` dilepas dari `User` — tak pernah
+      dipakai dari `auth.user` di frontend manapun.
+- [x] Verifikasi: `tsc --noEmit` 29 error, identik dengan sebelum perubahan (recharts +
+      xterm types, tak terkait). `php artisan test`: 494 passed, 15 gagal pre-existing
+      yang sama, nol regresi.
 
 ### Langkah 7 — Gating frontend 🟢 Sonnet
 
