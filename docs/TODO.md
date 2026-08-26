@@ -354,15 +354,33 @@
       revoke invite). Total **510 passed** (+16), 15 gagal pre-existing yang sama, nol
       regresi. `tsc --noEmit` 29 error (identik), ESLint + Prettier bersih.
 
-### Langkah 9 — Audit 🟢 Sonnet
+### Langkah 9 — Audit 🟢 Sonnet ✅ (2026-08-26)
 
-- [ ] 9 action audit baru — `user.invited`, `user.invite_revoked`, `user.invite_accepted`,
+- [x] 9 action audit baru — `user.invited`, `user.invite_revoked`, `user.invite_accepted`,
       `user.role_changed`, `user.deactivated`, `user.reactivated`, `user.server_assigned`,
       `user.server_unassigned`, `user.deleted` (§12).
-- [ ] **Fix `TerminalController`** — import `AuditLogger` di `:6` tapi tak pernah dipanggil.
-      Aksi paling security-relevant di app, nol audit trail. Log di `show():20` dan
-      `auth():53` (sebelum `Cache::forget()`). ↳ menutup item "Audit khusus sesi terminal" di Fase 5.
-- [ ] `ServerController::update:244` — tambah `server.updated`.
+      *(Sudah terpasang sekalian saat membangun `UserController`/`InvitationController`/
+      `InvitationAcceptController` di Langkah 8 — dicek ulang di sini, 9/9 lengkap.)*
+- [x] **Fix `TerminalController`** — import `AuditLogger` tapi tak pernah dipanggil.
+      Aksi paling security-relevant di app, nol audit trail. Log `terminal.session_opened`
+      di `show()` (dengan properti `reconnect` — dipertahankan untuk *semua* pemanggilan,
+      termasuk reconnect JSON, karena tiap token = grant akses root shell baru; bukan
+      di-skip biar gak "spam" seperti opsi di plan §12) dan `terminal.session_verified`
+      di `auth()` **sebelum** `Cache::forget()` (payload cache bawa `user_id` si pemohon —
+      route ini dipanggil gateway tanpa user terautentikasi). ↳ menutup item
+      "Audit khusus sesi terminal" di Fase 5.
+- [x] `ServerController::update` — tambah `server.updated`. Ketahuan saat nulis test:
+      **route ini sebelumnya nol test sama sekali** (bukan cuma nol audit).
+- [x] Test: 2 test baru (`reconnecting (JSON request) is logged distinctly...` di
+      `TerminalControllerTest`, `updating server settings renames it and is audited` di
+      `ServerTest`) + assertion audit ditambah ke 2 test existing. **512 passed** (+2),
+      15 gagal pre-existing yang sama (termasuk 2 di `TerminalControllerTest` — render
+      Inertia gagal duluan sebelum sempat cek props, jadi assertion audit baru gak
+      sempat jalan di situ; dibuktikan lewat test terpisah tanpa render halaman).
+      ⚠️ Jebakan kecil: test lama pakai `'user_id' => 1` mentah di payload cache —
+      `audit_logs.user_id` FK ke `users` (SQLite test DB jalan dengan
+      `DB_FOREIGN_KEYS=true`), jadi diganti user factory asli sebelum log call baru
+      bisa nulis tanpa pelanggaran FK.
 
 ### Langkah 10 — Matriks test otorisasi 🟢 Sonnet
 

@@ -259,6 +259,14 @@ class ServerController extends Controller
 
         $server->update($attrs);
 
+        AuditLogger::log(
+            action: 'server.updated',
+            description: "Server '{$server->name}' settings updated",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: $attrs,
+        );
+
         return redirect()->route('servers.settings', $server)->with('success', 'Server settings updated.');
     }
 

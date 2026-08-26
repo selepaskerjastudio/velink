@@ -20,9 +20,21 @@ class TerminalController extends Controller
     public function show(Request $request, Server $server): Response|JsonResponse
     {
         $token = $this->generateToken($request, $server);
+        $isReconnect = $request->wantsJson();
+
+        // Every token issuance is a fresh grant of root-shell access, so all of
+        // them are logged — including reconnects — with a property to tell
+        // them apart rather than skipping reconnects and losing the record.
+        AuditLogger::log(
+            action: 'terminal.session_opened',
+            description: ($isReconnect ? 'Terminal session reconnected on' : 'Terminal session opened on')." '{$server->name}'",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: ['server_uuid' => $server->uuid, 'reconnect' => $isReconnect],
+        );
 
         // AJAX request — return just the token (for reconnect without page reload).
-        if ($request->wantsJson()) {
+        if ($isReconnect) {
             return response()->json([
                 'terminalToken' => $token,
             ]);
@@ -70,6 +82,17 @@ class TerminalController extends Controller
         if ($session['server_uuid'] !== $serverUuid) {
             return response()->json(['valid' => false], 403);
         }
+
+        // Log before forgetting the cache entry — $session carries the user_id
+        // of whoever called show() above; this is the gateway's confirmation
+        // that a PTY is about to be opened for them.
+        AuditLogger::log(
+            action: 'terminal.session_verified',
+            description: 'Gateway verified a terminal session token',
+            userId: $session['user_id'] ?? null,
+            serverId: $session['server_id'] ?? null,
+            properties: ['server_uuid' => $serverUuid],
+        );
 
         // Delete the token (single-use).
         Cache::forget("terminal:session:{$sessionToken}");

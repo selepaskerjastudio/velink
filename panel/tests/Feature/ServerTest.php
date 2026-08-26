@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AuditLog;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,4 +67,21 @@ test('the connect page renders for a server that is not yet online', function ()
     $this->get(route('servers.connect', $server))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->component('servers/connect'));
+});
+
+test('updating server settings renames it and is audited', function () {
+    $user = User::factory()->create();
+    $server = Server::factory()->create(['name' => 'old-name']);
+
+    $this->actingAs($user)
+        ->patch(route('servers.update', $server), ['name' => 'new-name'])
+        ->assertRedirect(route('servers.settings', $server));
+
+    expect($server->fresh()->name)->toBe('new-name');
+
+    // ServerController::update() previously made no AuditLogger call at all.
+    expect(AuditLog::where('action', 'server.updated')
+        ->where('user_id', $user->id)
+        ->where('server_id', $server->id)
+        ->exists())->toBeTrue();
 });
