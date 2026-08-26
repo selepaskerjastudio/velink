@@ -181,21 +181,24 @@
 > **Kirim 3+4+5 bersamaan** (3 tanpa 4 = daftar server yang semuanya 403 saat diklik;
 > 3 tanpa 5 = kebocoran WebSocket tetap terbuka).
 
-### Langkah 1 — Schema & model 🟢 Sonnet
+### Langkah 1 — Schema & model 🟢 Sonnet ✅ (2026-08-26)
 
-- [ ] Migrasi `users`: kolom `uuid`, `role` (string 20, default `member`), `is_active`.
+- [x] Migrasi `users`: kolom `uuid`, `role` (string 20, default `member`), `is_active`.
       ⚠️ **Backfill `role = 'admin'` untuk semua baris lama di `up()` yang sama** — tanpa ini
       user tunggal yang ada terkunci dari panel-nya sendiri (§4.1, hazard #1).
-- [ ] Migrasi `server_user`: `server_id`/`user_id` cascadeOnDelete, `assigned_by_user_id`
+      *(Verified: user existing ter-backfill `role=admin` + `uuid` terisi setelah migrate.)*
+- [x] Migrasi `server_user`: `server_id`/`user_id` cascadeOnDelete, `assigned_by_user_id`
       nullOnDelete, unique `[server_id, user_id]`, index `user_id` (§4.2).
-- [ ] Migrasi `user_invitations`: token disimpan sebagai `hash('sha256', $plain)`,
+- [x] Migrasi `user_invitations`: token disimpan sebagai `hash('sha256', $plain)`,
       **bukan** cast `hashed` — bcrypt bikin lookup mustahil (§4.3).
-- [ ] `User`: konstanta `ROLE_ADMIN`/`ROLE_MEMBER`, trait `HasUuidRouteKey`, cast `is_active`,
+- [x] `User`: konstanta `ROLE_ADMIN`/`ROLE_MEMBER`, trait `HasUuidRouteKey`, cast `is_active`,
       `isAdmin()`, relasi `servers()`, `canAccessServer()`.
       ⚠️ `role`/`is_active` **jangan** masuk `$fillable` — `ProfileController.php:31` pakai `fill()` (hazard #5).
-- [ ] `Server`: relasi `users()` + `scopeVisibleTo()` (`whereIn` + subquery, **bukan join**) (§4.5).
-- [ ] `UserFactory`: default `role = admin` + state `admin()`/`member()`/`inactive()`.
-- [ ] Verifikasi: `php artisan test` **harus hijau** tanpa menyentuh satu pun dari
+- [x] `Server`: relasi `users()` + `scopeVisibleTo()` (`whereIn` + subquery, **bukan join**) (§4.5).
+- [x] `UserFactory`: default `role = admin` + state `admin()`/`member()`/`inactive()`.
+- [x] Verifikasi: `php artisan test` — **452 passed, nol regresi.** 15 failure (Inertia/broadcast,
+      tak terkait auth) **sudah ada sebelum perubahan ini** — diverifikasi dengan menjalankan
+      suite yang sama di worktree `main` bersih: identik 15 gagal/452 lolos. Nol edit ke
       ~212 `actingAs()` di 36 file (hazard #11).
 
 ### Langkah 2 — Lapisan keputusan 🟢 Sonnet
