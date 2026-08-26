@@ -3,7 +3,7 @@
 use App\Http\Controllers\BackupController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth')->group(function () {
+Route::middleware('panel')->group(function () {
     Route::get('apps/{application}/backups', [BackupController::class, 'index'])->name('backups.index');
     Route::post('apps/{application}/backups', [BackupController::class, 'store'])->name('backups.store');
     Route::post('apps/{application}/backups/settings', [BackupController::class, 'updateSettings'])->name('backups.settings');

@@ -15,6 +15,28 @@ use Inertia\Response;
 
 class CronJobController extends Controller
 {
+    /**
+     * Validation rules for the `user` a cron entry runs as.
+     *
+     * A cron line executes an arbitrary command as this user, so for members it
+     * is an escalation path: without the deny-list a member on an assigned
+     * server could schedule a root command every minute, bypassing the
+     * terminal and system-user restrictions entirely. Administrators keep the
+     * unrestricted set — they already have those routes.
+     *
+     * @return list<mixed>
+     */
+    private function userRules(Request $request): array
+    {
+        $rules = ['required', 'string', 'max:32', 'regex:'.CronTemplates::USER_REGEX];
+
+        if (! $request->user()?->isAdmin()) {
+            $rules[] = Rule::notIn(CronTemplates::MEMBER_FORBIDDEN_USERS);
+        }
+
+        return $rules;
+    }
+
     public function index(Server $server): Response
     {
         return Inertia::render('servers/cron', [
@@ -46,7 +68,7 @@ class CronJobController extends Controller
                 'integer',
                 Rule::exists('applications', 'id')->where('server_id', $server->id),
             ],
-            'user' => ['required', 'string', 'max:32', 'regex:'.CronTemplates::USER_REGEX],
+            'user' => $this->userRules($request),
             'command' => ['required', 'string', 'max:1000', function ($attribute, $value, $fail) {
                 if (str_contains($value, "\n")) {
                     $fail('The command must not contain newlines.');
@@ -76,7 +98,7 @@ class CronJobController extends Controller
                 'integer',
                 Rule::exists('applications', 'id')->where('server_id', $cronJob->server_id),
             ],
-            'user' => ['required', 'string', 'max:32', 'regex:'.CronTemplates::USER_REGEX],
+            'user' => $this->userRules($request),
             'command' => ['required', 'string', 'max:1000', function ($attribute, $value, $fail) {
                 if (str_contains($value, "\n")) {
                     $fail('The command must not contain newlines.');

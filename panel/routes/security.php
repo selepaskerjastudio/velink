@@ -3,7 +3,9 @@
 use App\Http\Controllers\SecurityController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth')->group(function () {
+// Administrator-only in full: firewall and fail2ban rules govern reachability
+// of the whole server, not of any one application on it.
+Route::middleware(['panel', 'admin'])->group(function () {
     Route::get('servers/{server}/security', [SecurityController::class, 'index'])->name('security.index');
     Route::post('servers/{server}/security/firewall/rules', [SecurityController::class, 'storeRule'])->name('security.firewall.store');
     Route::delete('servers/{server}/security/firewall/{rule}', [SecurityController::class, 'destroyRule'])->name('security.firewall.destroy');

@@ -3,7 +3,7 @@
 use App\Http\Controllers\WorkerController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth')->group(function () {
+Route::middleware('panel')->group(function () {
     Route::get('servers/{server}/workers', [WorkerController::class, 'serverIndex'])->name('servers.workers');
     Route::get('apps/{application}/workers', [WorkerController::class, 'index'])->name('workers.index');
     Route::post('apps/{application}/workers', [WorkerController::class, 'store'])->name('workers.store');

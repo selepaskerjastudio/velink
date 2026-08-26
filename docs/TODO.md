@@ -214,25 +214,40 @@
       `visibleTo()` untuk admin/member/member-tanpa-assignment. 459 passed total, 15 gagal
       pre-existing yang sama seperti Langkah 1, nol regresi.)*
 
-### Langkah 3 — Penegakan 🔴 **Opus** — langkah paling rawan
+### Langkah 3 — Penegakan 🔴 **Opus** ✅ (2026-08-26)
 
-- [ ] Middleware `EnforceServerScope` — resolve server dari route parameter,
+- [x] Middleware `EnforceServerScope` — resolve server dari route parameter,
       deny-by-default untuk route tak terklasifikasi, 403 (bukan 404) (§6.1).
-- [ ] Middleware `EnsureUserIsActive` — **wajib**, bukan opsional: `SESSION_DRIVER=redis`
+- [x] Middleware `EnsureUserIsActive` — **wajib**, bukan opsional: `SESSION_DRIVER=redis`
       bikin force-logout via hapus baris `sessions` mustahil (hazard #8). Blokir juga di `LoginRequest`.
-- [ ] Middleware `EnsureUserIsAdmin` + alias `admin`.
-- [ ] `bootstrap/app.php`: group `panel`, alias `admin`, rantai `appendToPriorityList`.
+      *(Ditolak juga saat login supaya tak pernah dapat session sedetik pun.)*
+- [x] Middleware `EnsureUserIsAdmin` + alias `admin`.
+- [x] `bootstrap/app.php`: group `panel`, alias `admin`, rantai `appendToPriorityList`.
       ⚠️ `EnforceServerScope` **harus** jalan setelah `SubstituteBindings` — kalau tidak,
       `resolveServer()` selalu `null` → lockout total member yang tak terlihat admin (hazard #2).
-- [ ] 16 file route: `Route::middleware('auth')` → `Route::middleware('panel')`.
-- [ ] Carve-out `admin`: `servers.create|store|terminal|provision|restart|regenerate-token|destroy`,
+      *(Diverifikasi: `SubstituteBindings` ada di group `web` yang jalan sebelum route middleware,
+      dan `SortedMiddleware` cuma meng-hoist middleware yang ada di priority map ke atas —
+      middleware custom tak pernah dipindah turun. `appendToPriorityList` tetap dipasang
+      sebagai pengunci. **Bukti fungsional:** test "member can reach a server assigned to them"
+      assert 200 — kalau binding belum jalan, `servers.show` pasti 403 lewat cabang deny.)*
+- [x] 16 file route: `Route::middleware('auth')` → `Route::middleware('panel')`.
+      *(113 route panel, nol yang masih pakai bare `auth`.)*
+- [x] Carve-out `admin`: `servers.create|store|terminal|provision|restart|regenerate-token|destroy`,
       seluruh `system-users.*` + `security.*`, `server.ssh-keys.deploy|revoke` (§6.4).
-- [ ] Batasi cron user untuk member — `CronTemplates::USER_REGEX` sekarang meloloskan `root`
+      *(20 route. ⚠️ Ditandai inline per-route di `servers.php`, bukan group — `servers/create`
+      harus tetap terdaftar sebelum `servers/{server}`, kalau tidak `{server}` menangkapnya
+      duluan dan gagal binding pada uuid='create'.)*
+- [x] Batasi cron user untuk member — `CronTemplates::USER_REGEX` sekarang meloloskan `root`
       dengan `command` bebas = root RCE. Tambah `MEMBER_FORBIDDEN_USERS`, terapkan di
       `store()` **dan** `update()` (§6.5).
-- [ ] `RouteCoverageTest` — satu-satunya yang menangkap route baru yang lupa diklasifikasi,
+- [x] `RouteCoverageTest` — satu-satunya yang menangkap route baru yang lupa diklasifikasi,
       karena admin early-return bikin lubangnya tak terlihat developer (hazard #3).
-- [ ] Beri nama 3 route tanpa nama: `POST confirm-password`, redirect `GET settings`, `POST login` (hazard #4).
+      *(5 guard struktural: bare-`auth`, allowlist coverage, route tanpa nama, entry allowlist
+      basi, dan carve-out admin yang hilang.)*
+- [x] Beri nama 2 route tanpa nama: `POST confirm-password` → `password.confirm.store`,
+      redirect `GET settings` → `settings.redirect` (hazard #4).
+      *(`POST login` ada di group `guest`, di luar jangkauan `panel` — tak perlu diberi nama.)*
+- [x] Verifikasi: **482 passed** (+23 test otorisasi), 15 gagal pre-existing yang sama, nol regresi.
 
 ### Langkah 4 — Scoping query halaman list 🟢 Sonnet
 

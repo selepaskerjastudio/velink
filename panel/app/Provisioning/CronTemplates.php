@@ -24,6 +24,27 @@ class CronTemplates
 
     public const USER_REGEX = '/^[a-z_][a-z0-9_-]*$/';
 
+    /**
+     * System accounts a member may not schedule jobs as. A cron entry runs an
+     * arbitrary command as its `user` field, so allowing `root` here would hand
+     * any member of an assigned server a root shell on a one-minute schedule —
+     * making the web-terminal and system-user restrictions meaningless.
+     * Administrators are not subject to this list.
+     *
+     * @var list<string>
+     */
+    public const MEMBER_FORBIDDEN_USERS = [
+        'root',
+        'daemon',
+        'bin',
+        'sys',
+        'sync',
+        'sudo',
+        'admin',
+        'velink-admin',
+        'www-data',
+    ];
+
     public const CRON_FILE = <<<'CONF'
         # Managed by Velink — do not edit manually.
         {{range .jobs}}{{.schedule}} {{.user}} {{.command}}

@@ -4,7 +4,7 @@ use App\Http\Controllers\ApplicationController;
 use App\Http\Controllers\DeploymentLogController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth')->group(function () {
+Route::middleware('panel')->group(function () {
     Route::get('servers/{server}/applications', [ApplicationController::class, 'serverIndex'])->name('applications.server-index');
     Route::get('servers/{server}/applications/create', [ApplicationController::class, 'create'])->name('applications.create');
     Route::post('servers/{server}/applications', [ApplicationController::class, 'store'])->name('applications.store');
