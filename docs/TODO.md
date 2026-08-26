@@ -290,18 +290,30 @@
       xterm types, tak terkait). `php artisan test`: 494 passed, 15 gagal pre-existing
       yang sama, nol regresi.
 
-### Langkah 7 — Gating frontend 🟢 Sonnet
+### Langkah 7 — Gating frontend 🟢 Sonnet ✅ (2026-08-26)
 
 > Kosmetik saja. Server yang menegakkan.
 
-- [ ] Hook `useIsAdmin()`.
-- [ ] `app-sidebar.tsx:9-30` — `adminOnly` di `NavItem`, filter di `AppSidebar`
-      (bukan di `nav-main.tsx`), tambah item `Users`.
-- [ ] `server-layout.tsx:38-58` — tandai Security/Terminal/System Users.
-      ⚠️ Filter **sebelum** `slice(0, 1)` di `:86` (§10).
-- [ ] `settings/layout.tsx:8-42` — item `Users` + filter.
-- [ ] Sembunyikan Danger Zone: `servers/connect.tsx:150,187`, `settings.tsx:213`,
-      `show.tsx:192,238,264`, tombol "Add Server" di `index.tsx`.
+- [x] Hook `useIsAdmin()` — `resources/js/hooks/use-permissions.ts`.
+- [x] `server-layout.tsx` — tandai Security/Terminal (`mainNavItems`) dan System Users
+      (`utilityNavItems`) `adminOnly: true`, filter.
+      ⚠️ Filter diterapkan **sebelum** `slice(0, 1)` (mode `isPending`) supaya index 0
+      tetap Dashboard baik member maupun admin (§10).
+- [x] Sembunyikan aksi admin-only: `servers/connect.tsx` (regenerate-token inline +
+      Danger Zone), `servers/settings.tsx` (kartu Server Controls/restart + Danger Zone),
+      `servers/show.tsx` (regenerate-token ×2 + delete-while-pending), tombol
+      "Connect a New Server" ×2 di `servers/index.tsx`. Semua dengan pesan pengganti
+      ("Ask an administrator...") alih-alih dihilangkan diam-diam.
+- [ ] `app-sidebar.tsx` — `adminOnly` di `NavItem` + item `Users`. **Ditunda ke Langkah 8**:
+      sidebar sekarang (Servers/Web Apps/Git Credentials/Audit Log) tak punya item
+      admin-only, dan menambah link `Users` sebelum halamannya ada di Langkah 8 berarti
+      tautan mati satu langkah. `adminOnly` sudah ada di tipe `NavItem`, tinggal dipakai.
+- [ ] `settings/layout.tsx` — item `Users` + filter. **Ditunda ke Langkah 8** dengan alasan
+      sama — belum ada item admin-only lain di situ untuk difilter hari ini.
+- [x] Verifikasi: `tsc --noEmit` 29 error (identik, pre-existing), ESLint nol error baru
+      (1 `no-empty` di `show.tsx` pre-existing, sudah dikonfirmasi lewat baseline),
+      Prettier bersih di semua file yang disentuh. `php artisan test`: 494 passed,
+      15 gagal pre-existing yang sama.
 
 ### Langkah 8 — Halaman Users + invite 🟢 Sonnet (🔴 Opus untuk token & guard)
 

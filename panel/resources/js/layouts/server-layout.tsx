@@ -14,6 +14,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { type BreadcrumbItem, type SharedData } from '@/types';
+import { useIsAdmin } from '@/hooks/use-permissions';
 import echo from '@/echo';
 import { Link, router, usePage } from '@inertiajs/react';
 import { Activity, ChevronLeft, Clock, Cpu, Database, Globe, KeyRound, LayoutGrid, Layers, Loader2, ScrollText, Settings, Shield, TerminalSquare, UserCog } from 'lucide-react';
@@ -27,6 +28,7 @@ interface ServerLayoutProps {
 
 function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
     const page = usePage();
+    const isAdmin = useIsAdmin();
 
     const dashboardUrl = `/servers/${server.id}`;
 
@@ -35,21 +37,24 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
         return page.url.startsWith(url);
     };
 
+    // adminOnly items are cosmetic here — the routes themselves 403 a member
+    // regardless (see docs/ACCESS_CONTROL.md). Filtered before the isPending
+    // slice below so index 0 stays Dashboard either way.
     const mainNavItems = [
         { title: 'Dashboard', url: dashboardUrl, icon: LayoutGrid, exact: true },
         { title: 'Monitoring', url: `/servers/${server.id}/monitoring`, icon: Activity, exact: false },
         { title: 'Web Applications', url: `/servers/${server.id}/applications`, icon: Globe, exact: false },
         { title: 'Databases', url: `/servers/${server.id}/databases`, icon: Database, exact: false },
         { title: 'Services', url: `/servers/${server.id}/services`, icon: Cpu, exact: false },
-        { title: 'Security', url: `/servers/${server.id}/security`, icon: Shield, exact: false },
-        { title: 'Terminal', url: `/servers/${server.id}/terminal`, icon: TerminalSquare, exact: false },
-    ];
+        { title: 'Security', url: `/servers/${server.id}/security`, icon: Shield, exact: false, adminOnly: true },
+        { title: 'Terminal', url: `/servers/${server.id}/terminal`, icon: TerminalSquare, exact: false, adminOnly: true },
+    ].filter((item) => !item.adminOnly || isAdmin);
 
     const utilityNavItems = [
         { title: 'Cron Jobs', url: `/servers/${server.id}/cron`, icon: Clock, exact: false },
         { title: 'Workers', url: `/servers/${server.id}/workers`, icon: Layers, exact: false },
-        { title: 'System Users', url: `/servers/${server.id}/system-users`, icon: UserCog, exact: false },
-    ];
+        { title: 'System Users', url: `/servers/${server.id}/system-users`, icon: UserCog, exact: false, adminOnly: true },
+    ].filter((item) => !item.adminOnly || isAdmin);
 
     const moreNavItems = [
         { title: 'Activity Log', url: `/servers/${server.id}/activity`, icon: ScrollText, exact: false },

@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import echo from '@/echo';
+import { useIsAdmin } from '@/hooks/use-permissions';
 import ServerLayout from '@/layouts/server-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
@@ -56,6 +57,7 @@ function InstallCommandCode({ command }: { command: string }) {
 
 export default function ServerConnect({ server }: { server: ConnectServer }) {
     const { flash } = usePage<SharedData>().props;
+    const isAdmin = useIsAdmin();
 
     const tokenForm = useForm({});
     const deleteForm = useForm({});
@@ -141,7 +143,7 @@ export default function ServerConnect({ server }: { server: ConnectServer }) {
                                 <div className="ml-9 mt-2 rounded-md border bg-muted px-4 py-3">
                                     {installCommand ? (
                                         <InstallCommandCode command={installCommand} />
-                                    ) : (
+                                    ) : isAdmin ? (
                                         <p className="text-sm text-muted-foreground">
                                             The install token has expired.{' '}
                                             <button
@@ -152,6 +154,10 @@ export default function ServerConnect({ server }: { server: ConnectServer }) {
                                                 Regenerate install command
                                             </button>{' '}
                                             to get a new one.
+                                        </p>
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground">
+                                            The install token has expired. Ask an administrator to regenerate it.
                                         </p>
                                     )}
                                 </div>
@@ -169,27 +175,29 @@ export default function ServerConnect({ server }: { server: ConnectServer }) {
                     </div>
                 </div>
 
-                {/* Danger Zone */}
-                <div className="rounded-lg border border-red-200">
-                    <div className="border-b border-red-200 px-6 py-4">
-                        <h2 className="text-sm font-semibold">Danger Zone</h2>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 px-6 py-4">
-                        <div>
-                            <p className="text-sm font-medium">Permanently Delete This Server And All Of Its Content</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">All data stored in the server will be deleted and cannot be recovered.</p>
+                {/* Danger Zone — admin-only action, hidden for members */}
+                {isAdmin && (
+                    <div className="rounded-lg border border-red-200">
+                        <div className="border-b border-red-200 px-6 py-4">
+                            <h2 className="text-sm font-semibold">Danger Zone</h2>
                         </div>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            className="shrink-0"
-                            disabled={deleteForm.processing}
-                            onClick={() => deleteForm.delete(route('servers.destroy', server.id))}
-                        >
-                            Delete Server
-                        </Button>
+                        <div className="flex items-center justify-between gap-4 px-6 py-4">
+                            <div>
+                                <p className="text-sm font-medium">Permanently Delete This Server And All Of Its Content</p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">All data stored in the server will be deleted and cannot be recovered.</p>
+                            </div>
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                className="shrink-0"
+                                disabled={deleteForm.processing}
+                                onClick={() => deleteForm.delete(route('servers.destroy', server.id))}
+                            >
+                                Delete Server
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </ServerLayout>
     );

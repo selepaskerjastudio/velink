@@ -24,6 +24,8 @@ export interface NavItem {
     url: string;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    /** Hidden for non-admins. Cosmetic only — the route itself enforces this. */
+    adminOnly?: boolean;
 }
 
 export interface SharedData {
