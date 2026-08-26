@@ -6,15 +6,22 @@ use App\Models\Application;
 use App\Models\AuditLog;
 use App\Models\Deployment;
 use App\Models\Server;
-use App\Models\ServerMetric;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(): Response
+    public function __invoke(Request $request): Response
     {
-        $servers = Server::with('latestMetric')->get()->map(fn (Server $server) => [
+        $user = $request->user();
+
+        // Rebuilt per use: scopeVisibleTo() is a constraint on a fresh query,
+        // so the counts below cannot share one builder instance.
+        $visible = fn () => Server::query()->visibleTo($user);
+        $visibleIds = Server::query()->visibleTo($user)->select('servers.id');
+
+        $servers = $visible()->with('latestMetric')->get()->map(fn (Server $server) => [
             'id' => $server->uuid,
             'name' => $server->name,
             'public_ip' => $server->public_ip,
@@ -28,13 +35,20 @@ class DashboardController extends Controller
         ]);
 
         $serverCounts = [
-            'total' => Server::count(),
-            'online' => Server::where('status', 'online')->count(),
-            'offline' => Server::where('status', 'offline')->count(),
-            'provisioning' => Server::where('status', 'provisioning')->count(),
+            'total' => $visible()->count(),
+            'online' => $visible()->where('status', 'online')->count(),
+            'offline' => $visible()->where('status', 'offline')->count(),
+            'provisioning' => $visible()->where('status', 'provisioning')->count(),
         ];
 
+        // audit_logs.server_id is nullable — account-level actions (SSH keys,
+        // git credentials, Cloudflare tokens) carry no server. A member should
+        // see their own account actions alongside their servers' activity.
         $recentActivity = AuditLog::with('user:id,name')
+            ->when(! $user->isAdmin(), fn ($query) => $query->where(
+                fn ($q) => $q->whereIn('server_id', $visibleIds)
+                    ->orWhere(fn ($q2) => $q2->whereNull('server_id')->where('user_id', $user->id))
+            ))
             ->latest('id')
             ->limit(10)
             ->get()
@@ -47,6 +61,10 @@ class DashboardController extends Controller
             ]);
 
         $recentDeployments = Deployment::with(['application:id,name', 'user:id,name'])
+            ->when(! $user->isAdmin(), fn ($query) => $query->whereIn(
+                'application_id',
+                Application::query()->whereIn('server_id', $visibleIds)->select('id')
+            ))
             ->latest('id')
             ->limit(5)
             ->get()

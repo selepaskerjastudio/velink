@@ -13,13 +13,22 @@ uses(RefreshDatabase::class);
 /**
  * Helper: call an Inertia controller and extract props WITHOUT rendering Blade.
  */
-function dashboardProps(): array
+function dashboardProps(?User $user = null): array
 {
+    // The dashboard scopes its queries to the caller's visible servers, so it
+    // needs a user. Defaults to an admin, which is what these assertions
+    // (every server, every deployment) describe.
+    $user ??= User::factory()->admin()->create();
+    test()->actingAs($user);
+
+    $request = \Illuminate\Http\Request::create('/dashboard');
+    $request->setUserResolver(fn () => $user);
+
     $controller = app(\App\Http\Controllers\DashboardController::class);
 
     // Use reflection to build the Inertia response, then grab props
     // via the component/data properties (avoids Vite/Blade rendering).
-    $response = $controller->__invoke();
+    $response = $controller->__invoke($request);
 
     // Inertia\Response stores props internally — access via shared data
     // We use the LazyHeaders test helper or access props via Inertia's shared.

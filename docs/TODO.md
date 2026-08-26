@@ -249,22 +249,32 @@
       *(`POST login` ada di group `guest`, di luar jangkauan `panel` — tak perlu diberi nama.)*
 - [x] Verifikasi: **482 passed** (+23 test otorisasi), 15 gagal pre-existing yang sama, nol regresi.
 
-### Langkah 4 — Scoping query halaman list 🟢 Sonnet
+### Langkah 4 — Scoping query halaman list 🟢 Sonnet ✅ (2026-08-26)
 
-- [ ] `ServerController::index:23-25` — `->visibleTo()`, signature terima `Request`.
-- [ ] `DashboardController` — 4 query (`:16`, `:31-34`, `:37`, `:49`).
-- [ ] `AuditLogController::index:14-16` — filter **dua cabang**: `server_id` terlihat
+- [x] `ServerController::index` — `->visibleTo()`, signature terima `Request`.
+- [x] `DashboardController` — 4 query (servers, counts, recentActivity, recentDeployments).
+- [x] `AuditLogController::index` — filter **dua cabang**: `server_id` terlihat
       **atau** (`server_id IS NULL` **dan** `user_id` = dirinya). Tanpa cabang kedua,
       member tak bisa lihat aksi akunnya sendiri (hazard #7).
-- [ ] `ServerAlertController` — 3 query + null-guard `$alert->server?->uuid`.
-- [ ] `SshKeyController:24` — eager load `servers` ter-scope.
+      *(`serverIndex()` tak diubah — middleware sudah menjaga `{server}`.)*
+- [x] `ServerAlertController` — 3 query + null-guard `$alert->server?->uuid`.
+- [x] `SshKeyController` — eager load `servers` ter-scope (key yang masih ter-deploy di
+      server yang sudah di-unassign tak lagi membocorkan nama + IP-nya).
+- [x] `VisibilityScopeTest` — 7 kasus termasuk cabang `server_id IS NULL`.
+      ⚠️ **Regresi yang sempat terjadi:** menambah parameter `Request` memecahkan
+      `DashboardControllerTest` dan `ServerAlertTest`, yang memanggil controller
+      langsung tanpa HTTP. Helper keduanya diperbaiki agar mengoper `Request`
+      ber-user-resolver (default admin, sesuai asumsi assertion lama).
 
-### Langkah 5 — Broadcast channel 🔴 Opus
+### Langkah 5 — Broadcast channel 🔴 Opus ✅ (2026-08-26)
 
-- [ ] `routes/channels.php:11-13` — sekarang `return $user !== null`, membocorkan output
-      command live semua server ke semua user. Ganti dengan lookup uuid + `canAccessServer()`,
-      return `bool` ketat (§8).
-- [ ] `BroadcastChannelTest` — `POST /broadcasting/auth` ter-assign 200, tidak ter-assign 403.
+- [x] `routes/channels.php` — sebelumnya `return $user !== null`, membocorkan output
+      command live semua server ke semua user. Diganti lookup uuid + `canAccessServer()`,
+      return `bool` ketat + cek `is_active` (§8).
+- [x] `BroadcastChannelTest` — 5 kasus: member ter-assign 200, tak ter-assign 403,
+      admin 200, user nonaktif 403, uuid tak dikenal 403.
+      *(Catatan: payload wajib menyertakan `socket_id`; tanpa itu broadcaster melempar
+      saat menandatangani respons yang sudah **diizinkan** — 200 menyamar jadi 500.)*
 
 ### Langkah 6 — Inertia props 🟢 Sonnet
 
