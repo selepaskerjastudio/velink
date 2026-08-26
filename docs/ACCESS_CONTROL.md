@@ -468,7 +468,7 @@ $user->forceFill(['role' => User::ROLE_ADMIN])->save();   // user pertama selalu
 
 `InvitationAcceptController::store`: cari `where('token', hash('sha256', $token))->whereNull('accepted_at')->where('expires_at','>',now())->firstOrFail()`, buat user, `forceFill(['role' => $invite->role, 'is_active' => true])`, `$user->servers()->sync($invite->server_ids ?? [])`, tandai `accepted_at`, `event(new Registered($user))`, `Auth::login($user)`.
 
-### 11.4 🔒 Empat penjaga anti-lockout di `UserController`
+### 11.4 🔒 Penjaga anti-lockout di `UserController`
 
 ```php
 // update()
@@ -477,14 +477,9 @@ abort_if($user->is($request->user()) && $validated['is_active'] === false, 422, 
 
 // destroy()
 abort_if($user->is($request->user()), 422, 'You cannot delete your own account here.');
-
-// update() + destroy() — last-admin guard
-abort_if(
-    $user->isAdmin() && User::where('role', User::ROLE_ADMIN)->where('is_active', true)
-        ->whereKeyNot($user->getKey())->doesntExist(),
-    422, 'At least one active administrator must remain.'
-);
 ```
+
+> **Deviasi dari draft awal (yang menyebut 4 guard, termasuk cek "last admin" terpisah):** guard ke-4 dihapus setelah diimplementasikan dan terbukti **dead code**. Alasannya: acting user yang mencapai `UserController::update()`/`destroy()` **selalu** admin aktif — dijamin oleh middleware `EnsureUserIsActive` (menendang user nonaktif sebelum request sampai sini) dan `admin` (menolak non-admin). Karena itu, satu-satunya jalan mencapai nol admin aktif adalah admin terakhir bertindak ke **dirinya sendiri** — dan itu sudah diblokir mutlak oleh tiga guard di atas, tanpa syarat "apakah dia admin terakhir". Untuk aktor yang berbeda dari target, keberadaan aktor itu sendiri (admin aktif, karena lolos middleware) sudah membuktikan minimal satu admin aktif akan tersisa — cek `whereKeyNot($user->getKey())->doesntExist()` selalu `false` di jalur ini. Dikonfirmasi lewat test: admin lain **boleh** menurunkan satu-satunya admin lain (`UserManagementTest.php`, kasus "a different admin CAN demote the only other admin").
 
 **Deactivate lebih dipilih daripada delete** — mempertahankan riwayat `audit_logs.user_id`, dan ditegakkan `EnsureUserIsActive` di request berikutnya (esensial karena `SESSION_DRIVER=redis`). Delete meng-cascade pivot; `audit_logs.user_id` jadi `NULL` (`create_audit_logs_table.php:15` `nullOnDelete`) — baris log tetap hidup dengan aktor anonim.
 

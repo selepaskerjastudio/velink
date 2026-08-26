@@ -57,6 +57,15 @@ class EnforceServerScope
         'notifications.toggle',
         'notifications.destroy',
 
+        // User management — admin-only (enforced by the 'admin' middleware on
+        // these routes), and roster-wide rather than scoped to any one server.
+        'users.index',
+        'users.update',
+        'users.servers.sync',
+        'users.destroy',
+        'invitations.store',
+        'invitations.destroy',
+
         // Personal settings.
         'settings.redirect',
         'profile.edit',

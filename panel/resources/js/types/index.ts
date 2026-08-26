@@ -37,6 +37,7 @@ export interface SharedData {
         installCommand: string | null;
         plainDbUserPassword: string | null;
         plainDbUserUsername: string | null;
+        inviteUrl: string | null;
     };
     server_provisioning: boolean;
     [key: string]: unknown;
@@ -180,6 +181,29 @@ export interface User {
     is_active: boolean;
     two_factor_enabled: boolean;
     [key: string]: unknown; // This allows for additional properties...
+}
+
+export interface UserSummary {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    is_active: boolean;
+    server_ids: string[];
+    created_at: string;
+}
+
+export interface ServerOption {
+    id: string;
+    name: string;
+}
+
+export interface UserInvitationSummary {
+    id: string;
+    email: string;
+    role: UserRole;
+    invited_by: string | null;
+    expires_at: string;
 }
 
 export type WorkerStatus = 'unknown' | 'running' | 'stopped';

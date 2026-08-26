@@ -1,9 +1,10 @@
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
+import { useIsAdmin } from '@/hooks/use-permissions';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { Globe, KeyRound, Server, ShieldCheck } from 'lucide-react';
+import { Globe, KeyRound, Server, ShieldCheck, UsersIcon } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -27,9 +28,18 @@ const mainNavItems: NavItem[] = [
         url: '/audit-logs',
         icon: ShieldCheck,
     },
+    {
+        title: 'Users',
+        url: '/settings/users',
+        icon: UsersIcon,
+        adminOnly: true,
+    },
 ];
 
 export function AppSidebar() {
+    const isAdmin = useIsAdmin();
+    const items = mainNavItems.filter((item) => !item.adminOnly || isAdmin);
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -45,7 +55,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={items} />
             </SidebarContent>
 
             <SidebarFooter>

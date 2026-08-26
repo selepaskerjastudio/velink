@@ -42,6 +42,12 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
+        // Set explicitly rather than relying on the users.role column default
+        // ('member'): RegistrationEnabled only allows this endpoint to run once,
+        // for the very first account, and that account must be an admin or the
+        // panel would have no way to promote anyone.
+        $user->forceFill(['role' => User::ROLE_ADMIN])->save();
+
         event(new Registered($user));
 
         Auth::login($user);

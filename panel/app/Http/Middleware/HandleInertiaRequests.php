@@ -71,6 +71,7 @@ class HandleInertiaRequests extends Middleware
                 'installCommand' => $request->session()->get('install_command'),
                 'plainDbUserPassword' => $request->session()->get('plain_db_user_password'),
                 'plainDbUserUsername' => $request->session()->get('plain_db_user_username'),
+                'inviteUrl' => $request->session()->get('invite_url'),
             ],
             'server_provisioning' => function () use ($request): bool {
                 $server = $request->route('server');

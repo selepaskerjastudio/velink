@@ -315,16 +315,44 @@
       Prettier bersih di semua file yang disentuh. `php artisan test`: 494 passed,
       15 gagal pre-existing yang sama.
 
-### Langkah 8 — Halaman Users + invite 🟢 Sonnet (🔴 Opus untuk token & guard)
+### Langkah 8 — Halaman Users + invite 🟢 Sonnet ✅ (2026-08-26)
 
-- [ ] `routes/users.php` — `users.*` + `invitations.*` di bawah `['panel','admin']`,
-      plus jalur guest `invitations.accept` (di luar `RegistrationEnabled`, §11.1–11.2).
-- [ ] `RegisteredUserController:39` — user pertama selalu admin, eksplisit.
-- [ ] `InvitationController` — mail best-effort dalam `try/catch`, **fallback copy-link**
-      lewat flash (`MAIL_MAILER=log`, preseden `plainAgentToken`) (§11.3).
-- [ ] `InvitationAcceptController` — lookup by hash, sync server, `accepted_at`, auto-login.
-- [ ] 🔒 Empat guard anti-lockout: self-demote, self-deactivate, self-delete, last-admin (§11.4).
-- [ ] Halaman `settings/users.tsx` + dialog assignment + `auth/accept-invitation.tsx`.
+- [x] `routes/users.php` — `users.*` + `invitations.*` di bawah `['panel','admin']`,
+      plus jalur guest `invitations.accept`/`invitations.accept.store` (di luar
+      `RegistrationEnabled`, §11.1–11.2). Ditambahkan ke allowlist `EnforceServerScope`
+      (route roster-wide, bukan per-server).
+- [x] `RegisteredUserController` — user pertama selalu admin, eksplisit via `forceFill`
+      (kolom `role` default `member`, jadi tanpa ini user pertama jadi member).
+- [x] `UserInvitation` model — `hashToken()` static helper, cast `server_ids` → array.
+- [x] `InvitationController` — mail best-effort dalam `try/catch` (skip kalau
+      `mail.default === 'log'`), **fallback copy-link** lewat flash `inviteUrl`
+      (preseden `plainAgentToken`) (§11.3). Ditambah guard: email yang sudah jadi user,
+      atau sudah punya invite pending, ditolak 422.
+- [x] `InvitationAcceptController` — lookup by hash (`firstOrFail` → 404 bersih untuk
+      token invalid/expired/sudah dipakai), sync server, `accepted_at`, auto-login.
+- [x] 🔒 Guard anti-lockout: self-demote, self-deactivate, self-delete.
+      ⚠️ **Deviasi dari plan** — guard "last admin" (§11.4, poin ke-4) **dihapus setelah
+      dianalisis dan terbukti dead code**: acting user selalu admin aktif (dijamin
+      middleware `EnsureUserIsActive` + `admin`), jadi satu-satunya jalan mencapai nol
+      admin aktif adalah admin terakhir bertindak ke **diri sendiri** — yang sudah
+      diblokir mutlak oleh guard self-demote/self-deactivate/self-delete tanpa syarat
+      apa pun. Guard "last admin" tak pernah bisa ter-trigger lewat aktor berbeda
+      (aktor itu sendiri = bukti masih ada admin aktif lain). Dites eksplisit:
+      admin lain **BOLEH** menurunkan satu-satunya admin lain (`UserManagementTest`).
+- [x] Halaman `settings/users.tsx` (invite form + pending invitations + tabel user
+      dengan role select/toggle aktif/dialog assign server/delete) + `auth/accept-invitation.tsx`.
+      ⚠️ Bug tertangkap saat build: rencana awal simpan state assignment server di
+      frontend (`assignedServerIds`) tanpa data dari backend — kalau dilanjutkan,
+      buka dialog lalu save akan **menghapus semua assignment** user (array kosong
+      di-sync). Diperbaiki: `UserController::index()` sekarang eager-load
+      `servers:servers.id,uuid` dan kirim `server_ids` per user.
+- [x] Nav item `Users` (ditunda dari Langkah 7) — `app-sidebar.tsx` dan
+      `settings/layout.tsx`, filter `adminOnly`.
+- [x] Test: `FirstUserIsAdminTest` (2 kasus) + `UserManagementTest` (16 kasus — invite,
+      reject email dobel, accept dengan server pre-assigned, token expired/dipakai,
+      role+active update, 3 self-guard, cross-actor demote, delete, sync assignment,
+      revoke invite). Total **510 passed** (+16), 15 gagal pre-existing yang sama, nol
+      regresi. `tsc --noEmit` 29 error (identik), ESLint + Prettier bersih.
 
 ### Langkah 9 — Audit 🟢 Sonnet
 
