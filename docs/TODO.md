@@ -382,17 +382,47 @@
       `DB_FOREIGN_KEYS=true`), jadi diganti user factory asli sebelum log call baru
       bisa nulis tanpa pelanggaran FK.
 
-### Langkah 10 — Matriks test otorisasi 🟢 Sonnet
+### Langkah 10 — Matriks test otorisasi 🟢 Sonnet ✅ (2026-08-26)
 
-- [ ] Helper `actingAsAdmin()` / `actingAsMember(?Server)` di `tests/Pest.php`
-      (pakai `test()`, bukan `$this`).
-- [ ] `MemberServerScopeTest` — **uji kedua arah**: bisa akses yang ter-assign, tak bisa yang tidak.
-      Arah positif inilah yang memverifikasi urutan middleware (hazard #2).
-- [ ] `AdminOnlyRouteTest` — member ter-assign tetap 403 di seluruh carve-out.
-- [ ] `MemberCronRestrictionTest`, `VisibilityScopeTest`, `DeactivatedUserTest`,
-      `UserManagementTest`, `FirstUserIsAdminTest`.
-- [ ] Update test lama yang pecah: `assertInertia` + `auth` (shape props berubah), count dashboard.
-- [ ] Verifikasi manual 11 langkah (§16).
+- [x] Helper `actingAsAdmin()` / `actingAsMember(?Server)` di `tests/Pest.php`
+      (pakai `test()`, bukan `$this`). Dipakai di `AdminOnlyRouteTest` yang baru;
+      test Authorization lama (Langkah 3–9) dibiarkan pakai `User::factory()->...->create()`
+      + `actingAs()` inline apa adanya — sudah lolos, tak perlu disentuh ulang.
+- [x] `MemberServerScopeTest` — **uji kedua arah**: bisa akses yang ter-assign, tak bisa yang tidak.
+      Arah positif inilah yang memverifikasi urutan middleware (hazard #2). *(Langkah 3.)*
+- [x] `AdminOnlyRouteTest` — matriks lengkap: **ke-20 route** ber-middleware `admin`
+      (bukan cuma 7 yang di-spot-check `MemberServerScopeTest`), member ter-assign
+      tetap 403 di semuanya dalam satu test loop. Butuh record `FirewallRule`,
+      `SystemUser`, `SshKey` sungguhan biar route-model-binding lolos duluan
+      sebelum middleware `admin` sempat jalan (binding gagal = 404, bukan 403 —
+      beda arti sama sekali).
+- [x] `MemberCronRestrictionTest`, `VisibilityScopeTest`, `DeactivatedUserTest`,
+      `UserManagementTest`, `FirstUserIsAdminTest` — semua sudah ditulis inline di
+      langkah masing-masing (3, 4, 8).
+- [x] Update test lama yang pecah — sudah ditangani inline: `DashboardControllerTest`
+      + `ServerAlertTest` (Langkah 4, controller butuh `Request`).
+- [x] **Verifikasi live** terhadap Postgres + Redis + Reverb asli (bukan cuma SQLite
+      in-memory test suite) — pengganti walkthrough browser manual §16, dijalankan via
+      `php artisan serve` + curl dengan cookie jar + parsing payload Inertia asli:
+      - Redis **belum jalan** di mesin ini sebelum verifikasi — dinyalakan
+        (`redis-server --daemonize yes`), dibiarkan jalan setelahnya karena
+        `SESSION_DRIVER=redis` butuh itu untuk operasi normal, bukan cuma buat test.
+      - Server temporer (`e2e-temp-1`, `e2e-temp-2`) + user member temporer dibuat via
+        tinker, **dihapus lagi setelahnya**. User admin asli (`Onnay Okheng`, 1 server
+        `Mang Eko` dari Juni) dikonfirmasi tak tersentuh.
+      - Dashboard member: `auth.user` shape sesuai Langkah 6, `auth.can.admin=false`,
+        `servers` cuma nampilin yang ter-assign, `serverCounts.total=1`.
+      - `servers.show` ter-assign → 200; tak ter-assign → 403; `security`/`terminal`/
+        `servers.create`/`settings/users` di server ter-assign → 403 (carve-out admin
+        jalan meski di server sendiri); `applications` di server ter-assign → 200.
+      - `/broadcasting/auth`: server ter-assign → 200 dengan signature Reverb asli;
+        tak ter-assign → 403.
+      - Nonaktifkan user via tinker mid-session → request berikutnya 302 ke `/login`;
+        percobaan login ulang → 422 "This account has been deactivated."
+- [x] Verifikasi akhir: **513 passed**, 15 gagal pre-existing yang sama sejak Langkah 1
+      (Inertia/Vite manifest + broadcast, tak terkait access control). `tsc --noEmit`
+      29 error (identik sejak awal). Pint, ESLint, Prettier bersih di semua file yang
+      disentuh Fase 7.
 
 ### Follow-up (di luar scope Fase 7)
 
