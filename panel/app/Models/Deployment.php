@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Contracts\BelongsToServer;
 use App\Models\Concerns\HasUuidRouteKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Deployment extends Model
+class Deployment extends Model implements BelongsToServer
 {
     use HasFactory;
     use HasUuidRouteKey;
@@ -39,6 +40,11 @@ class Deployment extends Model
     public function application(): BelongsTo
     {
         return $this->belongsTo(Application::class);
+    }
+
+    public function owningServer(): ?Server
+    {
+        return $this->application?->server;
     }
 
     public function user(): BelongsTo

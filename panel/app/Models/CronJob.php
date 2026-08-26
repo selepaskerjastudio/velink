@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use App\Contracts\BelongsToServer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class CronJob extends Model
+class CronJob extends Model implements BelongsToServer
 {
     protected $fillable = [
         'server_id',
@@ -27,6 +28,11 @@ class CronJob extends Model
     public function server(): BelongsTo
     {
         return $this->belongsTo(Server::class);
+    }
+
+    public function owningServer(): ?Server
+    {
+        return $this->server;
     }
 
     public function application(): BelongsTo

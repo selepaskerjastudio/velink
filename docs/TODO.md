@@ -201,14 +201,18 @@
       suite yang sama di worktree `main` bersih: identik 15 gagal/452 lolos. Nol edit ke
       ~212 `actingAs()` di 36 file (hazard #11).
 
-### Langkah 2 — Lapisan keputusan 🟢 Sonnet
+### Langkah 2 — Lapisan keputusan 🟢 Sonnet ✅ (2026-08-26)
 
-- [ ] Interface `App\Contracts\BelongsToServer` (§5).
-- [ ] Implement `owningServer()` di 10 model: `Application`, `Service`, `CronJob`,
+- [x] Interface `App\Contracts\BelongsToServer` (§5).
+- [x] Implement `owningServer()` di 10 model: `Application`, `Service`, `CronJob`,
       `DatabaseInstance`, `DatabaseUser`, `SystemUser`, `FirewallRule`, `Backup`
       (`$this->server`); `DnsRecord`, `Deployment` (`$this->application?->server`).
-- [ ] `use AuthorizesRequests` di `Controller.php` (sekarang `abstract class Controller {}` kosong).
-- [ ] Unit test `scopeVisibleTo()` + `canAccessServer()`.
+- [x] `use AuthorizesRequests` di `Controller.php` (sekarang `abstract class Controller {}` kosong).
+- [x] Unit test `scopeVisibleTo()` + `canAccessServer()`.
+      *(`tests/Feature/Authorization/ServerAccessScopingTest.php` — 7 kasus: admin akses semua,
+      member akses yang ter-assign, member ditolak yang tidak ter-assign/server lain,
+      `visibleTo()` untuk admin/member/member-tanpa-assignment. 459 passed total, 15 gagal
+      pre-existing yang sama seperti Langkah 1, nol regresi.)*
 
 ### Langkah 3 — Penegakan 🔴 **Opus** — langkah paling rawan
 

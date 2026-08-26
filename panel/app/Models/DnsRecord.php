@@ -2,11 +2,12 @@
 
 namespace App\Models;
 
+use App\Contracts\BelongsToServer;
 use App\Models\Concerns\HasUuidRouteKey;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class DnsRecord extends Model
+class DnsRecord extends Model implements BelongsToServer
 {
     use HasUuidRouteKey;
 
@@ -34,6 +35,11 @@ class DnsRecord extends Model
     public function application(): BelongsTo
     {
         return $this->belongsTo(Application::class);
+    }
+
+    public function owningServer(): ?Server
+    {
+        return $this->application?->server;
     }
 
     /**
