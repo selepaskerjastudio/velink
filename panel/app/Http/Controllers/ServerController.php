@@ -17,10 +17,11 @@ use Inertia\Response;
 
 class ServerController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         return Inertia::render('servers/index', [
             'servers' => Server::query()
+                ->visibleTo($request->user())
                 ->orderBy('name')
                 ->get(['uuid', 'name', 'hostname', 'public_ip', 'private_ip', 'os', 'status', 'agent_version', 'last_seen_at'])
                 ->map(fn (Server $s) => [
@@ -257,6 +258,14 @@ class ServerController extends Controller
         }
 
         $server->update($attrs);
+
+        AuditLogger::log(
+            action: 'server.updated',
+            description: "Server '{$server->name}' settings updated",
+            userId: $request->user()->id,
+            serverId: $server->id,
+            properties: $attrs,
+        );
 
         return redirect()->route('servers.settings', $server)->with('success', 'Server settings updated.');
     }

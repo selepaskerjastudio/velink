@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useIsAdmin } from '@/hooks/use-permissions';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type Server } from '@/types';
 import { Head, Link } from '@inertiajs/react';
@@ -49,6 +50,7 @@ function ServerAvatar({ name, status, size = 'md' }: { name: string; status: str
 const RECENTLY_VIEWED_KEY = 'velink:recently-viewed';
 
 export default function ServersIndex({ servers }: { servers: Server[] }) {
+    const isAdmin = useIsAdmin();
     const [search, setSearch] = useState('');
     const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
 
@@ -121,12 +123,14 @@ export default function ServersIndex({ servers }: { servers: Server[] }) {
                             className="pl-9"
                         />
                     </div>
-                    <Button asChild>
-                        <Link href={route('servers.create')}>
-                            <PlusIcon className="size-4" />
-                            Connect a New Server
-                        </Link>
-                    </Button>
+                    {isAdmin && (
+                        <Button asChild>
+                            <Link href={route('servers.create')}>
+                                <PlusIcon className="size-4" />
+                                Connect a New Server
+                            </Link>
+                        </Button>
+                    )}
                 </div>
 
                 {/* Server Table */}
@@ -136,13 +140,17 @@ export default function ServersIndex({ servers }: { servers: Server[] }) {
                             <SearchIcon className="text-muted-foreground size-6" />
                         </div>
                         <p className="font-medium">No servers yet</p>
-                        <p className="text-muted-foreground text-sm">Add your first server to get started.</p>
-                        <Button asChild className="mt-1">
-                            <Link href={route('servers.create')}>
-                                <PlusIcon className="size-4" />
-                                Connect a New Server
-                            </Link>
-                        </Button>
+                        <p className="text-muted-foreground text-sm">
+                            {isAdmin ? 'Add your first server to get started.' : 'Ask an administrator to add a server, or to assign you to one.'}
+                        </p>
+                        {isAdmin && (
+                            <Button asChild className="mt-1">
+                                <Link href={route('servers.create')}>
+                                    <PlusIcon className="size-4" />
+                                    Connect a New Server
+                                </Link>
+                            </Button>
+                        )}
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="border-border flex flex-col items-center gap-2 rounded-lg border py-12 text-center">

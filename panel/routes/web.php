@@ -29,7 +29,7 @@ Route::get('install/bin/{file}', function (string $file) {
 // Called by the installer (token-authenticated) to arm full-stack provisioning.
 Route::post('install/provision', [InstallController::class, 'provision'])->name('install.provision');
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware('panel')->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
     Route::get('github/repos', [GitHubRepoController::class, 'search'])->name('github.repos');
@@ -40,6 +40,7 @@ Route::middleware(['auth'])->group(function () {
 });
 
 require __DIR__.'/settings.php';
+require __DIR__.'/users.php';
 require __DIR__.'/auth.php';
 require __DIR__.'/servers.php';
 require __DIR__.'/applications.php';

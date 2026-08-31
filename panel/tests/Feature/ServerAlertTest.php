@@ -256,8 +256,14 @@ test('alerts endpoint returns active alerts', function () {
         'resolved_at' => now()->subHour(),
     ]);
 
+    // The alerts list is scoped to the caller's visible servers, so it needs a
+    // user. An admin sees every server, which is what these assertions expect.
+    $admin = \App\Models\User::factory()->admin()->create();
+    $request = \Illuminate\Http\Request::create('/alerts');
+    $request->setUserResolver(fn () => $admin);
+
     $controller = new \App\Http\Controllers\ServerAlertController;
-    $response = $controller->index();
+    $response = $controller->index($request);
 
     $reflection = new \ReflectionClass($response);
     $propsProp = $reflection->getProperty('props');

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Contracts\BelongsToServer;
 use App\Models\Concerns\HasUuidRouteKey;
 use App\Provisioning\PhpSettings;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
-class Application extends Model
+class Application extends Model implements BelongsToServer
 {
     use HasFactory;
     use HasUuidRouteKey;
@@ -75,6 +76,11 @@ class Application extends Model
     public function server(): BelongsTo
     {
         return $this->belongsTo(Server::class);
+    }
+
+    public function owningServer(): ?Server
+    {
+        return $this->server;
     }
 
     public function gitCredential(): BelongsTo

@@ -2,10 +2,11 @@
 
 namespace App\Models;
 
+use App\Contracts\BelongsToServer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Service extends Model
+class Service extends Model implements BelongsToServer
 {
     protected $fillable = [
         'server_id',
@@ -29,6 +30,11 @@ class Service extends Model
     public function server(): BelongsTo
     {
         return $this->belongsTo(Server::class);
+    }
+
+    public function owningServer(): ?Server
+    {
+        return $this->server;
     }
 
     public function application(): BelongsTo

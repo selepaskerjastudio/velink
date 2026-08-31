@@ -1,11 +1,15 @@
 <?php
 
+use App\Http\Middleware\EnforceServerScope;
+use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\VerifyGatewaySecret;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -33,6 +37,28 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
+
+        $middleware->alias([
+            'admin' => EnsureUserIsAdmin::class,
+        ]);
+
+        // Every authenticated browser route uses this group instead of bare
+        // 'auth', so a route added to an existing file inherits access scoping
+        // by default rather than opting into it.
+        $middleware->group('panel', [
+            'auth',
+            EnsureUserIsActive::class,
+            EnforceServerScope::class,
+        ]);
+
+        // EnforceServerScope inspects bound route models, so it must run after
+        // SubstituteBindings. Route middleware already sits after the web group
+        // (where SubstituteBindings lives) and the sorter only ever hoists
+        // priority-mapped middleware upward, so the natural order is correct —
+        // these entries pin it against future reordering.
+        $middleware->appendToPriorityList(SubstituteBindings::class, EnsureUserIsActive::class);
+        $middleware->appendToPriorityList(EnsureUserIsActive::class, EnforceServerScope::class);
+        $middleware->appendToPriorityList(EnforceServerScope::class, EnsureUserIsAdmin::class);
 
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',

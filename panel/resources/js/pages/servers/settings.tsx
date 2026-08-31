@@ -4,6 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useIsAdmin } from '@/hooks/use-permissions';
 import ServerLayout from '@/layouts/server-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
@@ -25,6 +26,7 @@ export default function ServerSettings({
     };
     edgeProxyAvailable?: boolean;
 }) {
+    const isAdmin = useIsAdmin();
     const nameForm = useForm({ name: server.name, uses_edge_proxy: server.uses_edge_proxy });
     const restartForm = useForm({});
     const deleteForm = useForm({});
@@ -121,107 +123,111 @@ export default function ServerSettings({
                     </CardFooter>
                 </Card>
 
-                {/* Server Controls */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Server Controls</CardTitle>
-                        <CardDescription>Perform administrative actions on this server.</CardDescription>
-                    </CardHeader>
-                    <CardFooter className="flex items-center gap-4">
-                        <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
-                            <DialogTrigger asChild>
-                                <Button variant="outline" size="sm" disabled={serverOffline || restartForm.processing}>
-                                    Restart Server
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Restart server</DialogTitle>
-                                    <DialogDescription>
-                                        This will reboot <strong>{server.name}</strong>. All active connections will be disconnected briefly while the
-                                        server restarts.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setRestartOpen(false)}>
-                                        Cancel
+                {/* Server Controls — admin-only: a reboot takes down every application on the box */}
+                {isAdmin && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Server Controls</CardTitle>
+                            <CardDescription>Perform administrative actions on this server.</CardDescription>
+                        </CardHeader>
+                        <CardFooter className="flex items-center gap-4">
+                            <Dialog open={restartOpen} onOpenChange={setRestartOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm" disabled={serverOffline || restartForm.processing}>
+                                        Restart Server
                                     </Button>
-                                    <Button
-                                        variant="destructive"
-                                        disabled={restartForm.processing}
-                                        onClick={() =>
-                                            restartForm.post(route('servers.restart', server.id), {
-                                                onSuccess: () => setRestartOpen(false),
-                                            })
-                                        }
-                                    >
-                                        Restart
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                        {serverOffline && <p className="text-muted-foreground text-sm">Server must be online to send a restart command.</p>}
-                    </CardFooter>
-                </Card>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Restart server</DialogTitle>
+                                        <DialogDescription>
+                                            This will reboot <strong>{server.name}</strong>. All active connections will be disconnected briefly while
+                                            the server restarts.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setRestartOpen(false)}>
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            disabled={restartForm.processing}
+                                            onClick={() =>
+                                                restartForm.post(route('servers.restart', server.id), {
+                                                    onSuccess: () => setRestartOpen(false),
+                                                })
+                                            }
+                                        >
+                                            Restart
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                            {serverOffline && <p className="text-muted-foreground text-sm">Server must be online to send a restart command.</p>}
+                        </CardFooter>
+                    </Card>
+                )}
 
-                {/* Danger Zone */}
-                <Card className="border-destructive/40">
-                    <CardHeader>
-                        <CardTitle>Danger zone</CardTitle>
-                        <CardDescription>Permanently delete this server and all associated data.</CardDescription>
-                    </CardHeader>
-                    <CardFooter>
-                        <Dialog
-                            open={deleteOpen}
-                            onOpenChange={(open) => {
-                                setDeleteOpen(open);
-                                setDeleteConfirm('');
-                            }}
-                        >
-                            <DialogTrigger asChild>
-                                <Button variant="destructive" size="sm">
-                                    Delete server
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Delete server</DialogTitle>
-                                    <DialogDescription>
-                                        This will permanently delete <strong>{server.name}</strong> and all its applications, databases, services, and
-                                        jobs. This action cannot be undone.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <div className="grid gap-2 py-2">
-                                    <Label htmlFor="delete-confirm">
-                                        Type <strong>DELETE</strong> to confirm
-                                    </Label>
-                                    <Input
-                                        id="delete-confirm"
-                                        value={deleteConfirm}
-                                        onChange={(e) => setDeleteConfirm(e.target.value)}
-                                        placeholder="DELETE"
-                                    />
-                                </div>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setDeleteOpen(false)}>
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        variant="destructive"
-                                        disabled={deleteConfirm !== 'DELETE' || deleteForm.processing}
-                                        onClick={() =>
-                                            deleteForm.delete(route('servers.destroy', server.id), {
-                                                onSuccess: () => setDeleteOpen(false),
-                                            })
-                                        }
-                                    >
+                {/* Danger Zone — admin-only */}
+                {isAdmin && (
+                    <Card className="border-destructive/40">
+                        <CardHeader>
+                            <CardTitle>Danger zone</CardTitle>
+                            <CardDescription>Permanently delete this server and all associated data.</CardDescription>
+                        </CardHeader>
+                        <CardFooter>
+                            <Dialog
+                                open={deleteOpen}
+                                onOpenChange={(open) => {
+                                    setDeleteOpen(open);
+                                    setDeleteConfirm('');
+                                }}
+                            >
+                                <DialogTrigger asChild>
+                                    <Button variant="destructive" size="sm">
                                         Delete server
                                     </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    </CardFooter>
-                </Card>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Delete server</DialogTitle>
+                                        <DialogDescription>
+                                            This will permanently delete <strong>{server.name}</strong> and all its applications, databases, services,
+                                            and jobs. This action cannot be undone.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="grid gap-2 py-2">
+                                        <Label htmlFor="delete-confirm">
+                                            Type <strong>DELETE</strong> to confirm
+                                        </Label>
+                                        <Input
+                                            id="delete-confirm"
+                                            value={deleteConfirm}
+                                            onChange={(e) => setDeleteConfirm(e.target.value)}
+                                            placeholder="DELETE"
+                                        />
+                                    </div>
+                                    <DialogFooter>
+                                        <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            disabled={deleteConfirm !== 'DELETE' || deleteForm.processing}
+                                            onClick={() =>
+                                                deleteForm.delete(route('servers.destroy', server.id), {
+                                                    onSuccess: () => setDeleteOpen(false),
+                                                })
+                                            }
+                                        >
+                                            Delete server
+                                        </Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </CardFooter>
+                    </Card>
+                )}
             </div>
         </ServerLayout>
     );

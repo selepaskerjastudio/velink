@@ -49,6 +49,19 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // A deactivated account must not get a session at all. EnsureUserIsActive
+        // would terminate it on the next request anyway, but denying it here
+        // avoids handing out a briefly-valid session in the first place.
+        if (! Auth::user()->is_active) {
+            Auth::guard('web')->logout();
+
+            RateLimiter::hit($this->throttleKey());
+
+            throw ValidationException::withMessages([
+                'email' => 'This account has been deactivated.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 

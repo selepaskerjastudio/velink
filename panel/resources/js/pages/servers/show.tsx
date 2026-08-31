@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import echo from '@/echo';
+import { useIsAdmin } from '@/hooks/use-permissions';
 import ServerLayout from '@/layouts/server-layout';
 import {
     type AgentJob,
@@ -111,6 +112,7 @@ export default function ServersShow({
     counts: Counts;
 }) {
     const { flash } = usePage<SharedData>().props;
+    const isAdmin = useIsAdmin();
     const [liveStatus, setLiveStatus] = useState(server.status);
 
     useEffect(() => setLiveStatus(server.status), [server.status]);
@@ -181,20 +183,23 @@ export default function ServersShow({
                         <CardHeader>
                             <CardTitle>Agent not connected</CardTitle>
                             <CardDescription>
-                                This server has no active agent connection. Install the agent or regenerate the token.
+                                This server has no active agent connection.{' '}
+                                {isAdmin ? 'Install the agent or regenerate the token.' : 'Ask an administrator to install the agent or regenerate the token.'}
                             </CardDescription>
                         </CardHeader>
-                        <CardFooter className="flex flex-col items-start gap-2">
-                            <Button
-                                variant="destructive"
-                                size="sm"
-                                disabled={tokenForm.processing}
-                                onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
-                            >
-                                Regenerate install command
-                            </Button>
-                            <p className="text-muted-foreground text-xs">This will invalidate the existing agent token.</p>
-                        </CardFooter>
+                        {isAdmin && (
+                            <CardFooter className="flex flex-col items-start gap-2">
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    disabled={tokenForm.processing}
+                                    onClick={() => tokenForm.post(route('servers.regenerate-token', server.id))}
+                                >
+                                    Regenerate install command
+                                </Button>
+                                <p className="text-muted-foreground text-xs">This will invalidate the existing agent token.</p>
+                            </CardFooter>
+                        )}
                     </Card>
                 )}
 
@@ -215,7 +220,7 @@ export default function ServersShow({
                     </Alert>
                 )}
 
-                {isPending && (
+                {isPending && isAdmin && (
                     <div className="mt-2 flex justify-start">
                         <Dialog>
                             <DialogTrigger asChild>
@@ -255,7 +260,7 @@ export default function ServersShow({
                             {server.os && <span className="text-muted-foreground">{server.os}</span>}
                             {server.agent_version && <span className="text-muted-foreground">Agent {server.agent_version}</span>}
                             {server.last_seen_at && <span className="text-muted-foreground">Seen: {server.last_seen_at}</span>}
-                            {!isOnline && (
+                            {!isOnline && isAdmin && (
                                 <Button
                                     variant="link"
                                     size="sm"

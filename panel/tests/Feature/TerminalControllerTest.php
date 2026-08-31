@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AuditLog;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,16 +32,35 @@ test('the terminal page generates a one-time session token', function () {
             ->has('systemUsers')
             ->where('terminalToken', fn ($token) => filled($token) && Cache::get("terminal:session:{$token}") !== null)
         );
+
+    // Opening a terminal is a root-shell grant — TerminalController used to
+    // import AuditLogger without ever calling it, leaving the most
+    // security-relevant action in the app with no audit trail at all.
+    expect(AuditLog::where('action', 'terminal.session_opened')
+        ->where('user_id', $user->id)
+        ->where('server_id', $server->id)
+        ->exists())->toBeTrue();
+});
+
+test('reconnecting (JSON request) is logged distinctly from the initial page load', function () {
+    $user = User::factory()->create();
+    $server = Server::factory()->online()->create();
+
+    $this->actingAs($user)->getJson(route('servers.terminal', $server))->assertOk();
+
+    $log = AuditLog::where('action', 'terminal.session_opened')->where('user_id', $user->id)->firstOrFail();
+    expect($log->properties['reconnect'])->toBeTrue();
 });
 
 test('terminal auth validates a valid session token', function () {
+    $user = User::factory()->create();
     $server = Server::factory()->online()->create();
     $token = fake()->uuid();
 
     Cache::put("terminal:session:{$token}", [
         'server_uuid' => $server->uuid,
         'server_id' => $server->id,
-        'user_id' => 1,
+        'user_id' => $user->id,
     ], 60);
 
     $response = $this->withHeaders(['X-Gateway-Secret' => config('services.gateway.secret', 'test-gateway-secret')])
@@ -54,6 +74,13 @@ test('terminal auth validates a valid session token', function () {
 
     // Token is single-use — deleted after auth.
     expect(Cache::get("terminal:session:{$token}"))->toBeNull();
+
+    // The gateway's confirmation that a PTY is about to open is logged too,
+    // attributed to the user who requested it (carried in the cached session).
+    expect(AuditLog::where('action', 'terminal.session_verified')
+        ->where('user_id', $user->id)
+        ->where('server_id', $server->id)
+        ->exists())->toBeTrue();
 });
 
 test('terminal auth rejects an expired or invalid token', function () {

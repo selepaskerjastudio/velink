@@ -4,7 +4,7 @@ use App\Http\Controllers\CloudflareTokenController;
 use App\Http\Controllers\DnsRecordController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth')->group(function () {
+Route::middleware('panel')->group(function () {
     // Account-scoped Cloudflare token management.
     Route::get('settings/cloudflare', [CloudflareTokenController::class, 'index'])->name('cloudflare.index');
     Route::post('settings/cloudflare', [CloudflareTokenController::class, 'store'])->name('cloudflare.store');

@@ -1,5 +1,10 @@
 <?php
 
+use App\Models\Server;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -11,8 +16,8 @@
 |
 */
 
-pest()->extend(Tests\TestCase::class)
-    ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
     ->in('Feature');
 
 /*
@@ -41,7 +46,24 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+function actingAsAdmin(array $attributes = []): User
 {
-    // ..
+    $user = User::factory()->admin()->create($attributes);
+    test()->actingAs($user);
+
+    return $user;
+}
+
+/** A member, optionally assigned to $server. */
+function actingAsMember(?Server $server = null, array $attributes = []): User
+{
+    $user = User::factory()->member()->create($attributes);
+
+    if ($server) {
+        $user->servers()->attach($server);
+    }
+
+    test()->actingAs($user);
+
+    return $user;
 }

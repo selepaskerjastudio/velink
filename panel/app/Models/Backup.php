@@ -2,11 +2,12 @@
 
 namespace App\Models;
 
+use App\Contracts\BelongsToServer;
 use App\Models\Concerns\HasUuidRouteKey;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Backup extends Model
+class Backup extends Model implements BelongsToServer
 {
     use HasUuidRouteKey;
 
@@ -51,5 +52,10 @@ class Backup extends Model
     public function server(): BelongsTo
     {
         return $this->belongsTo(Server::class);
+    }
+
+    public function owningServer(): ?Server
+    {
+        return $this->server;
     }
 }

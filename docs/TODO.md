@@ -120,7 +120,8 @@
 - [x] 🔴 **Opus** — Web terminal: agent buka PTY (`creack/pty`) ↔ Gateway ↔ xterm.js (multiplex channel).
       *(PR #19 — Direct gateway WebSocket. Browser ↔ gateway `/terminal/connect` ↔ agent PTY.
       User-selectable shell user (root/velink/custom). `runuser` untuk switch user tanpa password.)*
-- [ ] Audit khusus sesi terminal.
+- [ ] Audit khusus sesi terminal. ↳ dikerjakan di **Fase 7 langkah 9** (`TerminalController`
+      meng-import `AuditLogger` tapi tak pernah memanggilnya).
 
 ## Fase 6 — Parity RunCloud (UI/UX + Monitoring) 🟢 Sonnet
 
@@ -169,6 +170,267 @@
     *(`applications/show.tsx` SSL card → `applications.ssl`. HTTP-01 + DNS-01 (Cloudflare) PR #15.)*
 - [x] App detail: NGINX Config editor.
     *(2026-06-23 — `ApplicationController::nginxConfig` + test `NginxConfigControllerTest`, `applications/show.tsx` section "NGINX Config".)*
+
+## Fase 7 — Access Control (role + scoping per-server) 🔴 Opus untuk penegakan
+
+> Rencana lengkap: [`ACCESS_CONTROL.md`](./ACCESS_CONTROL.md). Nomor seksi (§) merujuk ke sana.
+> Keputusan: dua role (`admin`/`member`), scoping **per-server** lewat pivot `server_user`,
+> ditegakkan satu middleware choke point — bukan RBAC granular ([`PRD.md`](./PRD.md) §3).
+>
+> **Kirim 1+2 bersamaan** (schema tanpa penegakan itu inert).
+> **Kirim 3+4+5 bersamaan** (3 tanpa 4 = daftar server yang semuanya 403 saat diklik;
+> 3 tanpa 5 = kebocoran WebSocket tetap terbuka).
+
+### Langkah 1 — Schema & model 🟢 Sonnet ✅ (2026-08-26)
+
+- [x] Migrasi `users`: kolom `uuid`, `role` (string 20, default `member`), `is_active`.
+      ⚠️ **Backfill `role = 'admin'` untuk semua baris lama di `up()` yang sama** — tanpa ini
+      user tunggal yang ada terkunci dari panel-nya sendiri (§4.1, hazard #1).
+      *(Verified: user existing ter-backfill `role=admin` + `uuid` terisi setelah migrate.)*
+- [x] Migrasi `server_user`: `server_id`/`user_id` cascadeOnDelete, `assigned_by_user_id`
+      nullOnDelete, unique `[server_id, user_id]`, index `user_id` (§4.2).
+- [x] Migrasi `user_invitations`: token disimpan sebagai `hash('sha256', $plain)`,
+      **bukan** cast `hashed` — bcrypt bikin lookup mustahil (§4.3).
+- [x] `User`: konstanta `ROLE_ADMIN`/`ROLE_MEMBER`, trait `HasUuidRouteKey`, cast `is_active`,
+      `isAdmin()`, relasi `servers()`, `canAccessServer()`.
+      ⚠️ `role`/`is_active` **jangan** masuk `$fillable` — `ProfileController.php:31` pakai `fill()` (hazard #5).
+- [x] `Server`: relasi `users()` + `scopeVisibleTo()` (`whereIn` + subquery, **bukan join**) (§4.5).
+- [x] `UserFactory`: default `role = admin` + state `admin()`/`member()`/`inactive()`.
+- [x] Verifikasi: `php artisan test` — **452 passed, nol regresi.** 15 failure (Inertia/broadcast,
+      tak terkait auth) **sudah ada sebelum perubahan ini** — diverifikasi dengan menjalankan
+      suite yang sama di worktree `main` bersih: identik 15 gagal/452 lolos. Nol edit ke
+      ~212 `actingAs()` di 36 file (hazard #11).
+
+### Langkah 2 — Lapisan keputusan 🟢 Sonnet ✅ (2026-08-26)
+
+- [x] Interface `App\Contracts\BelongsToServer` (§5).
+- [x] Implement `owningServer()` di 10 model: `Application`, `Service`, `CronJob`,
+      `DatabaseInstance`, `DatabaseUser`, `SystemUser`, `FirewallRule`, `Backup`
+      (`$this->server`); `DnsRecord`, `Deployment` (`$this->application?->server`).
+- [x] `use AuthorizesRequests` di `Controller.php` (sekarang `abstract class Controller {}` kosong).
+- [x] Unit test `scopeVisibleTo()` + `canAccessServer()`.
+      *(`tests/Feature/Authorization/ServerAccessScopingTest.php` — 7 kasus: admin akses semua,
+      member akses yang ter-assign, member ditolak yang tidak ter-assign/server lain,
+      `visibleTo()` untuk admin/member/member-tanpa-assignment. 459 passed total, 15 gagal
+      pre-existing yang sama seperti Langkah 1, nol regresi.)*
+
+### Langkah 3 — Penegakan 🔴 **Opus** ✅ (2026-08-26)
+
+- [x] Middleware `EnforceServerScope` — resolve server dari route parameter,
+      deny-by-default untuk route tak terklasifikasi, 403 (bukan 404) (§6.1).
+- [x] Middleware `EnsureUserIsActive` — **wajib**, bukan opsional: `SESSION_DRIVER=redis`
+      bikin force-logout via hapus baris `sessions` mustahil (hazard #8). Blokir juga di `LoginRequest`.
+      *(Ditolak juga saat login supaya tak pernah dapat session sedetik pun.)*
+- [x] Middleware `EnsureUserIsAdmin` + alias `admin`.
+- [x] `bootstrap/app.php`: group `panel`, alias `admin`, rantai `appendToPriorityList`.
+      ⚠️ `EnforceServerScope` **harus** jalan setelah `SubstituteBindings` — kalau tidak,
+      `resolveServer()` selalu `null` → lockout total member yang tak terlihat admin (hazard #2).
+      *(Diverifikasi: `SubstituteBindings` ada di group `web` yang jalan sebelum route middleware,
+      dan `SortedMiddleware` cuma meng-hoist middleware yang ada di priority map ke atas —
+      middleware custom tak pernah dipindah turun. `appendToPriorityList` tetap dipasang
+      sebagai pengunci. **Bukti fungsional:** test "member can reach a server assigned to them"
+      assert 200 — kalau binding belum jalan, `servers.show` pasti 403 lewat cabang deny.)*
+- [x] 16 file route: `Route::middleware('auth')` → `Route::middleware('panel')`.
+      *(113 route panel, nol yang masih pakai bare `auth`.)*
+- [x] Carve-out `admin`: `servers.create|store|terminal|provision|restart|regenerate-token|destroy`,
+      seluruh `system-users.*` + `security.*`, `server.ssh-keys.deploy|revoke` (§6.4).
+      *(20 route. ⚠️ Ditandai inline per-route di `servers.php`, bukan group — `servers/create`
+      harus tetap terdaftar sebelum `servers/{server}`, kalau tidak `{server}` menangkapnya
+      duluan dan gagal binding pada uuid='create'.)*
+- [x] Batasi cron user untuk member — `CronTemplates::USER_REGEX` sekarang meloloskan `root`
+      dengan `command` bebas = root RCE. Tambah `MEMBER_FORBIDDEN_USERS`, terapkan di
+      `store()` **dan** `update()` (§6.5).
+- [x] `RouteCoverageTest` — satu-satunya yang menangkap route baru yang lupa diklasifikasi,
+      karena admin early-return bikin lubangnya tak terlihat developer (hazard #3).
+      *(5 guard struktural: bare-`auth`, allowlist coverage, route tanpa nama, entry allowlist
+      basi, dan carve-out admin yang hilang.)*
+- [x] Beri nama 2 route tanpa nama: `POST confirm-password` → `password.confirm.store`,
+      redirect `GET settings` → `settings.redirect` (hazard #4).
+      *(`POST login` ada di group `guest`, di luar jangkauan `panel` — tak perlu diberi nama.)*
+- [x] Verifikasi: **482 passed** (+23 test otorisasi), 15 gagal pre-existing yang sama, nol regresi.
+
+### Langkah 4 — Scoping query halaman list 🟢 Sonnet ✅ (2026-08-26)
+
+- [x] `ServerController::index` — `->visibleTo()`, signature terima `Request`.
+- [x] `DashboardController` — 4 query (servers, counts, recentActivity, recentDeployments).
+- [x] `AuditLogController::index` — filter **dua cabang**: `server_id` terlihat
+      **atau** (`server_id IS NULL` **dan** `user_id` = dirinya). Tanpa cabang kedua,
+      member tak bisa lihat aksi akunnya sendiri (hazard #7).
+      *(`serverIndex()` tak diubah — middleware sudah menjaga `{server}`.)*
+- [x] `ServerAlertController` — 3 query + null-guard `$alert->server?->uuid`.
+- [x] `SshKeyController` — eager load `servers` ter-scope (key yang masih ter-deploy di
+      server yang sudah di-unassign tak lagi membocorkan nama + IP-nya).
+- [x] `VisibilityScopeTest` — 7 kasus termasuk cabang `server_id IS NULL`.
+      ⚠️ **Regresi yang sempat terjadi:** menambah parameter `Request` memecahkan
+      `DashboardControllerTest` dan `ServerAlertTest`, yang memanggil controller
+      langsung tanpa HTTP. Helper keduanya diperbaiki agar mengoper `Request`
+      ber-user-resolver (default admin, sesuai asumsi assertion lama).
+
+### Langkah 5 — Broadcast channel 🔴 Opus ✅ (2026-08-26)
+
+- [x] `routes/channels.php` — sebelumnya `return $user !== null`, membocorkan output
+      command live semua server ke semua user. Diganti lookup uuid + `canAccessServer()`,
+      return `bool` ketat + cek `is_active` (§8).
+- [x] `BroadcastChannelTest` — 5 kasus: member ter-assign 200, tak ter-assign 403,
+      admin 200, user nonaktif 403, uuid tak dikenal 403.
+      *(Catatan: payload wajib menyertakan `socket_id`; tanpa itu broadcaster melempar
+      saat menandatangani respons yang sudah **diizinkan** — 200 menyamar jadi 500.)*
+
+### Langkah 6 — Inertia props 🟢 Sonnet ✅ (2026-08-26)
+
+- [x] `HandleInertiaRequests` — persempit dari share whole-model ke shape eksplisit
+      (`id`, `uuid`, `name`, `email`, `email_verified_at`, `role`, `is_active`,
+      `two_factor_enabled`) + `auth.can.admin` (satu boolean cukup, jangan bikin
+      matriks per-route) (§9).
+- [x] Fix double `parent::share()` (bug lama — sekaligus hilang saat ditulis ulang).
+- [x] `types/index.ts` — `UserRole`, field `uuid`/`role`/`is_active`/`two_factor_enabled`
+      di `User`, `Auth.can`. `created_at`/`updated_at` dilepas dari `User` — tak pernah
+      dipakai dari `auth.user` di frontend manapun.
+- [x] Verifikasi: `tsc --noEmit` 29 error, identik dengan sebelum perubahan (recharts +
+      xterm types, tak terkait). `php artisan test`: 494 passed, 15 gagal pre-existing
+      yang sama, nol regresi.
+
+### Langkah 7 — Gating frontend 🟢 Sonnet ✅ (2026-08-26)
+
+> Kosmetik saja. Server yang menegakkan.
+
+- [x] Hook `useIsAdmin()` — `resources/js/hooks/use-permissions.ts`.
+- [x] `server-layout.tsx` — tandai Security/Terminal (`mainNavItems`) dan System Users
+      (`utilityNavItems`) `adminOnly: true`, filter.
+      ⚠️ Filter diterapkan **sebelum** `slice(0, 1)` (mode `isPending`) supaya index 0
+      tetap Dashboard baik member maupun admin (§10).
+- [x] Sembunyikan aksi admin-only: `servers/connect.tsx` (regenerate-token inline +
+      Danger Zone), `servers/settings.tsx` (kartu Server Controls/restart + Danger Zone),
+      `servers/show.tsx` (regenerate-token ×2 + delete-while-pending), tombol
+      "Connect a New Server" ×2 di `servers/index.tsx`. Semua dengan pesan pengganti
+      ("Ask an administrator...") alih-alih dihilangkan diam-diam.
+- [ ] `app-sidebar.tsx` — `adminOnly` di `NavItem` + item `Users`. **Ditunda ke Langkah 8**:
+      sidebar sekarang (Servers/Web Apps/Git Credentials/Audit Log) tak punya item
+      admin-only, dan menambah link `Users` sebelum halamannya ada di Langkah 8 berarti
+      tautan mati satu langkah. `adminOnly` sudah ada di tipe `NavItem`, tinggal dipakai.
+- [ ] `settings/layout.tsx` — item `Users` + filter. **Ditunda ke Langkah 8** dengan alasan
+      sama — belum ada item admin-only lain di situ untuk difilter hari ini.
+- [x] Verifikasi: `tsc --noEmit` 29 error (identik, pre-existing), ESLint nol error baru
+      (1 `no-empty` di `show.tsx` pre-existing, sudah dikonfirmasi lewat baseline),
+      Prettier bersih di semua file yang disentuh. `php artisan test`: 494 passed,
+      15 gagal pre-existing yang sama.
+
+### Langkah 8 — Halaman Users + invite 🟢 Sonnet ✅ (2026-08-26)
+
+- [x] `routes/users.php` — `users.*` + `invitations.*` di bawah `['panel','admin']`,
+      plus jalur guest `invitations.accept`/`invitations.accept.store` (di luar
+      `RegistrationEnabled`, §11.1–11.2). Ditambahkan ke allowlist `EnforceServerScope`
+      (route roster-wide, bukan per-server).
+- [x] `RegisteredUserController` — user pertama selalu admin, eksplisit via `forceFill`
+      (kolom `role` default `member`, jadi tanpa ini user pertama jadi member).
+- [x] `UserInvitation` model — `hashToken()` static helper, cast `server_ids` → array.
+- [x] `InvitationController` — mail best-effort dalam `try/catch` (skip kalau
+      `mail.default === 'log'`), **fallback copy-link** lewat flash `inviteUrl`
+      (preseden `plainAgentToken`) (§11.3). Ditambah guard: email yang sudah jadi user,
+      atau sudah punya invite pending, ditolak 422.
+- [x] `InvitationAcceptController` — lookup by hash (`firstOrFail` → 404 bersih untuk
+      token invalid/expired/sudah dipakai), sync server, `accepted_at`, auto-login.
+- [x] 🔒 Guard anti-lockout: self-demote, self-deactivate, self-delete.
+      ⚠️ **Deviasi dari plan** — guard "last admin" (§11.4, poin ke-4) **dihapus setelah
+      dianalisis dan terbukti dead code**: acting user selalu admin aktif (dijamin
+      middleware `EnsureUserIsActive` + `admin`), jadi satu-satunya jalan mencapai nol
+      admin aktif adalah admin terakhir bertindak ke **diri sendiri** — yang sudah
+      diblokir mutlak oleh guard self-demote/self-deactivate/self-delete tanpa syarat
+      apa pun. Guard "last admin" tak pernah bisa ter-trigger lewat aktor berbeda
+      (aktor itu sendiri = bukti masih ada admin aktif lain). Dites eksplisit:
+      admin lain **BOLEH** menurunkan satu-satunya admin lain (`UserManagementTest`).
+- [x] Halaman `settings/users.tsx` (invite form + pending invitations + tabel user
+      dengan role select/toggle aktif/dialog assign server/delete) + `auth/accept-invitation.tsx`.
+      ⚠️ Bug tertangkap saat build: rencana awal simpan state assignment server di
+      frontend (`assignedServerIds`) tanpa data dari backend — kalau dilanjutkan,
+      buka dialog lalu save akan **menghapus semua assignment** user (array kosong
+      di-sync). Diperbaiki: `UserController::index()` sekarang eager-load
+      `servers:servers.id,uuid` dan kirim `server_ids` per user.
+- [x] Nav item `Users` (ditunda dari Langkah 7) — `app-sidebar.tsx` dan
+      `settings/layout.tsx`, filter `adminOnly`.
+- [x] Test: `FirstUserIsAdminTest` (2 kasus) + `UserManagementTest` (16 kasus — invite,
+      reject email dobel, accept dengan server pre-assigned, token expired/dipakai,
+      role+active update, 3 self-guard, cross-actor demote, delete, sync assignment,
+      revoke invite). Total **510 passed** (+16), 15 gagal pre-existing yang sama, nol
+      regresi. `tsc --noEmit` 29 error (identik), ESLint + Prettier bersih.
+
+### Langkah 9 — Audit 🟢 Sonnet ✅ (2026-08-26)
+
+- [x] 9 action audit baru — `user.invited`, `user.invite_revoked`, `user.invite_accepted`,
+      `user.role_changed`, `user.deactivated`, `user.reactivated`, `user.server_assigned`,
+      `user.server_unassigned`, `user.deleted` (§12).
+      *(Sudah terpasang sekalian saat membangun `UserController`/`InvitationController`/
+      `InvitationAcceptController` di Langkah 8 — dicek ulang di sini, 9/9 lengkap.)*
+- [x] **Fix `TerminalController`** — import `AuditLogger` tapi tak pernah dipanggil.
+      Aksi paling security-relevant di app, nol audit trail. Log `terminal.session_opened`
+      di `show()` (dengan properti `reconnect` — dipertahankan untuk *semua* pemanggilan,
+      termasuk reconnect JSON, karena tiap token = grant akses root shell baru; bukan
+      di-skip biar gak "spam" seperti opsi di plan §12) dan `terminal.session_verified`
+      di `auth()` **sebelum** `Cache::forget()` (payload cache bawa `user_id` si pemohon —
+      route ini dipanggil gateway tanpa user terautentikasi). ↳ menutup item
+      "Audit khusus sesi terminal" di Fase 5.
+- [x] `ServerController::update` — tambah `server.updated`. Ketahuan saat nulis test:
+      **route ini sebelumnya nol test sama sekali** (bukan cuma nol audit).
+- [x] Test: 2 test baru (`reconnecting (JSON request) is logged distinctly...` di
+      `TerminalControllerTest`, `updating server settings renames it and is audited` di
+      `ServerTest`) + assertion audit ditambah ke 2 test existing. **512 passed** (+2),
+      15 gagal pre-existing yang sama (termasuk 2 di `TerminalControllerTest` — render
+      Inertia gagal duluan sebelum sempat cek props, jadi assertion audit baru gak
+      sempat jalan di situ; dibuktikan lewat test terpisah tanpa render halaman).
+      ⚠️ Jebakan kecil: test lama pakai `'user_id' => 1` mentah di payload cache —
+      `audit_logs.user_id` FK ke `users` (SQLite test DB jalan dengan
+      `DB_FOREIGN_KEYS=true`), jadi diganti user factory asli sebelum log call baru
+      bisa nulis tanpa pelanggaran FK.
+
+### Langkah 10 — Matriks test otorisasi 🟢 Sonnet ✅ (2026-08-26)
+
+- [x] Helper `actingAsAdmin()` / `actingAsMember(?Server)` di `tests/Pest.php`
+      (pakai `test()`, bukan `$this`). Dipakai di `AdminOnlyRouteTest` yang baru;
+      test Authorization lama (Langkah 3–9) dibiarkan pakai `User::factory()->...->create()`
+      + `actingAs()` inline apa adanya — sudah lolos, tak perlu disentuh ulang.
+- [x] `MemberServerScopeTest` — **uji kedua arah**: bisa akses yang ter-assign, tak bisa yang tidak.
+      Arah positif inilah yang memverifikasi urutan middleware (hazard #2). *(Langkah 3.)*
+- [x] `AdminOnlyRouteTest` — matriks lengkap: **ke-20 route** ber-middleware `admin`
+      (bukan cuma 7 yang di-spot-check `MemberServerScopeTest`), member ter-assign
+      tetap 403 di semuanya dalam satu test loop. Butuh record `FirewallRule`,
+      `SystemUser`, `SshKey` sungguhan biar route-model-binding lolos duluan
+      sebelum middleware `admin` sempat jalan (binding gagal = 404, bukan 403 —
+      beda arti sama sekali).
+- [x] `MemberCronRestrictionTest`, `VisibilityScopeTest`, `DeactivatedUserTest`,
+      `UserManagementTest`, `FirstUserIsAdminTest` — semua sudah ditulis inline di
+      langkah masing-masing (3, 4, 8).
+- [x] Update test lama yang pecah — sudah ditangani inline: `DashboardControllerTest`
+      + `ServerAlertTest` (Langkah 4, controller butuh `Request`).
+- [x] **Verifikasi live** terhadap Postgres + Redis + Reverb asli (bukan cuma SQLite
+      in-memory test suite) — pengganti walkthrough browser manual §16, dijalankan via
+      `php artisan serve` + curl dengan cookie jar + parsing payload Inertia asli:
+      - Redis **belum jalan** di mesin ini sebelum verifikasi — dinyalakan
+        (`redis-server --daemonize yes`), dibiarkan jalan setelahnya karena
+        `SESSION_DRIVER=redis` butuh itu untuk operasi normal, bukan cuma buat test.
+      - Server temporer (`e2e-temp-1`, `e2e-temp-2`) + user member temporer dibuat via
+        tinker, **dihapus lagi setelahnya**. User admin asli (`Onnay Okheng`, 1 server
+        `Mang Eko` dari Juni) dikonfirmasi tak tersentuh.
+      - Dashboard member: `auth.user` shape sesuai Langkah 6, `auth.can.admin=false`,
+        `servers` cuma nampilin yang ter-assign, `serverCounts.total=1`.
+      - `servers.show` ter-assign → 200; tak ter-assign → 403; `security`/`terminal`/
+        `servers.create`/`settings/users` di server ter-assign → 403 (carve-out admin
+        jalan meski di server sendiri); `applications` di server ter-assign → 200.
+      - `/broadcasting/auth`: server ter-assign → 200 dengan signature Reverb asli;
+        tak ter-assign → 403.
+      - Nonaktifkan user via tinker mid-session → request berikutnya 302 ke `/login`;
+        percobaan login ulang → 422 "This account has been deactivated."
+- [x] Verifikasi akhir: **513 passed**, 15 gagal pre-existing yang sama sejak Langkah 1
+      (Inertia/Vite manifest + broadcast, tak terkait access control). `tsc --noEmit`
+      29 error (identik sejak awal). Pint, ESLint, Prettier bersih di semua file yang
+      disentuh Fase 7.
+
+### Follow-up (di luar scope Fase 7)
+
+- [ ] `Service`, `CronJob`, `Worker` belum pakai `HasUuidRouteKey` — bind by integer `id`,
+      melanggar hard rule UUID ([`PLAN.md`](./PLAN.md) §4). Bukan bug akses, tapi permukaan enumerasi (hazard #9).
+- [ ] Ziggy `@routes` mengirim seluruh tabel route ke tiap browser — member bisa
+      mengenumerasi nama route admin. Prioritas rendah (hazard #10).
+- [ ] Audit pass untuk `Auth/*` + `Settings/*`: `auth.login`, `auth.login_failed`, `auth.2fa_disabled`.
 
 ## Lintas-Fase (Keamanan & Kualitas)
 

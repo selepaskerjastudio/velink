@@ -1,7 +1,12 @@
 import { LucideIcon } from 'lucide-react';
 
+export type UserRole = 'admin' | 'member';
+
 export interface Auth {
     user: User;
+    can: {
+        admin: boolean;
+    };
 }
 
 export interface BreadcrumbItem {
@@ -19,6 +24,8 @@ export interface NavItem {
     url: string;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    /** Hidden for non-admins. Cosmetic only — the route itself enforces this. */
+    adminOnly?: boolean;
 }
 
 export interface SharedData {
@@ -30,6 +37,7 @@ export interface SharedData {
         installCommand: string | null;
         plainDbUserPassword: string | null;
         plainDbUserUsername: string | null;
+        inviteUrl: string | null;
     };
     server_provisioning: boolean;
     [key: string]: unknown;
@@ -164,13 +172,38 @@ export interface Deployment {
 
 export interface User {
     id: number;
+    uuid: string;
     name: string;
     email: string;
     avatar?: string;
     email_verified_at: string | null;
-    created_at: string;
-    updated_at: string;
+    role: UserRole;
+    is_active: boolean;
+    two_factor_enabled: boolean;
     [key: string]: unknown; // This allows for additional properties...
+}
+
+export interface UserSummary {
+    id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    is_active: boolean;
+    server_ids: string[];
+    created_at: string;
+}
+
+export interface ServerOption {
+    id: string;
+    name: string;
+}
+
+export interface UserInvitationSummary {
+    id: string;
+    email: string;
+    role: UserRole;
+    invited_by: string | null;
+    expires_at: string;
 }
 
 export type WorkerStatus = 'unknown' | 'running' | 'stopped';

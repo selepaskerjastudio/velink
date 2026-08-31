@@ -20,8 +20,14 @@ class SshKeyController extends Controller
      */
     public function index(Request $request): Response
     {
+        // Scope the eager load too: a key can stay deployed to a server the
+        // user has since been unassigned from, and listing it would leak that
+        // server's name and IP through the user's own settings page.
         $sshKeys = $request->user()->sshKeys()
-            ->with(['servers:id,uuid,name,public_ip'])
+            ->with(['servers' => fn ($query) => $query
+                ->visibleTo($request->user())
+                ->select('servers.id', 'servers.uuid', 'servers.name', 'servers.public_ip'),
+            ])
             ->latest('id')
             ->get(['id', 'uuid', 'name', 'fingerprint', 'type', 'comment', 'created_at'])
             ->map(fn (SshKey $key) => [

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasUuidRouteKey;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -124,6 +125,30 @@ class Server extends Model
     public function latestMetric()
     {
         return $this->hasOne(ServerMetric::class)->latestOfMany();
+    }
+
+    /**
+     * Users assigned access to this server.
+     *
+     * @return BelongsToMany<User>
+     */
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class)->withTimestamps();
+    }
+
+    /**
+     * Scope to servers visible to the given user. Admins see everything,
+     * including servers nobody has been assigned to; members see only
+     * their assigned servers.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->isAdmin()) {
+            return $query;
+        }
+
+        return $query->whereIn('servers.id', $user->servers()->select('servers.id'));
     }
 
     /**
