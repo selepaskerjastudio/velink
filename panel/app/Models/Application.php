@@ -56,6 +56,7 @@ class Application extends Model implements BelongsToServer
         'ssl_enabled_at',
         'ssl_challenge',
         'ssl_dns_provider',
+        'behind_reverse_proxy',
     ];
 
     protected $hidden = [
@@ -70,6 +71,7 @@ class Application extends Model implements BelongsToServer
             'ssl_enabled_at' => 'datetime',
             'directory_size_bytes' => 'integer',
             'php_settings' => 'array',
+            'behind_reverse_proxy' => 'boolean',
         ];
     }
 

@@ -321,6 +321,42 @@ class AppProvisionService
     }
 
     /**
+     * Re-render the app's nginx vhost in place (without touching the domain)
+     * and reload nginx. Used when a setting that affects the vhost — currently
+     * the behind_reverse_proxy toggle — changes on an already-provisioned app.
+     *
+     * @return array<int, AgentJob>
+     */
+    public function reloadVhost(Application $app, ?int $userId = null): array
+    {
+        if (! $app->domain) {
+            return [];
+        }
+
+        $vars = AppTemplates::vars($app);
+
+        $render = $this->renderConfig(
+            $app,
+            "Write nginx vhost for {$app->domain}",
+            AppTemplates::vhostPath((string) $app->domain),
+            AppTemplates::vhostTemplate($app->app_type),
+            $vars,
+            $userId,
+        );
+
+        $vhostPath = escapeshellarg(AppTemplates::vhostPath((string) $app->domain));
+        $enabledPath = escapeshellarg(AppTemplates::vhostEnabledPath((string) $app->domain));
+
+        $reload = $this->shell($app, 'Enable site & reload nginx', <<<SH
+            ln -sf {$vhostPath} {$enabledPath}
+            nginx -t
+            systemctl reload nginx
+            SH, $userId);
+
+        return [$render, $reload];
+    }
+
+    /**
      * Type-specific placeholder document so a freshly created app serves
      * something before the first deploy. WordPress gets none (its core
      * download provides index.php).

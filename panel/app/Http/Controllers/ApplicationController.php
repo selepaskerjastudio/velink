@@ -144,6 +144,10 @@ class ApplicationController extends Controller
             'branch' => $validated['branch'],
             'git_credential_id' => $credential?->id,
             'status' => 'provisioning',
+            // Default to the server's edge-proxy flag: apps behind the Velink
+            // Caddy edge (or any TLS-terminating proxy) need the vhost to trust
+            // X-Forwarded-* headers so PHP sees the original https scheme.
+            'behind_reverse_proxy' => $server->uses_edge_proxy,
         ]);
 
         // Optionally provision a database + dedicated user in the same flow.
@@ -308,7 +312,7 @@ class ApplicationController extends Controller
             'application' => [
                 ...$application->only([
                     'name', 'domain', 'root_path', 'linux_user', 'app_slug', 'php_version', 'app_type', 'stack_mode', 'status', 'created_at',
-                    'repository', 'branch', 'deploy_mode', 'deploy_script', 'webhook_secret', 'directory_size_bytes',
+                    'repository', 'branch', 'deploy_mode', 'deploy_script', 'webhook_secret', 'directory_size_bytes', 'behind_reverse_proxy',
                 ]),
                 'id' => $application->uuid,
                 'git_credential_id' => $application->gitCredential?->uuid,
@@ -521,6 +525,39 @@ class ApplicationController extends Controller
         );
 
         return redirect()->route('applications.show', $application)->with('success', 'PHP & FPM settings updated and PHP-FPM reloaded.');
+    }
+
+    /**
+     * Toggle whether this app's nginx vhost trusts X-Forwarded-* headers from
+     * an upstream TLS-terminating proxy (Velink edge, Cloudflare, own nginx).
+     * Re-renders the vhost and reloads nginx so the change takes effect.
+     */
+    public function updateReverseProxy(Request $request, Application $application, AppProvisionService $provisionService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'behind_reverse_proxy' => ['required', 'boolean'],
+        ]);
+
+        $enabled = (bool) $validated['behind_reverse_proxy'];
+
+        // No-op short-circuit when nothing changed (mirrors updatePhpVersion).
+        if ($enabled === (bool) $application->behind_reverse_proxy) {
+            return redirect()->route('applications.show', $application);
+        }
+
+        $application->forceFill(['behind_reverse_proxy' => $enabled])->save();
+
+        $provisionService->reloadVhost($application, $request->user()->id);
+
+        AuditLogger::log(
+            action: 'application.reverse_proxy_updated',
+            description: "Reverse-proxy mode ".($enabled ? 'enabled' : 'disabled')." for '{$application->name}'",
+            userId: $request->user()->id,
+            serverId: $application->server_id,
+            properties: ['behind_reverse_proxy' => $enabled],
+        );
+
+        return redirect()->route('applications.show', $application)->with('success', 'Reverse-proxy setting updated and nginx reloaded.');
     }
 
     public function enableSsl(Request $request, Application $application, JobDispatcher $dispatcher): RedirectResponse

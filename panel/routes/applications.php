@@ -12,6 +12,7 @@ Route::middleware('panel')->group(function () {
     Route::delete('apps/{application}', [ApplicationController::class, 'destroy'])->name('applications.destroy');
     Route::patch('apps/{application}/php-version', [ApplicationController::class, 'updatePhpVersion'])->name('applications.php-version');
     Route::patch('apps/{application}/php-settings', [ApplicationController::class, 'updatePhpSettings'])->name('applications.php-settings');
+    Route::patch('apps/{application}/reverse-proxy', [ApplicationController::class, 'updateReverseProxy'])->name('applications.reverse-proxy');
     Route::patch('apps/{application}/env', [ApplicationController::class, 'updateEnv'])->name('applications.env');
     Route::patch('apps/{application}/deploy-settings', [ApplicationController::class, 'updateDeploySettings'])->name('applications.deploy-settings');
     Route::patch('apps/{application}/domain', [ApplicationController::class, 'updateDomain'])->name('applications.domain');

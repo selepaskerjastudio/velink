@@ -31,6 +31,15 @@ class AppTemplates
             access_log {{.access_log}};
             error_log  {{.error_log}};
 
+            {{if eq .behind_reverse_proxy "true"}}
+            # Behind a TLS-terminating proxy: restore the real client IP and
+            # tell PHP the original scheme was https (X-Forwarded-Proto) so the
+            # app generates https:// asset URLs instead of http:// (Mixed Content).
+            set_real_ip_from {{.trusted_proxy_subnet}};
+            real_ip_header X-Forwarded-For;
+            real_ip_recursive on;
+            {{end}}
+
             location / {
                 try_files $uri $uri/ /index.php?$query_string;
             }
@@ -38,6 +47,9 @@ class AppTemplates
             location ~ \.php$ {
                 include snippets/fastcgi-php.conf;
                 fastcgi_pass unix:{{.socket_path}};
+                {{if eq .behind_reverse_proxy "true"}}
+                fastcgi_param HTTPS on;
+                {{end}}
             }
 
             location ~ /\.(?!well-known).* {
@@ -58,6 +70,14 @@ class AppTemplates
 
             access_log {{.access_log}};
             error_log  {{.error_log}};
+
+            {{if eq .behind_reverse_proxy "true"}}
+            # Behind a TLS-terminating proxy: restore the real client IP.
+            # Static sites have no PHP, so no fastcgi HTTPS param is needed.
+            set_real_ip_from {{.trusted_proxy_subnet}};
+            real_ip_header X-Forwarded-For;
+            real_ip_recursive on;
+            {{end}}
 
             location / {
                 try_files $uri $uri/ =404;
@@ -82,6 +102,15 @@ class AppTemplates
             access_log {{.access_log}};
             error_log  {{.error_log}};
 
+            {{if eq .behind_reverse_proxy "true"}}
+            # Behind a TLS-terminating proxy: restore the real client IP and
+            # tell PHP the original scheme was https so WordPress uses the
+            # correct scheme for wp_url/site_url and plugin asset generation.
+            set_real_ip_from {{.trusted_proxy_subnet}};
+            real_ip_header X-Forwarded-For;
+            real_ip_recursive on;
+            {{end}}
+
             location / {
                 try_files $uri $uri/ /index.php?$args;
             }
@@ -89,6 +118,9 @@ class AppTemplates
             location ~ \.php$ {
                 include snippets/fastcgi-php.conf;
                 fastcgi_pass unix:{{.socket_path}};
+                {{if eq .behind_reverse_proxy "true"}}
+                fastcgi_param HTTPS on;
+                {{end}}
             }
 
             location = /xmlrpc.php {
@@ -198,6 +230,16 @@ class AppTemplates
             // is restarted manually — deploys silently ship old code. The per-request
             // stat() cost is negligible and makes `git pull` deploys just work.
             'opcache_validate_timestamps' => '1',
+            // Behind-proxy handling: when true the vhost trusts X-Forwarded-*
+            // headers from the upstream TLS-terminating proxy and tells PHP-FPM
+            // the original scheme was https. Strings because Go text/template
+            // prints scalars verbatim and missingkey=error requires the key.
+            'behind_reverse_proxy' => $app->behind_reverse_proxy ? 'true' : 'false',
+            // nginx trusts X-Forwarded-For from this subnet. 0.0.0.0/0 is safe
+            // here because managed-server nginx binds a private interface and
+            // the real public edge (Caddy/Cloudflare) is the trust boundary —
+            // matching what RunCloud/Forge ship. Covers arbitrary user proxies.
+            'trusted_proxy_subnet' => '0.0.0.0/0',
             ...$settings,
         ];
     }

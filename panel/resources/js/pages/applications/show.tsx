@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,7 @@ const SECTIONS: SidebarItem[] = [
     { id: 'deploy', label: 'Git & Deploy' },
     { header: 'Web Settings' },
     { id: 'nginx', label: 'NGINX Config' },
+    { id: 'reverse-proxy', label: 'Reverse Proxy' },
     { id: 'php-fpm', label: 'PHP & FPM' },
     { id: 'settings', label: 'Settings' },
     { id: 'backups', label: 'Backups' },
@@ -239,6 +241,14 @@ export default function ApplicationsShow({
 
     const submitSsl = () => {
         sslForm.post(route('applications.ssl', application.id), { preserveScroll: true });
+    };
+
+    const reverseProxyForm = useForm<{ behind_reverse_proxy: boolean }>({
+        behind_reverse_proxy: application.behind_reverse_proxy ?? false,
+    });
+
+    const submitReverseProxy = () => {
+        reverseProxyForm.patch(route('applications.reverse-proxy', application.id), { preserveScroll: true });
     };
 
     const nginxForm = useForm<{ config: string }>({
@@ -654,6 +664,55 @@ export default function ApplicationsShow({
                                 <CardFooter>
                                     <Button onClick={submitNginx} disabled={nginxForm.processing}>
                                         Save &amp; reload NGINX
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                        )}
+
+                        {section === 'reverse-proxy' && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Reverse proxy</CardTitle>
+                                    <CardDescription>
+                                        Enable when this app sits behind a TLS-terminating proxy — the Velink edge (Caddy), Cloudflare, or your own
+                                        nginx. The vhost is re-rendered to trust <code className="text-xs">X-Forwarded-*</code> headers and pass{' '}
+                                        <code className="text-xs">fastcgi_param HTTPS on</code>, so PHP sees the original <code className="text-xs">https</code>{' '}
+                                        scheme and the real client IP.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="grid gap-3">
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox
+                                            id="behind_reverse_proxy"
+                                            checked={reverseProxyForm.data.behind_reverse_proxy}
+                                            onCheckedChange={(checked) =>
+                                                reverseProxyForm.setData('behind_reverse_proxy', checked === true)
+                                            }
+                                        />
+                                        <Label htmlFor="behind_reverse_proxy" className="font-normal">
+                                            Behind a reverse proxy (trust forwarded scheme &amp; client IP)
+                                        </Label>
+                                    </div>
+                                    {server.uses_edge_proxy && !reverseProxyForm.data.behind_reverse_proxy && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-500">
+                                            ⚠ This server uses the Velink edge proxy — leaving this off will cause Mixed Content errors (http://
+                                            asset URLs over HTTPS).
+                                        </p>
+                                    )}
+                                    <InputError message={reverseProxyForm.errors.behind_reverse_proxy} />
+                                    <p className="text-muted-foreground text-xs">
+                                        Fixes Mixed Content errors (insecure <code>http://</code> asset URLs) behind a proxy. The nginx vhost is
+                                        rewritten and reloaded. If you've pasted a custom NGINX config above, re-enable it there manually — this
+                                        toggle only renders the managed vhost.
+                                    </p>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button
+                                        onClick={submitReverseProxy}
+                                        disabled={reverseProxyForm.processing}
+                                        size="sm"
+                                    >
+                                        {reverseProxyForm.processing ? 'Saving…' : 'Save & reload nginx'}
                                     </Button>
                                 </CardFooter>
                             </Card>
