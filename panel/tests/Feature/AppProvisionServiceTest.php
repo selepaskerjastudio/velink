@@ -40,7 +40,10 @@ test('app templates expose the expected vars and paths', function () {
         'access_log' => '/home/velink/logs/example_app_access.log',
         'error_log' => '/home/velink/logs/example_app_error.log',
         'display_errors' => 'Off',
-        'opcache_validate_timestamps' => '0',
+        // Always '1': with opcache.validate_timestamps off, production serves
+        // stale bytecode after a git deploy until PHP-FPM restarts (see
+        // AppTemplates::vars()).
+        'opcache_validate_timestamps' => '1',
         // PHP-FPM / PHP ini defaults (merged by PhpSettings::forApp).
         'pm' => 'dynamic',
         'pm_max_children' => '5',
