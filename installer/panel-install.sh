@@ -194,6 +194,10 @@ if ! /usr/local/go/bin/go version 2>/dev/null | grep -q "go${GO_VERSION}"; then
     run "Download Go ${GO_VERSION}" curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz"
     run "Install Go" bash -c 'rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz && rm -f /tmp/go.tgz'
 else ok "Go ${GO_VERSION} present"; fi
+# Expose go in PATH for interactive shells and deploy.sh (which resolves
+# /usr/local/go/bin/go as a fallback anyway).
+run "Link go into PATH" ln -sf /usr/local/go/bin/go /usr/local/bin/go
+run "Link gofmt into PATH" ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
 export PATH="/usr/local/go/bin:$PATH"
 GO_BIN="/usr/local/go/bin/go"
 
