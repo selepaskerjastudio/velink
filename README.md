@@ -115,10 +115,16 @@ Halaman aplikasi → **Backups** → atur jadwal (harian/mingguan/bulanan), rete
 
 ### Update panel + gateway
 
-Jalankan di **VM panel**:
+Jalankan di **VM panel**. Folder default hasil installer adalah `/opt/velink` (bisa berbeda jika install dengan `--dir=`):
 
 ```bash
-cd /root/velink && bash deploy.sh
+cd /opt/velink && sudo bash deploy.sh
+```
+
+Kalau foldernya tidak ada, cari lokasi instalasinya lewat service yang berjalan:
+
+```bash
+systemctl show velink-queue velink-reverb velink-gateway -p WorkingDirectory 2>/dev/null
 ```
 
 `deploy.sh` otomatis: `git pull` → `composer install` → `npm build` → `migrate` → rebuild gateway binary → rebuild agent binaries → restart semua service.
