@@ -24,8 +24,10 @@ Route::middleware('panel')->group(function () {
     Route::get('servers/{server}/activity', [AuditLogController::class, 'serverIndex'])->name('servers.activity');
     Route::patch('servers/{server}', [ServerController::class, 'update'])->name('servers.update');
 
-    // Admin-only: root shell.
-    Route::get('servers/{server}/terminal', [TerminalController::class, 'show'])->middleware('admin')->name('servers.terminal');
+    // Members may use the terminal on servers they are assigned to, but only
+    // as the webapp user (never root) — enforced server-side on the session
+    // token in TerminalController::auth(), NOT by hiding UI options.
+    Route::get('servers/{server}/terminal', [TerminalController::class, 'show'])->name('servers.terminal');
 
     // Admin-only: server lifecycle. A reboot takes down every application on the
     // box, including those belonging to other members assigned to it.

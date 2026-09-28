@@ -86,6 +86,10 @@ func (v *Verifier) Verify(ctx context.Context, serverID string, token string) (S
 type terminalAuthRequest struct {
 	ServerUUID   string `json:"server_uuid"`
 	SessionToken string `json:"session_token"`
+	// User is the OS user the browser asked to open a PTY as. The panel
+	// rejects it for non-admin sessions (members may only use the webapp
+	// user) — the gateway itself never authorizes usernames.
+	User string `json:"user"`
 }
 
 type terminalAuthResponse struct {
@@ -93,10 +97,10 @@ type terminalAuthResponse struct {
 	ServerID string `json:"server_id"`
 }
 
-// VerifyTerminal validates a browser terminal session token against the panel.
-// Returns the internal server ID if valid.
-func (v *Verifier) VerifyTerminal(ctx context.Context, serverUUID string, sessionToken string) (string, error) {
-	body, err := json.Marshal(terminalAuthRequest{ServerUUID: serverUUID, SessionToken: sessionToken})
+// VerifyTerminal validates a browser terminal session token against the panel,
+// including the requested OS user. Returns the internal server ID if valid.
+func (v *Verifier) VerifyTerminal(ctx context.Context, serverUUID string, sessionToken string, user string) (string, error) {
+	body, err := json.Marshal(terminalAuthRequest{ServerUUID: serverUUID, SessionToken: sessionToken, User: user})
 	if err != nil {
 		return "", err
 	}

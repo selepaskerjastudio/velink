@@ -11,11 +11,15 @@ uses(RefreshDatabase::class);
 beforeEach(fn () => $this->withoutVite());
 
 /**
- * Exhaustive matrix for the 20 routes RouteCoverageTest confirms carry the
+ * Exhaustive matrix for the 19 routes RouteCoverageTest confirms carry the
  * 'admin' middleware. That test only checks the middleware is attached; this
  * one drives real requests to prove a member on the assigned server actually
  * gets a 403 from every one of them — not just the handful spot-checked in
  * MemberServerScopeTest.
+ *
+ * servers.terminal is deliberately absent: members may use the terminal on
+ * their assigned servers, restricted to the webapp user (enforced in
+ * TerminalController::auth(), see docs/ACCESS_CONTROL.md).
  */
 test('every admin-only route 403s a member assigned to the server', function () {
     $server = Server::factory()->create();
@@ -40,7 +44,6 @@ test('every admin-only route 403s a member assigned to the server', function () 
     $cases = [
         ['get', route('servers.create'), []],
         ['post', route('servers.store'), ['name' => 'x', 'hostname' => 'x.test']],
-        ['get', route('servers.terminal', $server), []],
         ['post', route('servers.provision', $server), []],
         ['post', route('servers.restart', $server), []],
         ['post', route('servers.regenerate-token', $server), []],

@@ -7,6 +7,29 @@ use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
+// The default test driver (null/log) short-circuits auth() to a no-op — it
+// would 200 every subscription and never run the channel closure. Pin the
+// Reverb (Pusher-compatible) driver for this file so /broadcasting/auth
+// exercises the real private-channel authorization.
+//
+// channels.php registered its channels at boot onto the then-default (null)
+// driver, and BroadcastManager caches driver instances — so after switching
+// the default we must re-register the channels onto the Reverb broadcaster,
+// or every auth falls through to 403 with no pattern matched. authorizeChannel
+// signs locally with these dummy credentials; no network is touched. The
+// driver switch is deliberately per-file: switching it globally in phpunit.xml
+// would make ShouldBroadcast events in other tests attempt real HTTP calls.
+beforeEach(function () {
+    config([
+        'broadcasting.default' => 'reverb',
+        'broadcasting.connections.reverb.key' => 'test-key',
+        'broadcasting.connections.reverb.secret' => 'test-secret',
+        'broadcasting.connections.reverb.app_id' => 'test-app',
+    ]);
+
+    require base_path('routes/channels.php');
+});
+
 /**
  * Job stdout/stderr is streamed verbatim over the per-server channel, so an
  * unscoped subscription leaks live command output — including anything a
