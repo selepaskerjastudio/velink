@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Server;
+use App\Provisioning\AppTemplates;
 use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,9 +23,10 @@ class TerminalController extends Controller
         $token = $this->generateToken($request, $server);
         $isReconnect = $request->wantsJson();
 
-        // Every token issuance is a fresh grant of root-shell access, so all of
-        // them are logged — including reconnects — with a property to tell
-        // them apart rather than skipping reconnects and losing the record.
+        // Every token issuance is a fresh shell grant (root for admins, the
+        // webapp user for members), so all of them are logged — including
+        // reconnects — with a property to tell them apart rather than
+        // skipping reconnects and losing the record.
         AuditLogger::log(
             action: 'terminal.session_opened',
             description: ($isReconnect ? 'Terminal session reconnected on' : 'Terminal session opened on')." '{$server->name}'",
@@ -40,13 +42,21 @@ class TerminalController extends Controller
             ]);
         }
 
-        // Get available system users for the terminal user picker.
-        $systemUsers = $server->systemUsers()
-            ->orderBy('username')
-            ->pluck('username')
-            ->prepend('root')
-            ->unique()
-            ->values();
+        // Available system users for the terminal user picker. Admins get the
+        // full list; members are restricted to the webapp user only. This is
+        // cosmetic convenience — the actual restriction is enforced on the
+        // session token in auth() below, so editing the WebSocket `user`
+        // query param cannot escalate a member to root.
+        if ($request->user()->isAdmin()) {
+            $systemUsers = $server->systemUsers()
+                ->orderBy('username')
+                ->pluck('username')
+                ->prepend('root')
+                ->unique()
+                ->values();
+        } else {
+            $systemUsers = collect([AppTemplates::webappUser()]);
+        }
 
         return Inertia::render('servers/terminal', [
             'server' => [
@@ -83,15 +93,35 @@ class TerminalController extends Controller
             return response()->json(['valid' => false], 403);
         }
 
+        // Members may only open a PTY as the webapp user. The gateway
+        // forwards the browser's `user` query param here — without this
+        // check, editing the WebSocket URL would hand a member a root shell.
+        // An absent/empty param means root on the agent side (terminal.go),
+        // so it must fail closed for members too.
+        $requestedUser = (string) $request->input('user', 'root') ?: 'root';
+        if (! ($session['is_admin'] ?? false) && $requestedUser !== AppTemplates::webappUser()) {
+            Cache::forget("terminal:session:{$sessionToken}");
+
+            AuditLogger::log(
+                action: 'terminal.session_rejected',
+                description: "Terminal session rejected: member attempted to open a PTY as '{$requestedUser}'",
+                userId: $session['user_id'] ?? null,
+                serverId: $session['server_id'] ?? null,
+                properties: ['server_uuid' => $serverUuid, 'requested_user' => $requestedUser],
+            );
+
+            return response()->json(['valid' => false], 403);
+        }
+
         // Log before forgetting the cache entry — $session carries the user_id
         // of whoever called show() above; this is the gateway's confirmation
         // that a PTY is about to be opened for them.
         AuditLogger::log(
             action: 'terminal.session_verified',
-            description: 'Gateway verified a terminal session token',
+            description: "Gateway verified a terminal session token as '{$requestedUser}'",
             userId: $session['user_id'] ?? null,
             serverId: $session['server_id'] ?? null,
-            properties: ['server_uuid' => $serverUuid],
+            properties: ['server_uuid' => $serverUuid, 'user' => $requestedUser],
         );
 
         // Delete the token (single-use).
@@ -111,10 +141,14 @@ class TerminalController extends Controller
     private function generateToken(Request $request, Server $server): string
     {
         $token = Str::uuid()->toString();
+
+        // is_admin rides in the session so auth() can enforce the
+        // member-restricted webapp user without a DB round-trip.
         Cache::put("terminal:session:{$token}", [
             'server_uuid' => $server->uuid,
             'server_id' => $server->id,
             'user_id' => $request->user()->id,
+            'is_admin' => $request->user()->isAdmin(),
         ], 60);
 
         return $token;

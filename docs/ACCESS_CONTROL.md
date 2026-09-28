@@ -33,11 +33,21 @@ Konsekuensinya: begitu ada user ke-2, dia langsung punya kendali penuh atas semu
 | Role | `admin` \| `member` saja |
 | Sumbu akses | **Resource**, bukan matriks aksi |
 | Unit assignment | **Per server**. App/DB/worker/cron/service ikut server-nya |
-| Carve-out admin-only | terminal, server destroy/regenerate-token/provision/**restart**/create/store, `system-users.*`, `security.*` (firewall+fail2ban), **ssh-keys deploy/revoke**, `users.*` |
+| Carve-out admin-only | server destroy/regenerate-token/provision/**restart**/create/store, `system-users.*`, `security.*` (firewall+fail2ban), **ssh-keys deploy/revoke**, `users.*` |
+| Terminal | **Semua role** (server ter-assign). Member **hanya user webapp (`velink`)**, admin bebas — enforcement di session token, lihat §Terminal di bawah |
 | Cron user | Member **dilarang** pakai `root` + user sistem lain. Admin bebas |
 | User management | Halaman Users + invite, dengan fallback copy-link (mail belum dikonfigurasi) |
 
-`ssh-keys deploy/revoke` masuk carve-out karena `ServerSshKeyController.php:24` → `resolveTargetUser():83-92` → `SshKeyService::ensureDefaultAdmin()` (`SshKeyService.php:24`, akun `velink-admin`) — member bisa deploy pubkey sendiri lalu SSH masuk, menembus carve-out terminal.
+### Terminal — member terbatas ke user webapp
+
+Terminal dibuka untuk member di server yang di-assign, tapi **tidak** lewat filter UI: username hanya query param `user` di URL WebSocket gateway, jadi member bisa edit URL jadi `user=root`. Enforcement ada di panel:
+
+- `TerminalController::generateToken()` menyimpan `is_admin` di payload cache token (TTL 60s, single-use).
+- Gateway meneruskan `user` ke `POST /internal/terminal/auth` (`verifier.go` `VerifyTerminal`).
+- `TerminalController::auth()` menolak 403 jika `!is_admin && user !== AppTemplates::webappUser()`; param kosong = `root` di sisi agent → juga ditolak (fail-closed). Token dibakar saat penolakan + audit `terminal.session_rejected`.
+- `show()` memberikan prop `systemUsers` = `[velink]` untuk member (kenyamanan UI saja); admin dapat daftar lengkap + `root`.
+
+`ssh-keys deploy/revoke` masuk carve-out karena `ServerSshKeyController.php:24` → `resolveTargetUser():83-92` → `SshKeyService::ensureDefaultAdmin()` (`SshKeyService.php:24`, akun `velink-admin`) — member bisa deploy pubkey sendiri lalu SSH masuk sebagai user sudo.
 
 `servers.restart` = `sudo reboot` (`ServerController.php:263-271`) — mematikan semua app di server, termasuk milik member lain yang di-assign ke server yang sama.
 
@@ -272,7 +282,7 @@ Lalu carve-out:
 
 ```php
 // routes/servers.php — per-route
-->middleware('admin')   pada: servers.create, servers.store, servers.terminal,
+->middleware('admin')   pada: servers.create, servers.store,
                               servers.provision, servers.restart,
                               servers.regenerate-token, servers.destroy
 
@@ -382,7 +392,7 @@ Wajib `bool` ketat — mengembalikan model `Server` bikin Laravel memperlakukann
 ],
 ```
 
-Karena carve-out murni berbasis role, **satu boolean `auth.can.admin` cukup** untuk terminal / destroy / regenerate-token / restart / system-users / security / ssh-key-deploy. Jangan bikin matriks ability per-route.
+Karena carve-out murni berbasis role, **satu boolean `auth.can.admin` cukup** untuk destroy / regenerate-token / restart / system-users / security / ssh-key-deploy (terminal kini semua role — pembatasan user-nya bukan di nav tapi di session token). Jangan bikin matriks ability per-route.
 
 Pertahankan `id` dulu — `resources/js/types/index.ts:165-174` mendeklarasikan `id: number`, dikonsumsi `nav-user.tsx` dan `user-info.tsx`. Migrasi ke `uuid` = PR mekanis terpisah.
 
@@ -406,7 +416,7 @@ export function useIsAdmin(): boolean {
 
 **`components/app-sidebar.tsx:9-30`** — tambah `adminOnly?: boolean` ke `NavItem` (`types/index.ts:17-22`), filter di dalam `AppSidebar` (bukan di `nav-main.tsx:5-24` — komponen itu dipakai bersama beberapa layout, biarkan bodoh). Tambah item `Users` dengan `adminOnly: true`.
 
-**`layouts/server-layout.tsx:38-58`** — tandai `Security` (`:44`) dan `Terminal` (`:45`) di `mainNavItems`, `System Users` (`:51`) di `utilityNavItems`, lalu `.filter((i) => !i.adminOnly || isAdmin)`.
+**`layouts/server-layout.tsx:38-58`** — tandai `Security` (`:44`) di `mainNavItems`, `System Users` (`:51`) di `utilityNavItems`, lalu `.filter((i) => !i.adminOnly || isAdmin)`. `Terminal` **tidak** ditandai — semua role melihatnya, member dibatasi ke user webapp oleh session token (lihat §Terminal).
 
 ⚠️ `:86` melakukan `mainNavItems.slice(0, 1)` saat `isPending`. **Filter sebelum slice** supaya index 0 tetap Dashboard. Beri komentar — ketergantungan urutan ini rapuh.
 
@@ -421,7 +431,7 @@ export function useIsAdmin(): boolean {
 | `pages/servers/show.tsx:192`, `:238`, `:264` | regenerate-token, destroy |
 | `pages/servers/index.tsx` | link "Add Server" → `/servers/create` |
 
-Halaman `security.tsx`, `system-users.tsx`, `terminal.tsx` tak perlu diubah — route 403 sebelum halaman render, link nav sudah hilang.
+Halaman `security.tsx` dan `system-users.tsx` tak perlu diubah — route 403 sebelum halaman render, link nav sudah hilang. `terminal.tsx` juga tak berubah logikanya: untuk member prop `systemUsers` dari controller hanya berisi `['velink']` sehingga picker otomatis terbatas.
 
 ---
 
@@ -527,7 +537,7 @@ Pakai `test()`, bukan `$this` — ini fungsi global, tak terikat TestCase.
 
 1. `RouteCoverageTest.php` — §6.6, jaminan deny-by-default.
 2. `MemberServerScopeTest.php` — dataset matriks: 34 route `{server}` + perwakilan tiap keluarga `{application}`/flat-child. Member tanpa assignment → 403; member dengan assignment → sukses. **Uji kedua arah** — memverifikasi urutan middleware (hazard #2).
-3. `AdminOnlyRouteTest.php` — member **yang ter-assign** tetap 403 di: `servers.terminal|destroy|regenerate-token|provision|restart|create|store`, `system-users.*` (5), `security.*` (6), `server.ssh-keys.deploy|revoke`, `users.*`.
+3. `AdminOnlyRouteTest.php` — member **yang ter-assign** tetap 403 di: `servers.destroy|regenerate-token|provision|restart|create|store`, `system-users.*` (5), `security.*` (6), `server.ssh-keys.deploy|revoke`, `users.*`. Terminal diuji terpisah di `TerminalControllerTest.php` (member: halaman OK + prop `systemUsers=[velink]`; token member + `user=root` → 403 + audit `terminal.session_rejected`).
 4. `MemberCronRestrictionTest.php` — member gagal validasi saat `user: root`; admin lolos.
 5. `VisibilityScopeTest.php` — `servers.index` hanya yang ter-assign; count dashboard; audit log mengecualikan server lain **tapi menyertakan** baris `server_id = null` milik member sendiri; alerts terfilter.
 6. `BroadcastChannelTest.php` — `POST /broadcasting/auth` dengan `channel_name=private-server.{uuid}`: ter-assign 200, tidak ter-assign 403.
@@ -602,7 +612,7 @@ Manual, dua browser / dua sesi:
 2. `/settings/users` → invite `member@test`, assign hanya Server A → salin invite link dari flash.
 3. Sesi kedua (incognito), buka link, set password → auto-login sebagai member.
 4. Member: `/servers` hanya menampilkan Server A. Dashboard menghitung 1 server. `/servers/{B-uuid}` → 403.
-5. Member di Server A: buat app, deploy, kelola DB/worker/cron — **sukses**. Nav tak menampilkan Security / Terminal / System Users.
+5. Member di Server A: buat app, deploy, kelola DB/worker/cron — **sukses**. Nav tak menampilkan Security / System Users. Terminal tampil; buka → picker hanya `velink`; coba paksa `user=root` di URL WS → auth ditolak.
 6. Member `curl -X POST /servers/{A}/regenerate-token` (dengan CSRF) → **403**.
 7. Member coba buat cron `user: root` → **error validasi**.
 8. DevTools sesi member: WebSocket hanya subscribe `private-server.{A}`. Paksa subscribe ke `{B}` → `/broadcasting/auth` **403**.

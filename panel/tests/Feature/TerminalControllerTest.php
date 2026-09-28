@@ -3,6 +3,7 @@
 use App\Models\AuditLog;
 use App\Models\Server;
 use App\Models\User;
+use App\Provisioning\AppTemplates;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 
@@ -52,7 +53,7 @@ test('reconnecting (JSON request) is logged distinctly from the initial page loa
     expect($log->properties['reconnect'])->toBeTrue();
 });
 
-test('terminal auth validates a valid session token', function () {
+test('terminal auth validates a valid admin session token', function () {
     $user = User::factory()->create();
     $server = Server::factory()->online()->create();
     $token = fake()->uuid();
@@ -61,12 +62,14 @@ test('terminal auth validates a valid session token', function () {
         'server_uuid' => $server->uuid,
         'server_id' => $server->id,
         'user_id' => $user->id,
+        'is_admin' => true,
     ], 60);
 
     $response = $this->withHeaders(['X-Gateway-Secret' => config('services.gateway.secret', 'test-gateway-secret')])
         ->postJson('/internal/terminal/auth', [
             'server_uuid' => $server->uuid,
             'session_token' => $token,
+            'user' => 'root',
         ]);
 
     $response->assertOk()
@@ -103,6 +106,7 @@ test('terminal auth rejects mismatched server UUID', function () {
         'server_uuid' => $server->uuid,
         'server_id' => $server->id,
         'user_id' => 1,
+        'is_admin' => true,
     ], 60);
 
     $this->withHeaders(['X-Gateway-Secret' => config('services.gateway.secret', 'test-gateway-secret')])
@@ -123,4 +127,149 @@ test('terminal page includes available system users', function () {
         ->assertInertia(fn ($page) => $page
             ->where('systemUsers', fn ($users) => collect($users)->contains('root') && collect($users)->contains('deployer'))
         );
+});
+
+// ---------------------------------------------------------------------------
+// Member access — webapp-user-only enforcement (docs/ACCESS_CONTROL.md).
+// ---------------------------------------------------------------------------
+
+test('a member assigned to the server can open the terminal page but only sees the webapp user', function () {
+    $server = Server::factory()->online()->create();
+    $server->systemUsers()->create(['username' => 'deployer', 'shell' => '/bin/bash']);
+    $server->systemUsers()->create(['username' => AppTemplates::webappUser(), 'shell' => '/bin/bash']);
+    $server->systemUsers()->create(['username' => 'velink-admin', 'shell' => '/bin/bash', 'is_sudo' => true]);
+
+    actingAsMember($server);
+
+    $this->get(route('servers.terminal', $server))
+        ->assertInertia(fn ($page) => $page
+            ->component('servers/terminal')
+            ->where('systemUsers', [AppTemplates::webappUser()])
+        );
+});
+
+test('a member not assigned to the server cannot open the terminal page', function () {
+    $server = Server::factory()->online()->create();
+
+    actingAsMember();
+
+    $this->get(route('servers.terminal', $server))->assertForbidden();
+});
+
+test('a member token authorizes only the webapp user', function () {
+    $member = User::factory()->member()->create();
+    $server = Server::factory()->online()->create();
+    $token = fake()->uuid();
+
+    Cache::put("terminal:session:{$token}", [
+        'server_uuid' => $server->uuid,
+        'server_id' => $server->id,
+        'user_id' => $member->id,
+        'is_admin' => false,
+    ], 60);
+
+    $this->withHeaders(['X-Gateway-Secret' => config('services.gateway.secret', 'test-gateway-secret')])
+        ->postJson('/internal/terminal/auth', [
+            'server_uuid' => $server->uuid,
+            'session_token' => $token,
+            'user' => AppTemplates::webappUser(),
+        ])
+        ->assertOk()
+        ->assertJson(['valid' => true]);
+
+    // Single-use: consumed by the successful verification.
+    expect(Cache::get("terminal:session:{$token}"))->toBeNull();
+});
+
+test('a member token rejects root, burns the token, and leaves an audit trail', function () {
+    $member = User::factory()->member()->create();
+    $server = Server::factory()->online()->create();
+    $token = fake()->uuid();
+
+    Cache::put("terminal:session:{$token}", [
+        'server_uuid' => $server->uuid,
+        'server_id' => $server->id,
+        'user_id' => $member->id,
+        'is_admin' => false,
+    ], 60);
+
+    $this->withHeaders(['X-Gateway-Secret' => config('services.gateway.secret', 'test-gateway-secret')])
+        ->postJson('/internal/terminal/auth', [
+            'server_uuid' => $server->uuid,
+            'session_token' => $token,
+            'user' => 'root',
+        ])
+        ->assertStatus(403)
+        ->assertJson(['valid' => false]);
+
+    // The token is burnt even on rejection — it must not become a
+    // guess-until-luck oracle for the webapp username.
+    expect(Cache::get("terminal:session:{$token}"))->toBeNull();
+
+    // The refused privilege escalation is audited, attributed to the member.
+    expect(AuditLog::where('action', 'terminal.session_rejected')
+        ->where('user_id', $member->id)
+        ->where('server_id', $server->id)
+        ->exists())->toBeTrue();
+});
+
+test('a member token defaults to root when the gateway omits the user param and is rejected', function () {
+    $member = User::factory()->member()->create();
+    $server = Server::factory()->online()->create();
+    $token = fake()->uuid();
+
+    Cache::put("terminal:session:{$token}", [
+        'server_uuid' => $server->uuid,
+        'server_id' => $server->id,
+        'user_id' => $member->id,
+        'is_admin' => false,
+    ], 60);
+
+    // An empty/absent user means root on the agent side (terminal.go Open()),
+    // so the panel must treat it as root — fail closed for members.
+    $this->withHeaders(['X-Gateway-Secret' => config('services.gateway.secret', 'test-gateway-secret')])
+        ->postJson('/internal/terminal/auth', [
+            'server_uuid' => $server->uuid,
+            'session_token' => $token,
+            'user' => '',
+        ])
+        ->assertStatus(403);
+});
+
+test('an admin token authorizes any user including root', function () {
+    $admin = User::factory()->create();
+    $server = Server::factory()->online()->create();
+    $token = fake()->uuid();
+
+    Cache::put("terminal:session:{$token}", [
+        'server_uuid' => $server->uuid,
+        'server_id' => $server->id,
+        'user_id' => $admin->id,
+        'is_admin' => true,
+    ], 60);
+
+    $this->withHeaders(['X-Gateway-Secret' => config('services.gateway.secret', 'test-gateway-secret')])
+        ->postJson('/internal/terminal/auth', [
+            'server_uuid' => $server->uuid,
+            'session_token' => $token,
+            'user' => 'root',
+        ])
+        ->assertOk()
+        ->assertJson(['valid' => true]);
+});
+
+test('the generated token carries the requesting user role', function () {
+    $server = Server::factory()->online()->create();
+
+    $member = actingAsMember($server);
+
+    $response = $this->getJson(route('servers.terminal', $server))->assertOk();
+
+    $token = $response->json('terminalToken');
+    expect($token)->not->toBeNull();
+
+    $session = Cache::get("terminal:session:{$token}");
+    expect($session)->not->toBeNull()
+        ->and($session['is_admin'])->toBeFalse()
+        ->and($session['user_id'])->toBe($member->id);
 });

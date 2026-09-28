@@ -239,8 +239,10 @@ func (s *Server) handleTerminalConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authenticate the terminal session against the panel.
-	serverID, err := s.verifier.VerifyTerminal(r.Context(), serverUUID, sessionToken)
+	// Authenticate the terminal session against the panel. The requested user
+	// is forwarded so the panel can enforce role restrictions (members may
+	// only open a PTY as the webapp user).
+	serverID, err := s.verifier.VerifyTerminal(r.Context(), serverUUID, sessionToken, user)
 	if err != nil {
 		s.log.Warn("terminal auth rejected", "server_uuid", serverUUID, "error", err)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)

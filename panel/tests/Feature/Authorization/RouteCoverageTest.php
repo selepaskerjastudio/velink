@@ -88,8 +88,11 @@ test('the serverless allowlist has no stale entries', function () {
 });
 
 test('root-equivalent actions are administrator-only', function () {
+    // servers.terminal is intentionally not here: members get terminal access
+    // on assigned servers, restricted to the webapp user via the session
+    // token (TerminalController::auth()), not the admin middleware.
     $mustBeAdmin = [
-        'servers.create', 'servers.store', 'servers.terminal', 'servers.provision',
+        'servers.create', 'servers.store', 'servers.provision',
         'servers.restart', 'servers.regenerate-token', 'servers.destroy',
         'system-users.index', 'system-users.store', 'system-users.sudo',
         'system-users.shell', 'system-users.destroy',

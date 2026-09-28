@@ -47,7 +47,9 @@ function ServerSidebar({ server }: { server: ServerLayoutProps['server'] }) {
         { title: 'Databases', url: `/servers/${server.id}/databases`, icon: Database, exact: false },
         { title: 'Services', url: `/servers/${server.id}/services`, icon: Cpu, exact: false },
         { title: 'Security', url: `/servers/${server.id}/security`, icon: Shield, exact: false, adminOnly: true },
-        { title: 'Terminal', url: `/servers/${server.id}/terminal`, icon: TerminalSquare, exact: false, adminOnly: true },
+        // Terminal is available to every role — members are restricted to the
+        // webapp user, enforced on the session token server-side.
+        { title: 'Terminal', url: `/servers/${server.id}/terminal`, icon: TerminalSquare, exact: false },
     ].filter((item) => !item.adminOnly || isAdmin);
 
     const utilityNavItems = [

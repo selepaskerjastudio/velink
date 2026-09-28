@@ -87,7 +87,9 @@ test('a member is denied admin-only actions on a server they are assigned to', f
     $member = User::factory()->member()->create();
     $member->servers()->attach($server);
 
-    $this->actingAs($member)->get(route('servers.terminal', $server))->assertForbidden();
+    // servers.terminal is intentionally absent — members MAY use the terminal
+    // on assigned servers, restricted to the webapp user (TerminalController::auth()).
+    $this->actingAs($member)->post(route('servers.provision', $server))->assertForbidden();
     $this->actingAs($member)->get(route('security.index', $server))->assertForbidden();
     $this->actingAs($member)->get(route('system-users.index', $server))->assertForbidden();
     $this->actingAs($member)->post(route('servers.restart', $server))->assertForbidden();
