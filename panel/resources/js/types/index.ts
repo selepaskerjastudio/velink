@@ -124,6 +124,8 @@ export interface PhpSettings {
 export interface GitCredential {
     id: string;
     account_username: string | null;
+    /** Owner's name when the credential is shared (admin-linked) with the current user; null when owned by them. */
+    shared_by?: string | null;
     created_at?: string;
     provider: {
         type: string;

@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Models\Concerns\HasUuidRouteKey;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -90,6 +91,20 @@ class User extends Authenticatable
     public function gitCredentials(): HasMany
     {
         return $this->hasMany(GitCredential::class);
+    }
+
+    /**
+     * Credentials this user may deploy with: their own plus any linked by an
+     * admin, so members can deploy through credentials the admin shared.
+     * Sharing is deploy-only — managing (deleting) a credential stays
+     * exclusive to its owner, enforced in GitCredentialController.
+     */
+    public function usableGitCredentials(): Builder
+    {
+        return GitCredential::query()
+            ->where(fn (Builder $query) => $query
+                ->where('user_id', $this->id)
+                ->orWhereIn('user_id', static::query()->where('role', self::ROLE_ADMIN)->select('id')));
     }
 
     public function sshKeys(): HasMany

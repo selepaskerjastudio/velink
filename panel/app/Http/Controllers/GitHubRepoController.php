@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\GitCredential;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -16,8 +15,8 @@ class GitHubRepoController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $credential = GitCredential::where('uuid', $validated['credential'])
-            ->where('user_id', $request->user()->id)
+        $credential = $request->user()->usableGitCredentials()
+            ->where('uuid', $validated['credential'])
             ->firstOrFail();
 
         if ($credential->provider->type !== 'github') {

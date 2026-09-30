@@ -375,8 +375,8 @@ test('deploy settings reject zero-downtime mode for now', function () {
     $response->assertSessionHasErrors('deploy_mode');
 });
 
-test('a git credential must belong to the authenticated user', function () {
-    $owner = User::factory()->create();
+test('a git credential must be owned by the user or shared by an admin', function () {
+    $owner = User::factory()->member()->create();
     $provider = GitProvider::create(['type' => 'github', 'name' => 'GitHub']);
     $credential = $owner->gitCredentials()->create([
         'git_provider_id' => $provider->id,

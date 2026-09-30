@@ -85,11 +85,7 @@ class ApplicationController extends Controller
             // Git (optional)
             'repository' => ['nullable', 'string', 'max:255', 'regex:'.self::REPOSITORY_REGEX],
             'branch' => ['required', 'string', 'max:255', 'regex:'.self::BRANCH_REGEX],
-            'git_credential_id' => [
-                'nullable',
-                'uuid',
-                Rule::exists('git_credentials', 'uuid')->where('user_id', $request->user()->id),
-            ],
+            'git_credential_id' => $this->gitCredentialRule($request),
 
             // Database (optional; required for WordPress)
             'create_database' => ['boolean'],
@@ -285,22 +281,42 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Validation rule for the deploy credential: the uuid must resolve to a
+     * credential the user may deploy with (their own or admin-shared).
+     *
+     * @return array<int, mixed>
+     */
+    private function gitCredentialRule(Request $request): array
+    {
+        return [
+            'nullable',
+            'uuid',
+            function ($attribute, $value, $fail) use ($request) {
+                if (! $request->user()->usableGitCredentials()->where('uuid', $value)->exists()) {
+                    $fail('The selected git credential is invalid.');
+                }
+            },
+        ];
+    }
+
+    /**
      * @return Collection<int, array<string, mixed>>
      */
     private function gitCredentialsFor(Request $request)
     {
-        return $request->user()->gitCredentials()
-            ->with('provider:id,type,name')
-            ->get(['id', 'uuid', 'account_username', 'git_provider_id', 'created_at'])
+        return $request->user()->usableGitCredentials()
+            ->with('provider:id,type,name', 'user:id,name')
+            ->get(['id', 'uuid', 'user_id', 'account_username', 'git_provider_id', 'created_at'])
             ->map(fn ($c) => [
                 'id' => $c->uuid,
                 'account_username' => $c->account_username,
                 'created_at' => $c->created_at,
                 'provider' => ['type' => $c->provider->type, 'name' => $c->provider->name],
+                'shared_by' => $c->user_id === $request->user()->id ? null : $c->user?->name,
             ]);
     }
 
-    public function show(Application $application): Response
+    public function show(Request $request, Application $application): Response
     {
         $application->load(['server', 'gitCredential']);
 
@@ -325,15 +341,7 @@ class ApplicationController extends Controller
             'phpVersions' => ProvisioningCatalog::PHP_VERSIONS,
             'phpSettingsPresets' => PhpSettings::presets(),
             'defaultDeployScript' => DeployTemplates::DEFAULT_SCRIPT,
-            'gitCredentials' => auth()->user()->gitCredentials()
-                ->with('provider:id,type,name')
-                ->get(['id', 'uuid', 'account_username', 'git_provider_id', 'created_at'])
-                ->map(fn ($c) => [
-                    'id' => $c->uuid,
-                    'account_username' => $c->account_username,
-                    'created_at' => $c->created_at,
-                    'provider' => ['type' => $c->provider->type, 'name' => $c->provider->name],
-                ]),
+            'gitCredentials' => $this->gitCredentialsFor($request),
             'deployments' => $application->deployments()
                 ->latest('id')
                 ->limit(20)
@@ -358,11 +366,7 @@ class ApplicationController extends Controller
             'repository' => ['nullable', 'string', 'max:255', 'regex:'.self::REPOSITORY_REGEX],
             'branch' => ['required', 'string', 'max:255', 'regex:'.self::BRANCH_REGEX],
             'deploy_mode' => ['required', 'string', 'in:inplace'],
-            'git_credential_id' => [
-                'nullable',
-                'uuid',
-                Rule::exists('git_credentials', 'uuid')->where('user_id', $request->user()->id),
-            ],
+            'git_credential_id' => $this->gitCredentialRule($request),
             'deploy_script' => ['nullable', 'string'],
         ]);
 
@@ -384,7 +388,7 @@ class ApplicationController extends Controller
             'branch' => $validated['branch'],
             'deploy_mode' => $validated['deploy_mode'],
             'git_credential_id' => $credential?->id,
-            'deploy_script' => $validated['deploy_script'] ?: null,
+            'deploy_script' => ($validated['deploy_script'] ?? null) ?: null,
         ])->save();
 
         AuditLogger::log(

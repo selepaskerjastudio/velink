@@ -28,6 +28,7 @@ type AppType = { value: string; label: string; description: string };
 type GitCredential = {
     id: string;
     account_username: string;
+    shared_by?: string | null;
     provider: { type: string; name: string };
 };
 
@@ -211,6 +212,7 @@ export default function ApplicationsCreate({
                                             {gitCredentials.map((cred) => (
                                                 <SelectItem key={cred.id} value={cred.id}>
                                                     {cred.provider.name}: {cred.account_username}
+                                                    {cred.shared_by ? ` (shared by ${cred.shared_by})` : ''}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
