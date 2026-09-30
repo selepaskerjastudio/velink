@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ApplicationController;
+use App\Http\Controllers\DatabaseImportController;
 use App\Http\Controllers\DeploymentLogController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,6 +19,7 @@ Route::middleware('panel')->group(function () {
     Route::post('apps/{application}/deployments', [ApplicationController::class, 'storeDeployment'])->name('applications.deployments.store');
     Route::post('apps/{application}/ssl', [ApplicationController::class, 'enableSsl'])->name('applications.ssl');
     Route::post('apps/{application}/nginx-config', [ApplicationController::class, 'nginxConfig'])->name('applications.nginx-config');
+    Route::post('apps/{application}/database/import', DatabaseImportController::class)->name('applications.database.import');
     Route::post('apps/{application}/directory-size', [ApplicationController::class, 'refreshDirectorySize'])->name('applications.directory-size');
 
     // Dedicated full-page deployment log viewer (ANSI-rendered, realtime).
