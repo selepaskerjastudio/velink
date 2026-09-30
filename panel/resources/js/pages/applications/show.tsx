@@ -1048,6 +1048,7 @@ export default function ApplicationsShow({
                                                     <SelectItem key={credential.id} value={String(credential.id)}>
                                                         {PROVIDER_LABELS[credential.provider.type] ?? credential.provider.type}
                                                         {credential.account_username ? ` — ${credential.account_username}` : ''}
+                                                        {credential.shared_by ? ` (shared by ${credential.shared_by})` : ''}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
