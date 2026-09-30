@@ -35,6 +35,7 @@ Konsekuensinya: begitu ada user ke-2, dia langsung punya kendali penuh atas semu
 | Unit assignment | **Per server**. App/DB/worker/cron/service ikut server-nya |
 | Carve-out admin-only | server destroy/regenerate-token/provision/**restart**/create/store, `system-users.*`, `security.*` (firewall+fail2ban), **ssh-keys deploy/revoke**, `users.*` |
 | Terminal | **Semua role** (server ter-assign). Member **hanya user webapp (`velink`)**, admin bebas — enforcement di session token, lihat §Terminal di bawah |
+| Git credential | **Deploy-only sharing**: semua user boleh deploy dengan credential milik sendiri ∪ milik admin. Pinjam antar member ditolak; hapus credential tetap hak pemilik — lihat §Git credential di bawah |
 | Cron user | Member **dilarang** pakai `root` + user sistem lain. Admin bebas |
 | User management | Halaman Users + invite, dengan fallback copy-link (mail belum dikonfigurasi) |
 
@@ -50,6 +51,15 @@ Terminal dibuka untuk member di server yang di-assign, tapi **tidak** lewat filt
 `ssh-keys deploy/revoke` masuk carve-out karena `ServerSshKeyController.php:24` → `resolveTargetUser():83-92` → `SshKeyService::ensureDefaultAdmin()` (`SshKeyService.php:24`, akun `velink-admin`) — member bisa deploy pubkey sendiri lalu SSH masuk sebagai user sudo.
 
 `servers.restart` = `sudo reboot` (`ServerController.php:263-271`) — mematikan semua app di server, termasuk milik member lain yang di-assign ke server yang sama.
+
+### Git credential — dibagikan admin untuk deploy
+
+Credential Git dulu strictly per-user, jadi member tidak bisa memakai repo yang sudah ditautkan admin: dropdown credential di halaman create app dan tab deploy kosong, dan `git_credential_id` milik admin gagal validasi. Aturannya sekarang: **satu user boleh deploy dengan credential miliknya sendiri ditambah semua credential yang ditautkan admin** (`User::usableGitCredentials()` di `app/Models/User.php`). Pinjam antar **member** tetap ditolak.
+
+- Sharing **deploy-only**. Manajemen credential (`git-credentials.*`, OAuth callback) tetap scope per-user; `destroy` menolak 403 untuk credential milik orang lain (`GitCredentialController.php:64`) — member tidak bisa menghapus/mengubah credential admin.
+- Scope ini dipakai di: daftar credential halaman create app (`gitCredentialsFor()`), tab deploy `show()`, validasi `git_credential_id` di `store()`/`updateDeploySettings()`, dan repo picker `github.repos` (`GitHubRepoController.php:18`).
+- Token tetap tidak pernah keluar panel: prop Inertia hanya `uuid`/`account_username`/`provider` (+ `shared_by` = nama pemilik untuk label "(shared by …)"); `access_token`/`refresh_token` `$hidden` + cast `encrypted`.
+- Efek samping yang disadari: menghapus credential admin me-null-kan `git_credential_id` semua app yang memakainya (`nullOnDelete()`), termasuk app buatan member — app tersebut jatuh ke mode repo publik.
 
 ---
 

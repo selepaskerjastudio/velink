@@ -85,15 +85,7 @@ class ApplicationController extends Controller
             // Git (optional)
             'repository' => ['nullable', 'string', 'max:255', 'regex:'.self::REPOSITORY_REGEX],
             'branch' => ['required', 'string', 'max:255', 'regex:'.self::BRANCH_REGEX],
-            'git_credential_id' => [
-                'nullable',
-                'uuid',
-                function ($attribute, $value, $fail) use ($request) {
-                    if (! $request->user()->usableGitCredentials()->where('uuid', $value)->exists()) {
-                        $fail('The selected git credential is invalid.');
-                    }
-                },
-            ],
+            'git_credential_id' => $this->gitCredentialRule($request),
 
             // Database (optional; required for WordPress)
             'create_database' => ['boolean'],
@@ -289,6 +281,25 @@ class ApplicationController extends Controller
     }
 
     /**
+     * Validation rule for the deploy credential: the uuid must resolve to a
+     * credential the user may deploy with (their own or admin-shared).
+     *
+     * @return array<int, mixed>
+     */
+    private function gitCredentialRule(Request $request): array
+    {
+        return [
+            'nullable',
+            'uuid',
+            function ($attribute, $value, $fail) use ($request) {
+                if (! $request->user()->usableGitCredentials()->where('uuid', $value)->exists()) {
+                    $fail('The selected git credential is invalid.');
+                }
+            },
+        ];
+    }
+
+    /**
      * @return Collection<int, array<string, mixed>>
      */
     private function gitCredentialsFor(Request $request)
@@ -355,15 +366,7 @@ class ApplicationController extends Controller
             'repository' => ['nullable', 'string', 'max:255', 'regex:'.self::REPOSITORY_REGEX],
             'branch' => ['required', 'string', 'max:255', 'regex:'.self::BRANCH_REGEX],
             'deploy_mode' => ['required', 'string', 'in:inplace'],
-            'git_credential_id' => [
-                'nullable',
-                'uuid',
-                function ($attribute, $value, $fail) use ($request) {
-                    if (! $request->user()->usableGitCredentials()->where('uuid', $value)->exists()) {
-                        $fail('The selected git credential is invalid.');
-                    }
-                },
-            ],
+            'git_credential_id' => $this->gitCredentialRule($request),
             'deploy_script' => ['nullable', 'string'],
         ]);
 

@@ -183,3 +183,19 @@ test('a member cannot delete an admin-linked git credential', function () {
 
     expect($credential->fresh())->not->toBeNull();
 });
+
+test('the credential management page stays personal for a member', function () {
+    $server = Server::factory()->online()->create();
+    gitCredentialFor(User::factory()->admin()->create(), 'admin-octocat');
+
+    $member = actingAsMember($server);
+    gitCredentialFor($member, 'own-account');
+
+    // Sharing is deploy-only: the management list (with delete buttons)
+    // must not surface admin-linked credentials.
+    $this->get(route('git-credentials.index'))
+        ->assertInertia(fn ($page) => $page
+            ->has('credentials', 1)
+            ->where('credentials.0.account_username', 'own-account')
+        );
+});
