@@ -61,7 +61,11 @@ test('an application can be created and provisions a php pool plus jobs', functi
     expect($application->app_slug)->toMatch('/^[a-z][a-z0-9_]*$/');
     expect($application->root_path)->toBe("/home/velink/webapps/{$application->app_slug}");
 
-    expect($application->server->agentJobs()->where('application_id', $application->id)->count())->toBe(5);
+    // Provisioning jobs + the seeded default .env write (apps get a full
+    // .env even without a database now).
+    expect($application->server->agentJobs()->where('application_id', $application->id)->count())->toBe(6);
+    expect($application->server->agentJobs()->where('application_id', $application->id)->where('label', 'Write .env')->exists())->toBeTrue();
+    expect($application->env_content)->toContain('APP_URL=https://my-app.example.com');
     expect(PhpPool::where('application_id', $application->id)->where('php_version', '8.3')->exists())->toBeTrue();
 });
 

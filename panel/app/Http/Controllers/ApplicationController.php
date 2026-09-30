@@ -6,6 +6,7 @@ use App\Models\Application;
 use App\Models\GitCredential;
 use App\Models\Server;
 use App\Provisioning\DeployTemplates;
+use App\Provisioning\EnvTemplates;
 use App\Provisioning\PhpSettings;
 use App\Provisioning\ProvisioningCatalog;
 use App\Services\AppProvisionService;
@@ -185,17 +186,21 @@ class ApplicationController extends Controller
                 'user' => $validated['db_username'],
                 'password' => $dbPassword,
                 'host' => 'localhost',
+                'engine' => $validated['db_engine'],
             ];
 
             // Seed the app's .env with the real DB credentials so the first
             // deploy's `php artisan migrate` connects as the user we just
             // created — not the framework default (e.g. Laravel's `forge`).
             // WordPress wires its own wp-config.php (handled in provisionNew).
-            if ($application->app_type !== 'wordpress' && $application->usesPhp()) {
-                $application->forceFill([
-                    'env_content' => $this->databaseEnvSeed($validated['db_engine'], $dbCreds),
-                ])->save();
-            }
+        }
+
+        // Seed a full default .env (Laravel .env.example-style for Laravel
+        // apps, a lean set for custom PHP) with the provisioned DB values —
+        // WordPress/static get none (wp-config / no PHP).
+        $envContent = EnvTemplates::forApplication($application, $dbCreds);
+        if ($envContent !== null) {
+            $application->forceFill(['env_content' => $envContent])->save();
         }
 
         $provisionService->provisionNew($application, $request->user()->id, $dbCreds);
@@ -238,31 +243,6 @@ class ApplicationController extends Controller
         );
 
         return redirect()->route('applications.show', $application);
-    }
-
-    /**
-     * Build a minimal .env DB block wired to a freshly-provisioned database
-     * and user. MariaDB grants are created for @'localhost', so DB_HOST must be
-     * `localhost` — PDO then connects over the unix socket and matches that
-     * grant; `127.0.0.1` would authenticate over TCP and be denied.
-     *
-     * @param  array{name: string, user: string, password: string, host?: string}  $creds
-     */
-    private function databaseEnvSeed(string $engine, array $creds): string
-    {
-        [$connection, $host, $port] = match ($engine) {
-            'postgres' => ['pgsql', '127.0.0.1', '5432'],
-            default => ['mysql', 'localhost', '3306'],
-        };
-
-        return implode("\n", [
-            "DB_CONNECTION={$connection}",
-            "DB_HOST={$host}",
-            "DB_PORT={$port}",
-            "DB_DATABASE={$creds['name']}",
-            "DB_USERNAME={$creds['user']}",
-            "DB_PASSWORD={$creds['password']}",
-        ])."\n";
     }
 
     /**
