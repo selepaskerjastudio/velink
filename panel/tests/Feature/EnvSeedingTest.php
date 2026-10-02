@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Application;
+use App\Provisioning\EnvTemplates;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -147,4 +148,21 @@ test('wordpress and static apps are not seeded with a .env', function () {
 
     $static = createApp(app_type: 'static', create_database: false, domain: 'static.example.com', php_version: null);
     expect($static->env_content)->toBeNull();
+});
+
+test('an app name with quotes and newlines cannot corrupt the seeded env', function () {
+    $app = new Application([
+        'name' => "Shop \"Elite\"\nEVIL_INJECTED=pwned\t tab",
+        'domain' => 'hostile.example.com',
+        'app_type' => 'laravel',
+        'stack_mode' => 'production',
+    ]);
+
+    $env = EnvTemplates::forApplication($app, null);
+
+    // One inert quoted value on a single line — no quote breakout, no
+    // smuggled EVIL_INJECTED variable, no raw newline inside the value.
+    expect($env)->toContain("APP_NAME=\"Shop Elite EVIL_INJECTED=pwned tab\"\n");
+    expect(preg_match('/^APP_NAME=/m', $env))->toBe(1);
+    expect($env)->not->toMatch('/^EVIL_INJECTED=/m');
 });

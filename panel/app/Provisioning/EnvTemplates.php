@@ -43,7 +43,7 @@ class EnvTemplates
         $dev = $app->stack_mode === 'development';
 
         $lines = [
-            "APP_NAME=\"{$app->name}\"",
+            'APP_NAME="'.self::appName($app).'"',
             'APP_ENV='.($dev ? 'local' : 'production'),
             'APP_KEY='.'base64:'.base64_encode(random_bytes(32)),
             'APP_DEBUG='.($dev ? 'true' : 'false'),
@@ -85,7 +85,7 @@ class EnvTemplates
         $dev = $app->stack_mode === 'development';
 
         $lines = [
-            "APP_NAME=\"{$app->name}\"",
+            'APP_NAME="'.self::appName($app).'"',
             'APP_ENV='.($dev ? 'local' : 'production'),
             'APP_DEBUG='.($dev ? 'true' : 'false'),
             "APP_URL=https://{$app->domain}",
@@ -94,6 +94,16 @@ class EnvTemplates
         ];
 
         return implode("\n", $lines)."\n";
+    }
+
+    /**
+     * The app name as a single .env-safe value: a double quote would end the
+     * quoted value early and a newline would smuggle in extra variables, so
+     * both (plus CR) collapse to spaces and whitespace is normalized.
+     */
+    private static function appName(Application $app): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', str_replace(["\r", "\n", '"'], ' ', $app->name)));
     }
 
     /**
