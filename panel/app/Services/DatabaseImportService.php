@@ -59,17 +59,26 @@ class DatabaseImportService
     }
 
     /**
+     * Every interpolated value is shell-escaped and used in an unquoted
+     * context — escapeshellarg's single-quoted form is only safe outside
+     * quotes, so the echo line deliberately carries no double quotes (a
+     * double-quoted echo would let a `"` in the app name break out).
+     *
      * @param  array{connection: string, database: string, username: string, password: string}  $creds
      */
     private function buildScript(array $creds, string $path, string $url, string $appName): string
     {
         $user = escapeshellarg($creds['username']);
+        // Env-var prefixes keep the password out of `ps` arguments, matching
+        // the PGPASSWORD convention.
         $password = escapeshellarg($creds['password']);
         $database = escapeshellarg($creds['database']);
         $file = escapeshellarg($path);
+        $from = escapeshellarg($url);
+        $name = escapeshellarg($appName);
 
         $import = match ($creds['connection']) {
-            'mysql' => "mysql -u {$user} -p{$password} -h localhost {$database} < {$file}",
+            'mysql' => "MYSQL_PWD={$password} mysql -u {$user} -h localhost {$database} < {$file}",
             'pgsql' => "PGPASSWORD={$password} psql -U {$user} -h 127.0.0.1 -d {$database} -f {$file} -v ON_ERROR_STOP=1",
             default => throw ValidationException::withMessages([
                 'dump' => 'Database imports support MySQL/MariaDB and PostgreSQL apps only.',
@@ -78,11 +87,11 @@ class DatabaseImportService
 
         return <<<SH
             set -e
-            echo "==> Import database for {$appName}"
-            curl -fsSL --retry 3 -o {$file} {$url}
+            echo ==> Import database for {$name}
+            curl -fsSL --retry 3 -o {$file} {$from}
             {$import}
             rm -f {$file}
-            echo "==> Import finished"
+            echo ==> Import finished
             SH;
     }
 }
