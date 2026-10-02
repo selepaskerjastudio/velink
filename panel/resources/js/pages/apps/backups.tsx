@@ -245,7 +245,7 @@ export default function Backups({ application, server, backups, settings, databa
                         <CardHeader>
                             <CardTitle>Import database</CardTitle>
                             <CardDescription>
-                                Restore a plain <code>.sql</code> dump (max 20 MB) into{' '}
+                                Restore a plain <code>.sql</code> dump (up to 1 GB) into{' '}
                                 <code>{database.name}</code> ({database.connection === 'pgsql' ? 'PostgreSQL' : 'MySQL/MariaDB'}). The
                                 import runs as this app&rsquo;s database user — it cannot touch other apps&rsquo; databases.
                             </CardDescription>

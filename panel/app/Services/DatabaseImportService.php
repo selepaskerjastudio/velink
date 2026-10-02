@@ -4,16 +4,24 @@ namespace App\Services;
 
 use App\Models\AgentJob;
 use App\Models\Application;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Imports a member-uploaded .sql dump into an application's database.
+ * Imports a member-uploaded .sql dump (up to 1 GB) into an application's
+ * database.
  *
- * The dump is written to a root-only temp file on the server and piped into
- * the database **as the application's dedicated DB user** (credentials from
- * the app's .env) — never as root. The user's grants cover only that app's
- * database, so a hostile dump cannot touch other apps' databases, users, or
- * grants the way a root `mysql < dump` would.
+ * Large dumps never transit the gateway as JSON payloads — that path caps out
+ * at a few MB. Instead the upload is streamed to panel storage, and the agent
+ * downloads it from a single-use, expiring signed URL over HTTPS (the same
+ * host it already dials for the gateway).
+ *
+ * The import itself runs **as the application's dedicated DB user**
+ * (credentials from the app's .env) — never as root. The user's grants cover
+ * only that app's database, so a hostile dump cannot touch other apps'
+ * databases, users, or grants the way a root `mysql < dump` would.
  */
 class DatabaseImportService
 {
@@ -23,7 +31,7 @@ class DatabaseImportService
     ) {
     }
 
-    public function import(Application $app, string $dumpContent, int $userId): AgentJob
+    public function import(Application $app, UploadedFile $dump, int $userId): AgentJob
     {
         $creds = $this->backups->parseDbCredentials($app->env_content);
 
@@ -35,27 +43,25 @@ class DatabaseImportService
             }
         }
 
+        // Stream the dump onto panel storage (no memory blow-up at 1 GB);
+        // the agent pulls it from the signed URL below. Random UUID name —
+        // the URL is unguessable and expires in an hour.
+        $filename = Str::uuid()->toString().'.sql';
+        $dump->storeAs('dumps', $filename);
+        $url = URL::temporarySignedRoute('dumps.download', now()->addHour(), ['dump' => $filename]);
+
         $path = '/tmp/velink-import-'.$app->app_slug.'-'.uniqid().'.sql';
 
-        // 1. Upload the dump to a private temp file on the server.
-        $this->dispatcher->dispatch($app->server, 'write_file', [
-            'path' => $path,
-            'content' => $dumpContent,
-            'mode' => '0600',
-        ], ['application_id' => $app->id, 'user_id' => $userId, 'label' => 'Upload database dump']);
-
-        // 2. Import as the app's DB user, then remove the temp file. Jobs run
-        //    sequentially per server, so ordering with the upload is safe.
         return $this->dispatcher->dispatch($app->server, 'shell', [
-            'command' => $this->buildScript($creds, $path, $app->name),
-            'timeout' => 1800,
+            'command' => $this->buildScript($creds, $path, $url, $app->name),
+            'timeout' => 3600,
         ], ['application_id' => $app->id, 'user_id' => $userId, 'label' => 'Import database']);
     }
 
     /**
      * @param  array{connection: string, database: string, username: string, password: string}  $creds
      */
-    private function buildScript(array $creds, string $path, string $appName): string
+    private function buildScript(array $creds, string $path, string $url, string $appName): string
     {
         $user = escapeshellarg($creds['username']);
         $password = escapeshellarg($creds['password']);
@@ -73,6 +79,7 @@ class DatabaseImportService
         return <<<SH
             set -e
             echo "==> Import database for {$appName}"
+            curl -fsSL --retry 3 -o {$file} {$url}
             {$import}
             rm -f {$file}
             echo "==> Import finished"

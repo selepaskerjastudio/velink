@@ -16,19 +16,19 @@ use Illuminate\Http\Request;
  */
 class DatabaseImportController extends Controller
 {
+    /** 1 GB in KB — the panel nginx/php upload limits are sized to match. */
+    private const MAX_DUMP_KB = 1048576;
+
     public function __invoke(Request $request, Application $application, DatabaseImportService $service): RedirectResponse
     {
         $validated = $request->validate([
-            // Plain-text SQL only: the content transits the gateway as a JSON
-            // string, which binary gzip would not survive.
-            'dump' => ['required', 'file', 'max:20480', 'extensions:sql,txt'],
+            // Plain-text SQL only — binary gzip would break MySQL/pssql parsing
+            // anyway. Large dumps are streamed and served back to the agent via
+            // a signed URL, so the size cap is the only transport constraint.
+            'dump' => ['required', 'file', 'max:'.self::MAX_DUMP_KB, 'extensions:sql,txt'],
         ]);
 
-        $job = $service->import(
-            $application,
-            (string) file_get_contents($validated['dump']->path()),
-            $request->user()->id,
-        );
+        $job = $service->import($application, $validated['dump'], $request->user()->id);
 
         AuditLogger::log(
             action: 'database.imported',
