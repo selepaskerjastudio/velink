@@ -307,6 +307,16 @@ done
 
 # ─── Step 9: nginx + php-fpm ─────────────────────────────────────────────────────
 step "Configuring nginx + php-fpm"
+
+# Raise PHP's request-body limits to match nginx's client_max_body_size —
+# the database-import upload path accepts dumps up to 1 GB.
+cat > "/etc/php/${PHP_VER}/fpm/conf.d/90-velink.ini" <<'EOF'
+; Velink panel: allow large database-dump imports (1 GB).
+upload_max_filesize = 1024M
+post_max_size = 1100M
+EOF
+ok "PHP upload limits (1 GB)"
+
 VHOST="/etc/nginx/sites-available/velink"
 cat > "$VHOST" <<EOF
 server {
@@ -316,7 +326,7 @@ server {
     root ${INSTALL_DIR}/panel/public;
     index index.php;
     charset utf-8;
-    client_max_body_size 100M;
+    client_max_body_size 1100m;
 
     # Reverb browser WebSocket. The trailing slash is REQUIRED — without it the
     # prefix also captures /apps/ and /applications/ and breaks PHP routing.

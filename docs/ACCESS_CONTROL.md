@@ -37,6 +37,7 @@ Konsekuensinya: begitu ada user ke-2, dia langsung punya kendali penuh atas semu
 | Terminal | **Semua role** (server ter-assign). Member **hanya user webapp (`velink`)**, admin bebas — enforcement di session token, lihat §Terminal di bawah |
 | Git credential | **Deploy-only sharing**: semua user boleh deploy dengan credential milik sendiri ∪ milik admin. Pinjam antar member ditolak; hapus credential tetap hak pemilik — lihat §Git credential di bawah |
 | Cron user | Member **dilarang** pakai `root` + user sistem lain. Admin bebas |
+| Import database | **Semua role** (app di server ter-assign). Dump `.sql` dijalankan sebagai user DB milik app (grant terbatas ke DB itu), **bukan root** — dump member tidak bisa menyentuh DB/user lain |
 | User management | Halaman Users + invite, dengan fallback copy-link (mail belum dikonfigurasi) |
 
 ### Terminal — member terbatas ke user webapp

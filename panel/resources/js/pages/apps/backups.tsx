@@ -2,20 +2,22 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { type BackupSettings, type BackupSummary, type BreadcrumbItem } from '@/types';
-import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ChevronLeftIcon, DatabaseIcon, HardDriveDownloadIcon, RotateCcwIcon, Trash2Icon } from 'lucide-react';
-import { FormEventHandler } from 'react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { ChevronLeftIcon, DatabaseIcon, HardDriveDownloadIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from 'lucide-react';
+import { FormEventHandler, useState } from 'react';
 
 interface Props {
     application: { id: string; name: string };
     server: { id: string; name: string };
     backups: BackupSummary[];
     settings: BackupSettings;
+    database: { connection: string | null; name: string } | null;
 }
 
 function formatBytes(bytes: number | null): string {
@@ -44,7 +46,11 @@ function statusVariant(status: string): 'default' | 'secondary' | 'destructive' 
     }
 }
 
-export default function Backups({ application, server, backups, settings }: Props) {
+export default function Backups({ application, server, backups, settings, database }: Props) {
+    const { errors: pageErrors } = usePage().props as { errors: Record<string, string> };
+
+    const [dumpFile, setDumpFile] = useState<File | null>(null);
+    const [importing, setImporting] = useState(false);
     const settingsForm = useForm<BackupSettings>({
         schedule: settings.schedule,
         retention_count: settings.retention_count,
@@ -73,6 +79,20 @@ export default function Backups({ application, server, backups, settings }: Prop
         if (confirm('Restore from this backup? This will OVERWRITE all current files and database data.')) {
             router.post(route('backups.restore', [application.id, backupId]), {}, { preserveScroll: true });
         }
+    };
+
+    const importDump = () => {
+        if (!dumpFile) return;
+        if (!confirm(`Import "${dumpFile.name}" into database "${database?.name}"? Existing data in the target tables will be overwritten.`)) return;
+
+        setImporting(true);
+        const data = new FormData();
+        data.append('dump', dumpFile);
+        router.post(route('applications.database.import', application.id), data, {
+            preserveScroll: true,
+            onSuccess: () => setDumpFile(null),
+            onFinish: () => setImporting(false),
+        });
     };
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -218,6 +238,34 @@ export default function Backups({ application, server, backups, settings }: Prop
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Import — available to members too; runs as the app's DB user. */}
+                {database && (database.connection === 'mysql' || database.connection === 'pgsql') && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Import database</CardTitle>
+                            <CardDescription>
+                                Restore a plain <code>.sql</code> dump (up to 1 GB) into{' '}
+                                <code>{database.name}</code> ({database.connection === 'pgsql' ? 'PostgreSQL' : 'MySQL/MariaDB'}). The
+                                import runs as this app&rsquo;s database user — it cannot touch other apps&rsquo; databases.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            <Input
+                                id="dump"
+                                type="file"
+                                accept=".sql,.txt"
+                                className="sm:max-w-sm"
+                                onChange={(e) => setDumpFile(e.target.files?.[0] ?? null)}
+                            />
+                            <Button size="sm" disabled={!dumpFile || importing} onClick={importDump}>
+                                <UploadIcon className="mr-1.5 h-4 w-4" />
+                                {importing ? 'Importing…' : 'Import'}
+                            </Button>
+                            <InputError message={pageErrors.dump} />
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </AppLayout>
     );

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DumpDownloadController;
 use App\Http\Controllers\GitHubRepoController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\ServerAlertController;
@@ -28,6 +29,13 @@ Route::get('install/bin/{file}', function (string $file) {
 
 // Called by the installer (token-authenticated) to arm full-stack provisioning.
 Route::post('install/provision', [InstallController::class, 'provision'])->name('install.provision');
+
+// Database dump download for the agent's import `curl` — signed URL only
+// (unguessable UUID + signature + 1-hour expiry), no session: the agent
+// cannot authenticate. See DatabaseImportService.
+Route::get('dumps/{dump}', DumpDownloadController::class)
+    ->name('dumps.download')
+    ->middleware('signed');
 
 Route::middleware('panel')->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

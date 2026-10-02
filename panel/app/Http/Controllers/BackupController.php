@@ -39,6 +39,8 @@ class BackupController extends Controller
                 'created_at' => $b->created_at?->toIso8601String(),
             ]);
 
+        $db = $this->backupService->parseDbCredentials($application->env_content);
+
         return Inertia::render('apps/backups', [
             'application' => [
                 'id' => $application->uuid,
@@ -48,6 +50,10 @@ class BackupController extends Controller
                 'id' => $application->server->uuid,
                 'name' => $application->server->name,
             ],
+            // Target for the import card; null when the app has no database.
+            'database' => $db['database'] !== null
+                ? ['connection' => $db['connection'], 'name' => $db['database']]
+                : null,
             'backups' => $backups,
             'settings' => [
                 'schedule' => $settings->schedule,

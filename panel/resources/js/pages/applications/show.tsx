@@ -48,7 +48,7 @@ const SECTIONS: SidebarItem[] = [
     { id: 'activity', label: 'Activity Log' },
 ];
 
-const SECTION_IDS = SECTIONS.filter((s): s is { id: string; label: string } => 'id' in s).map((s) => s.id);
+const SECTION_IDS = SECTIONS.filter((s): s is { id: string; label: string } => 'id' in s && s.id !== 'backups').map((s) => s.id);
 const DEFAULT_SECTION = 'dashboard';
 
 function sectionFromUrl(): string {
@@ -417,6 +417,14 @@ export default function ApplicationsShow({
                                 >
                                     {item.header}
                                 </p>
+                            ) : item.id === 'backups' ? (
+                                <Link
+                                    key={item.id}
+                                    href={route('backups.index', application.id)}
+                                    className="text-muted-foreground rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+                                >
+                                    {item.label}
+                                </Link>
                             ) : (
                                 <button
                                     key={item.id}
